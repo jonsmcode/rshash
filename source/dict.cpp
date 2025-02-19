@@ -1,69 +1,14 @@
 #include <seqan3/core/debug_stream.hpp>
 #include <seqan3/alphabet/nucleotide/dna4.hpp>
 #include <seqan3/search/views/minimiser_hash_and_positions.hpp>
-#include <seqan3/search/views/minimiser_and_window_hash.hpp>
+// #include <seqan3/search/views/minimiser_and_window_hash.hpp>
+#include <seqan3/search/views/kmer_minimiser_hash.hpp>
+#include <seqan3/search/views/kmer_hash.hpp>
+#include <seqan3/search/views/minimiser_hash.hpp>
 #include <seqan3/contrib/sdsl-lite.hpp>
-
-// #include <boost/dynamic_bitset.hpp>
-// #include <bitset>
 
 using namespace seqan3::literals;
 using namespace seqan3::contrib::sdsl;
-
-
-// class Hash
-// {
-
-//     auto urange_size = std::ranges::distance(it_start, it_end);
-//         auto step = (shape_.size() > urange_size + 1) ? 0 : urange_size - shape_.size() + 1;
-//         text_left = std::ranges::next(it_start, step, it_end);
-
-//         // shape size = 3
-//         // Text:      1 2 3 4 5 6 7 8 9
-//         // text_left: ^
-//         // text_right:    ^
-//         // distance(text_left, text_right) = 2
-//         if (shape_.size() <= std::ranges::distance(text_left, it_end) + 1)
-//         {
-//             roll_factor = pow(sigma, static_cast<size_t>(std::ranges::size(shape_) - 1));
-//             hash_full();
-//         }
-
-//         text_right = it_end;
-
-//     value_type operator*() const noexcept
-//     {
-//         return hash_value + to_rank(*text_right);
-//     }
-
-//     void hash_forward()
-//     {
-//         if (shape_.all())
-//         {
-//             hash_roll_forward();
-//         }
-//         else
-//         {
-//             std::ranges::advance(text_left, 1);
-//             hash_full();
-//         }
-//     }
-
-//     void hash_full() {
-
-//     }
-
-//     void hash_roll_forward()
-//     {
-//         hash_value -= to_rank(*(text_left)) * roll_factor;
-//         hash_value += to_rank(*(text_right));
-//         hash_value *= sigma;
-
-//         std::ranges::advance(text_left, 1);
-//         std::ranges::advance(text_right, 1);
-//     }
-// }
-
 
 
 seqan3::dna4_vector kmer_to_string(uint64_t kmer, size_t const kmer_size)
@@ -95,7 +40,9 @@ class Dictionary
     public:
         Dictionary(uint8_t const, uint8_t const);
         int build(std::vector<seqan3::dna4>&);
-        int streaming_query(std::vector<seqan3::dna4>&, std::vector<seqan3::dna4>&);
+        int streaming_query(std::vector<seqan3::dna4>&,
+            std::vector<seqan3::dna4>&,
+            std::vector<uint64_t> &);
 };
 
 Dictionary::Dictionary(uint8_t const k, uint8_t const m) {
@@ -207,49 +154,60 @@ int Dictionary::build(std::vector<seqan3::dna4> &text)
 }
 
 
-int Dictionary::streaming_query(
-    std::vector<seqan3::dna4> &text,
-    std::vector<seqan3::dna4> &query)
+int Dictionary::streaming_query(std::vector<seqan3::dna4> &text,
+                                std::vector<seqan3::dna4> &query,
+                                std::vector<uint64_t> &positions)
 {
-    auto view = bsc::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
-    // uint64_t mask = static_cast<uint64_t>(1 << span_width - 1);
+    auto query_view = bsc::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
+    uint64_t const seed = 0;
+    auto kmer_view = seqan3::views::kmer_hash(seqan3::ungapped{k})
+                        | std::views::transform([](uint64_t i) {return i ^ seed;});
+
+    // todo: hashtable for buffer!
+    std::vector<uint64_t> kmerbuffer;
+    std::vector<uint64_t> startpositions;
+    int cur_minimiser = -1;
 
     // todo: parallelize queries
-    for(auto && minimiser : query | view) {
-        size_t r = r_rank(minimiser.minimiser_value)+1;
-        // todo: fast select bitvector implementation
-        // todo: test compressed size array
-        size_t p = s_select(r);
-        size_t q = s_select(r+1);
+    for(auto && minimiser : query | query_view) {
+        seqan3::debug_stream << "minimiser: " << kmer_to_string(minimiser.minimiser_value, m) << '\n';
+        if(minimiser.minimiser_value != cur_minimiser) {
+            kmerbuffer.clear();
+            startpositions.clear();
 
-        size_t b = q - p;
-        // seqan3::debug_stream << kmer_to_string(minimiser.minimiser_value, m) << ','
-        //                      << kmer_to_string(minimiser.window_value, k) << '\n';
-        // uint64_t o = (static_cast<uint64_t>(offset[p]) >> offset_width);
-        // uint64_t s = static_cast<uint64_t>(offset[p] & mask);
-        // std::cout << std::bitset<10>(offset[p]) << "\n";
-        // std::cout << std::bitset<6>(o) << "\n";
-        // std::cout << std::bitset<4>(s) << "\n";
-        // std::cout << o << " " << s << "\n";
+            size_t r = r_rank(minimiser.minimiser_value)+1;
+            // todo: fast select bitvector implementation
+            // todo: test compressed size array
+            size_t p = s_select(r);
+            size_t q = s_select(r+1);
+            size_t b = q - p;
 
-        std::vector<size_t> const buffer;
-        for(int i = 0; i < b; i++) {
-            // std::cout << offset[p+i] << "\n";
-            // std::cout << span[p+i] << "\n";
-            // for(int j = 0; j < span[p+i]; j++) {
-            //     buffer.push_back(hash());
-            // }
-            // for(auto &&minimiser = text[offset[p]] | view; minimiser != text[offset[p] + span[p+i]] | view; ++minimiser) {
-            //     seqan3::debug_stream << kmer_to_string(minimiser.minimiser_value, m) << ','
-            //                  << kmer_to_string(minimiser.window_value, k) << '\n';
-            // }
-            for (auto && minimiser : text | view) {
-                seqan3::debug_stream << kmer_to_string(minimiser.minimiser_value, m) << ','
-                             << kmer_to_string(minimiser.window_value, k) << '\n';
+            for(int i = 0; i < b; i++) {
+                seqan3::debug_stream << "offset: " << offset[p+i] << " span: "  << span[p+i] << '\n';
+                seqan3::debug_stream << "text: " << std::span(text).subspan(offset[p+i], span[p+i]+k-1) << '\n';
+                int j = 0;
+                for (auto && hash : text | std::views::drop(offset[p+i])
+                                         | std::views::take(span[p+i]+k-1) | kmer_view) {
+                    // seqan3::debug_stream << kmer_to_string(hash, k) << '\n';
+                    kmerbuffer.push_back(hash);
+                    startpositions.push_back(offset[p+i] + j);
+                    j++;
+                }
             }
+            for (auto kmer : kmerbuffer)
+                seqan3::debug_stream << kmer_to_string(kmer, k) << ' ';
+            seqan3::debug_stream << '\n';
+            for (auto pos : startpositions)
+                std::cout << pos << ' ';
+            std::cout << '\n';
+
+            cur_minimiser = minimiser.minimiser_value;
+        }
+        for(int i = 0; i < kmerbuffer.size(); i++) {
+            if(minimiser.window_value == kmerbuffer[i])
+                positions.push_back(startpositions[i]);
         }
         
-
     }
 
     return 0;
@@ -280,8 +238,14 @@ int main()
     Dictionary dict(5, 2);
     dict.build(text);
 
-    std::vector<seqan3::dna4> query{"GTAGCTAGCTACA"_dna4};
-    dict.streaming_query(text, query);
+    // std::vector<seqan3::dna4> query{"GTAGCTAGCTACA"_dna4};
+    std::vector<seqan3::dna4> query{"GTAGCTA"_dna4};
+    std::vector<uint64_t> positions;
+    dict.streaming_query(text, query, positions);
+
+    for (auto pos : positions)
+        std::cout << pos << ' ';
+    std::cout << '\n';
 
     
     return 0;
