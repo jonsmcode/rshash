@@ -1,49 +1,23 @@
 #include <seqan3/core/debug_stream.hpp>
-#include <seqan3/alphabet/nucleotide/dna4.hpp>
-#include <seqan3/search/views/minimiser_hash_and_positions.hpp>
-// #include <seqan3/search/views/minimiser_and_window_hash.hpp>
-#include <seqan3/search/views/kmer_minimiser_hash.hpp>
+
 #include <seqan3/search/views/kmer_hash.hpp>
 #include <seqan3/search/views/minimiser_hash.hpp>
-#include <seqan3/contrib/sdsl-lite.hpp>
 
-using namespace seqan3::literals;
-using namespace seqan3::contrib::sdsl;
-
-
-seqan3::dna4_vector kmer_to_string(uint64_t kmer, size_t const kmer_size)
-{
-    seqan3::dna4_vector result(kmer_size);
-    for (size_t i = 0; i < kmer_size; ++i)
-    {
-        result[kmer_size - 1 - i].assign_rank(kmer & 0b11);
-        kmer >>= 2;
-    }
-    return result;
-}
+#include "kmer_minimiser_hash.hpp"
+#include "dict.h"
 
 
-class Dictionary
-{
-    uint8_t k, m;
-    bit_vector r;
-    bit_vector s;
-    sd_vector<> sdr;
-    sd_vector<> sds;
-    sd_vector<>::rank_1_type r_rank;
-    sd_vector<>::select_1_type s_select;
-    int_vector<0> offset;
-    int_vector<0> span;
-    int offset_width;
-    int span_width;
+// seqan3::dna4_vector kmer_to_string(uint64_t kmer, size_t const kmer_size)
+// {
+//     seqan3::dna4_vector result(kmer_size);
+//     for (size_t i = 0; i < kmer_size; ++i)
+//     {
+//         result[kmer_size - 1 - i].assign_rank(kmer & 0b11);
+//         kmer >>= 2;
+//     }
+//     return result;
+// }
 
-    public:
-        Dictionary(uint8_t const, uint8_t const);
-        int build(std::vector<seqan3::dna4>&);
-        int streaming_query(std::vector<seqan3::dna4>&,
-            std::vector<seqan3::dna4>&,
-            std::vector<uint64_t> &);
-};
 
 Dictionary::Dictionary(uint8_t const k, uint8_t const m) {
     this->k = k;
@@ -60,12 +34,14 @@ int Dictionary::build(std::vector<seqan3::dna4> &text)
         r[minimiser.minimiser_value] = 1;
     }
 
+    // todo: not sparse, faster library
     sdr = sd_vector<>(r);
     r_rank = sd_vector<>::rank_1_type(&sdr);
+    // r_rank = rank_support_v<> rb(&r);
 
-    for (size_t i=0; i<r.size(); i++)
-        seqan3::debug_stream  << r[i] << " ";
-    std::cout << "\n";
+    // for (size_t i=0; i<r.size(); i++)
+    //     seqan3::debug_stream  << r[i] << " ";
+    // std::cout << "\n";
 
     const int c = r_rank((1 << (2*m))-1);
 
@@ -87,10 +63,10 @@ int Dictionary::build(std::vector<seqan3::dna4> &text)
         count[r]++; // + CB[minimiser] (if > 255)
         n++;
     }
-    std::cout  << n <<  "\n";
-    for (size_t i=0; i<c; i++)
-        std::cout  << +count[i] <<  " ";
-    std::cout << "\n";
+    // std::cout  << n <<  "\n";
+    // for (size_t i=0; i<c; i++)
+    //     std::cout  << +count[i] <<  " ";
+    // std::cout << "\n";
 
     s = bit_vector(n, 0);
     s[0] = 1;
@@ -99,10 +75,11 @@ int Dictionary::build(std::vector<seqan3::dna4> &text)
         j += count[i]; // + CB
         s[j] = 1;
     }
-    for (size_t i=0; i<n; i++)
-        std::cout  << s[i] <<  " ";
-    std::cout << "\n";
+    // for (size_t i=0; i<n; i++)
+    //     std::cout  << s[i] <<  " ";
+    // std::cout << "\n";
 
+    // todo: test runtime allocated (and compressed) sdsl::int_vector<0> sizes
     sds = sd_vector<>(s);
     s_select = sd_vector<>::select_1_type(&sds);
 
@@ -143,17 +120,18 @@ int Dictionary::build(std::vector<seqan3::dna4> &text)
     // for (size_t i=0; i<n; i++)
     //     std::cout << (offset[i] >> offset_width) << " " << (offset[i] & mask) << "\n";
     // std::cout << "\n";
-    for (size_t i=0; i<n; i++)
-        std::cout << offset[i] << "\n";
-    std::cout << "\n";
-    for (size_t i=0; i<n; i++)
-        std::cout << span[i] << "\n";
-    std::cout << "\n";
+    // for (size_t i=0; i<n; i++)
+    //     std::cout << offset[i] << "\n";
+    // std::cout << "\n";
+    // for (size_t i=0; i<n; i++)
+    //     std::cout << span[i] << "\n";
+    // std::cout << "\n";
 
     return 0;
 }
 
 
+// todo: parallelize queries
 int Dictionary::streaming_query(std::vector<seqan3::dna4> &text,
                                 std::vector<seqan3::dna4> &query,
                                 std::vector<uint64_t> &positions)
@@ -163,46 +141,49 @@ int Dictionary::streaming_query(std::vector<seqan3::dna4> &text,
     auto kmer_view = seqan3::views::kmer_hash(seqan3::ungapped{k})
                         | std::views::transform([](uint64_t i) {return i ^ seed;});
 
-    // todo: hashtable for buffer!
+    // todo: test hashtable instead of vector
     std::vector<uint64_t> kmerbuffer;
     std::vector<uint64_t> startpositions;
     int cur_minimiser = -1;
 
-    // todo: parallelize queries
     for(auto && minimiser : query | query_view) {
-        seqan3::debug_stream << "minimiser: " << kmer_to_string(minimiser.minimiser_value, m) << '\n';
+        // seqan3::debug_stream << "minimiser: " << kmer_to_string(minimiser.minimiser_value, m) << '\n';
         if(minimiser.minimiser_value != cur_minimiser) {
             kmerbuffer.clear();
             startpositions.clear();
 
             size_t r = r_rank(minimiser.minimiser_value)+1;
             // todo: fast select bitvector implementation
-            // todo: test compressed size array
             size_t p = s_select(r);
             size_t q = s_select(r+1);
             size_t b = q - p;
 
             for(int i = 0; i < b; i++) {
-                seqan3::debug_stream << "offset: " << offset[p+i] << " span: "  << span[p+i] << '\n';
-                seqan3::debug_stream << "text: " << std::span(text).subspan(offset[p+i], span[p+i]+k-1) << '\n';
+                // seqan3::debug_stream << "offset: " << offset[p+i] << " span: "  << span[p+i] << '\n';
+                // seqan3::debug_stream << "text: " << std::span(text).subspan(offset[p+i], span[p+i]+k-1) << '\n';
+
+                // todo: test no span!
+                // size_t sp = k - m + 1;
+                size_t sp = span[p+i]+k-1;
                 int j = 0;
                 for (auto && hash : text | std::views::drop(offset[p+i])
-                                         | std::views::take(span[p+i]+k-1) | kmer_view) {
+                                         | std::views::take(sp) | kmer_view) {
                     // seqan3::debug_stream << kmer_to_string(hash, k) << '\n';
                     kmerbuffer.push_back(hash);
                     startpositions.push_back(offset[p+i] + j);
                     j++;
                 }
             }
-            for (auto kmer : kmerbuffer)
-                seqan3::debug_stream << kmer_to_string(kmer, k) << ' ';
-            seqan3::debug_stream << '\n';
-            for (auto pos : startpositions)
-                std::cout << pos << ' ';
-            std::cout << '\n';
+            // for (auto kmer : kmerbuffer)
+            //     seqan3::debug_stream << kmer_to_string(kmer, k) << ' ';
+            // seqan3::debug_stream << '\n';
+            // for (auto pos : startpositions)
+            //     std::cout << pos << ' ';
+            // std::cout << '\n';
 
             cur_minimiser = minimiser.minimiser_value;
         }
+        // todo: simd for buffer
         for(int i = 0; i < kmerbuffer.size(); i++) {
             if(minimiser.window_value == kmerbuffer[i])
                 positions.push_back(startpositions[i]);
@@ -213,40 +194,3 @@ int Dictionary::streaming_query(std::vector<seqan3::dna4> &text,
     return 0;
 }
 
-// int Dictionary::hash_buf(std::vector<size_t> const &buffer, std::vector<seqan3::dna4> const &query)
-// {
-//     for(int i = 0; i < b; i++) {
-
-//     }
-// }
-
-
-int main()
-{
-    // const int m = 2; // minimiser
-    // const int k = 5; // k-mer
-
-    // auto reference_stream = seqan3::sequence_file_input{reference_file};
-
-    // // read into memory
-    // std::vector<std::vector<seqan3::dna4>> text;
-    // for (auto& record : reference_stream) {
-    //     text.push_back(record.sequence());
-    // }
-    std::vector<seqan3::dna4> text{"TCATCAGTAGCTACATTACG"_dna4};
-
-    Dictionary dict(5, 2);
-    dict.build(text);
-
-    // std::vector<seqan3::dna4> query{"GTAGCTAGCTACA"_dna4};
-    std::vector<seqan3::dna4> query{"GTAGCTA"_dna4};
-    std::vector<uint64_t> positions;
-    dict.streaming_query(text, query, positions);
-
-    for (auto pos : positions)
-        std::cout << pos << ' ';
-    std::cout << '\n';
-
-    
-    return 0;
-}
