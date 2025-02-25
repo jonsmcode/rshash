@@ -6,6 +6,7 @@ using namespace seqan3::contrib::sdsl;
 
 class Dictionary
 {
+private:
     uint8_t k, m;
     bit_vector r;
     bit_vector s;
@@ -18,10 +19,13 @@ class Dictionary
     int offset_width;
     int span_width;
 
-    public:
-        Dictionary(uint8_t const k, uint8_t const m);
-        int build(std::vector<seqan3::dna4>&);
-        int streaming_query(std::vector<seqan3::dna4>&,
-            std::vector<seqan3::dna4>&,
-            std::vector<uint64_t> &);
+public:
+    Dictionary();
+    Dictionary(uint8_t const k, uint8_t const m);
+    int build(std::vector<seqan3::dna4>&);
+    int streaming_query(std::vector<seqan3::dna4>&,
+        std::vector<seqan3::dna4>&,
+        std::vector<uint64_t> &);
+    int save(std::filesystem::path&);
+    int load(std::filesystem::path&);
 };

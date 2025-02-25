@@ -1,5 +1,8 @@
-#include <seqan3/core/debug_stream.hpp>
+#include <filesystem>
+#include <iostream>
+#include <fstream>
 
+#include <seqan3/core/debug_stream.hpp>
 #include <seqan3/search/views/kmer_hash.hpp>
 #include <seqan3/search/views/minimiser_hash.hpp>
 
@@ -7,22 +10,23 @@
 #include "dict.h"
 
 
-// seqan3::dna4_vector kmer_to_string(uint64_t kmer, size_t const kmer_size)
-// {
-//     seqan3::dna4_vector result(kmer_size);
-//     for (size_t i = 0; i < kmer_size; ++i)
-//     {
-//         result[kmer_size - 1 - i].assign_rank(kmer & 0b11);
-//         kmer >>= 2;
-//     }
-//     return result;
-// }
+seqan3::dna4_vector kmer_to_string(uint64_t kmer, size_t const kmer_size)
+{
+    seqan3::dna4_vector result(kmer_size);
+    for (size_t i = 0; i < kmer_size; ++i)
+    {
+        result[kmer_size - 1 - i].assign_rank(kmer & 0b11);
+        kmer >>= 2;
+    }
+    return result;
+}
 
+
+Dictionary::Dictionary() {}
 
 Dictionary::Dictionary(uint8_t const k, uint8_t const m) {
     this->k = k;
     this->m = m;
-    r = bit_vector(1 << (2*m)); // bitvector for 4^m minimizers
 }
 
 
@@ -30,20 +34,20 @@ int Dictionary::build(std::vector<seqan3::dna4> &text)
 {
     auto view = bsc::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k});
 
+    r = bit_vector(1 << (2*m)); // bitvector for 4^m minimizers
     for(auto && minimiser : text | view) {
         r[minimiser.minimiser_value] = 1;
     }
-
     // todo: not sparse, faster library
     sdr = sd_vector<>(r);
     r_rank = sd_vector<>::rank_1_type(&sdr);
-    // r_rank = rank_support_v<> rb(&r);
 
     // for (size_t i=0; i<r.size(); i++)
     //     seqan3::debug_stream  << r[i] << " ";
     // std::cout << "\n";
 
-    const int c = r_rank((1 << (2*m))-1);
+    uint64_t c = r_rank((1 << (2*m))-1);
+    std::cout  << c <<  "\n";
 
     uint8_t count[c];
     std::fill(count, count + c, 0);
@@ -63,10 +67,10 @@ int Dictionary::build(std::vector<seqan3::dna4> &text)
         count[r]++; // + CB[minimiser] (if > 255)
         n++;
     }
-    // std::cout  << n <<  "\n";
-    // for (size_t i=0; i<c; i++)
-    //     std::cout  << +count[i] <<  " ";
-    // std::cout << "\n";
+    std::cout  << n <<  "\n";
+    for (size_t i=0; i<c; i++)
+        std::cout  << +count[i] <<  " ";
+    std::cout << "\n";
 
     s = bit_vector(n, 0);
     s[0] = 1;
@@ -84,12 +88,12 @@ int Dictionary::build(std::vector<seqan3::dna4> &text)
     s_select = sd_vector<>::select_1_type(&sds);
 
     size_t offset_width = std::bit_width(text.size());
-    size_t span_width = std::bit_width(k);
+    // size_t span_width = std::bit_width(k);
     // offset.width(offset_width + span_width);
     offset.width(offset_width);
     offset.resize(n);
-    span.width(span_width);
-    span.resize(n);
+    // span.width(span_width);
+    // span.resize(n);
     // std::cout << "offset width " << offset_width << ", span width " << span_width << std::endl;
     // std::cout << "total width " << (int) offset.width() << ", total bits " << offset.bit_size() << std::endl;
 
@@ -97,32 +101,35 @@ int Dictionary::build(std::vector<seqan3::dna4> &text)
     // zero CB
 
     for (auto && minimiser : text | view) {
-        int r = r_rank(minimiser.minimiser_value);
-        int s = s_select(minimiser.minimiser_value);
-        // seqan3::debug_stream << minimiser.minimiser_value << kmer_to_string(minimiser.minimiser_value, m) << ',' << minimiser.range_position
-                             // << ',' << minimiser.occurrences << '\n';
+        seqan3::debug_stream << minimiser.minimiser_value << ',' << kmer_to_string(minimiser.minimiser_value, m)
+                             << ',' << minimiser.range_position << ',' << minimiser.occurrences << '\n';
+        uint64_t r = r_rank(minimiser.minimiser_value);
+        uint64_t s = s_select(r+1);
+        std::cout << "r: " << r << " s: " << s << '\n';
         int mo = minimiser.occurrences;
         int j = 0;
         while(mo > k) {
             mo -= k;
             // offset[s + count[r]] = (minimiser.range_position + j*k << offset_width) | k;
             offset[s + count[r]] = minimiser.range_position + j*k;
-            span[s + count[r]] = k;
+            // span[s + count[r]] = k;
             j++;
             count[r]++;
         }
         // offset[s + count[r]] = (minimiser.range_position + j*k << offset_width) | mo;
+        // std::cout << "s: " << s << "count: " << +count[r] << '\n';
         offset[s + count[r]] = minimiser.range_position + j*k;
-        span[s + count[r]] = mo;
+        // span[s + count[r]] = mo;
         count[r]++;
     }
+
     // uint64_t mask = (1 << span_width) - 1;
     // for (size_t i=0; i<n; i++)
     //     std::cout << (offset[i] >> offset_width) << " " << (offset[i] & mask) << "\n";
     // std::cout << "\n";
-    // for (size_t i=0; i<n; i++)
-    //     std::cout << offset[i] << "\n";
-    // std::cout << "\n";
+    for (size_t i=0; i<n; i++)
+        std::cout << offset[i] << " ";
+    std::cout << "\n";
     // for (size_t i=0; i<n; i++)
     //     std::cout << span[i] << "\n";
     // std::cout << "\n";
@@ -152,10 +159,10 @@ int Dictionary::streaming_query(std::vector<seqan3::dna4> &text,
             kmerbuffer.clear();
             startpositions.clear();
 
-            size_t r = r_rank(minimiser.minimiser_value)+1;
+            size_t r = r_rank(minimiser.minimiser_value);
             // todo: fast select bitvector implementation
-            size_t p = s_select(r);
-            size_t q = s_select(r+1);
+            size_t p = s_select(r+1);
+            size_t q = s_select(r+2);
             size_t b = q - p;
 
             for(int i = 0; i < b; i++) {
@@ -190,6 +197,30 @@ int Dictionary::streaming_query(std::vector<seqan3::dna4> &text,
         }
         
     }
+
+    return 0;
+}
+
+
+int Dictionary::save(std::filesystem::path &filepath) {
+    std::ofstream file;
+    file.open(filepath);
+    file << "k: " << +this->k << " m: " << +this->m << "\n";
+
+    file.close();
+
+    return 0;
+}
+
+int Dictionary::load(std::filesystem::path &filepath) {
+    // uint8_t k;
+    // uint8_t m;
+    // bit_vector r;
+    // bit_vector s;
+    // this->offset_width = offset_width;
+    // int span_width;
+    // int_vector<0> offset;
+    // int_vector<0> span;
 
     return 0;
 }
