@@ -1,13 +1,11 @@
 #include <filesystem>
-#include <iostream>
-#include <fstream>
 
 #include <seqan3/core/debug_stream.hpp>
 #include <seqan3/search/views/kmer_hash.hpp>
 #include <seqan3/search/views/minimiser_hash.hpp>
 
-#include "kmer_minimiser_hash.hpp"
 #include "dict.h"
+#include "kmer_minimiser_hash.hpp"
 
 
 seqan3::dna4_vector kmer_to_string(uint64_t kmer, size_t const kmer_size)
@@ -67,7 +65,7 @@ int Dictionary::build(const std::vector<seqan3::dna4> &text)
         count[r]++; // + CB[minimiser] (if > 255)
         n++;
     }
-    // std::cout  << n <<  "\n";
+    std::cout  << n <<  "\n";
     // for (size_t i=0; i<c; i++)
     //     std::cout  << +count[i] <<  " ";
     // std::cout << "\n";
@@ -125,9 +123,9 @@ int Dictionary::build(const std::vector<seqan3::dna4> &text)
     // for (size_t i=0; i<n; i++)
     //     std::cout << (offset[i] >> offset_width) << " " << (offset[i] & mask) << "\n";
     // std::cout << "\n";
-    for (size_t i=0; i<n; i++)
-        std::cout << offset[i] << " ";
-    std::cout << "\n";
+    // for (size_t i=0; i<n; i++)
+    //     std::cout << offset[i] << " ";
+    // std::cout << "\n";
     // for (size_t i=0; i<n; i++)
     //     std::cout << span[i] << " ";
     // std::cout << "\n";
@@ -141,7 +139,9 @@ int Dictionary::streaming_query(const std::vector<seqan3::dna4> &text,
                                 std::vector<uint64_t> &positions)
 {
     auto query_view = bsc::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
+    // uint64_t const seed = 347692;
     uint64_t const seed = 0;
+    // uint64_t const seed = 0x8F'3F'73'B5'CF'1C'9A'DE;
     auto kmer_view = seqan3::views::kmer_hash(seqan3::ungapped{k})
                       | std::views::transform([](uint64_t i) {return i ^ seed;});
 

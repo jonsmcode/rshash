@@ -9,3 +9,6 @@ find_package (seqan3 3.0 REQUIRED)
  
 # build app with seqan3
 add_subdirectory(source)
+
+# build tests
+add_subdirectory(test)

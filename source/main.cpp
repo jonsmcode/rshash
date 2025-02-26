@@ -1,4 +1,3 @@
-// #include <filesystem>
 #include <seqan3/core/debug_stream.hpp>
 #include <seqan3/argument_parser/all.hpp>
 #include <seqan3/io/sequence_file/all.hpp>
@@ -65,7 +64,6 @@ int main(int argc, char** argv)
     // std::vector<seqan3::dna4> input{"TCATCAGTAGCTACATTACG"_dna4};
     // std::vector<seqan3::dna4> query{"GTAGCTA"_dna4};
     std::vector<seqan3::dna4> input;
-    std::vector<seqan3::dna4> query;
 
     if(args.cmd == "bq") {
         if(!parser.is_option_set('i')) {
@@ -76,7 +74,7 @@ int main(int argc, char** argv)
             std::cout << "provide query file\n";
             return -1;
         }
-        
+
         load_file(args.i, input);
         Dictionary dict(args.k, args.m);
         dict.build(input);
@@ -87,12 +85,13 @@ int main(int argc, char** argv)
         std::cout << "no queries: " << queries.size() << '\n';
 
         for(auto query : queries) {
-            // seqan3::debug_stream << query;
             std::vector<uint64_t> positions;
             dict.streaming_query(input, query, positions);
             for (auto pos : positions)
                 std::cout << pos << ' ';
+            // std::cout << '\n';
         }
+        std::cout << '\n';
     }
     else if(args.cmd == "build") {
         if(!parser.is_option_set('i')) {
