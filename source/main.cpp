@@ -6,8 +6,7 @@
 #include "dict.h"
 
 
-struct cmd_arguments
-{
+struct cmd_arguments {
     std::string cmd{};
     std::filesystem::path i{};
     std::filesystem::path q{};
@@ -16,8 +15,7 @@ struct cmd_arguments
     uint8_t m{};
 };
 
-struct my_traits:seqan3::sequence_file_input_default_traits_dna
-{
+struct my_traits:seqan3::sequence_file_input_default_traits_dna {
     using sequence_alphabet = seqan3::dna4;
 };
 
@@ -34,6 +32,23 @@ void initialise_argument_parser(seqan3::argument_parser &parser, cmd_arguments &
     parser.add_option(args.m, 'm', "minimiser", "minimiser length");
 }
 
+int load_file(const std::filesystem::path &filepath, std::vector<seqan3::dna4> &output) {
+    auto stream = seqan3::sequence_file_input<my_traits>{filepath};
+    for (auto & record : stream) {
+        output = record.sequence();
+        return 0;
+    }
+    return -1;
+}
+
+int load_files(const std::filesystem::path &filepath, std::vector<std::vector<seqan3::dna4>> &output) {
+    auto stream = seqan3::sequence_file_input<my_traits>{filepath};
+    for (auto & record : stream) {
+        output.push_back(record.sequence());
+    }
+    return 0;
+}
+
 
 int main(int argc, char** argv)
 {
@@ -48,9 +63,38 @@ int main(int argc, char** argv)
     }
 
     // std::vector<seqan3::dna4> input{"TCATCAGTAGCTACATTACG"_dna4};
+    // std::vector<seqan3::dna4> query{"GTAGCTA"_dna4};
     std::vector<seqan3::dna4> input;
+    std::vector<seqan3::dna4> query;
 
-    if(args.cmd == "build") {
+    if(args.cmd == "bq") {
+        if(!parser.is_option_set('i')) {
+            std::cout << "provide input file\n";
+            return -1;
+        }
+        if(!parser.is_option_set('q')) {
+            std::cout << "provide query file\n";
+            return -1;
+        }
+        
+        load_file(args.i, input);
+        Dictionary dict(args.k, args.m);
+        dict.build(input);
+        std::cout << "built dict!\n";
+
+        std::vector<std::vector<seqan3::dna4>> queries;
+        load_files(args.q, queries);
+        std::cout << "no queries: " << queries.size() << '\n';
+
+        for(auto query : queries) {
+            // seqan3::debug_stream << query;
+            std::vector<uint64_t> positions;
+            dict.streaming_query(input, query, positions);
+            for (auto pos : positions)
+                std::cout << pos << ' ';
+        }
+    }
+    else if(args.cmd == "build") {
         if(!parser.is_option_set('i')) {
             std::cout << "provide input file\n";
             return -1;
@@ -63,11 +107,7 @@ int main(int argc, char** argv)
             std::cout << "specify k and m\n";
             return -1;
         }
-        auto reference_stream = seqan3::sequence_file_input<my_traits>{args.i};
-        for (auto & record : reference_stream) {
-            input = record.sequence();
-            break;
-        }
+        load_file(args.i, input);
         Dictionary dict(args.k, args.m);
         // seqan3::debug_stream << input;
         dict.build(input);
@@ -78,21 +118,24 @@ int main(int argc, char** argv)
             std::cout << "provide dict file\n";
             return -1;
         }
-        // if(!parser.is_option_set('q')) {
-        //     std::cout << "provide query file\n";
-        //     return -1;
-        // }
-        std::vector<seqan3::dna4> query{"GTAGCTA"_dna4};
-        // load query file into memory
-        std::vector<uint64_t> positions;
-
+        if(!parser.is_option_set('q')) {
+            std::cout << "provide query file\n";
+            return -1;
+        }
         Dictionary dict;
         dict.load(args.d);
-        dict.streaming_query(input, query, positions);
 
-        for (auto pos : positions)
-            std::cout << pos << ' ';
-        std::cout << '\n';
+        std::vector<std::vector<seqan3::dna4>> queries;
+        load_files(args.q, queries);
+        std::cout << "no queries: " << queries.size() << '\n';
+
+        // todo: parallelize queries
+        for(auto query : queries) {
+            std::vector<uint64_t> positions;
+            dict.streaming_query(input, query, positions);
+            for (auto pos : positions)
+                std::cout << pos << ' ';
+        }
     }
     else {
         std::cout << "illegal command\n";

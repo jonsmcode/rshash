@@ -22,10 +22,10 @@ private:
 public:
     Dictionary();
     Dictionary(uint8_t const k, uint8_t const m);
-    int build(std::vector<seqan3::dna4>&);
-    int streaming_query(std::vector<seqan3::dna4>&,
-        std::vector<seqan3::dna4>&,
+    int build(const std::vector<seqan3::dna4>&);
+    int streaming_query(const std::vector<seqan3::dna4>&,
+        const std::vector<seqan3::dna4>&,
         std::vector<uint64_t> &);
-    int save(std::filesystem::path&);
-    int load(std::filesystem::path&);
+    int save(const std::filesystem::path&);
+    int load(const std::filesystem::path&);
 };

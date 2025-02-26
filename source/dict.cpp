@@ -30,7 +30,7 @@ Dictionary::Dictionary(uint8_t const k, uint8_t const m) {
 }
 
 
-int Dictionary::build(std::vector<seqan3::dna4> &text)
+int Dictionary::build(const std::vector<seqan3::dna4> &text)
 {
     auto view = bsc::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k});
 
@@ -47,7 +47,7 @@ int Dictionary::build(std::vector<seqan3::dna4> &text)
     // std::cout << "\n";
 
     uint64_t c = r_rank((1 << (2*m))-1);
-    std::cout  << c <<  "\n";
+    // std::cout  << c <<  "\n";
 
     uint8_t count[c];
     std::fill(count, count + c, 0);
@@ -67,10 +67,10 @@ int Dictionary::build(std::vector<seqan3::dna4> &text)
         count[r]++; // + CB[minimiser] (if > 255)
         n++;
     }
-    std::cout  << n <<  "\n";
-    for (size_t i=0; i<c; i++)
-        std::cout  << +count[i] <<  " ";
-    std::cout << "\n";
+    // std::cout  << n <<  "\n";
+    // for (size_t i=0; i<c; i++)
+    //     std::cout  << +count[i] <<  " ";
+    // std::cout << "\n";
 
     s = bit_vector(n, 0);
     s[0] = 1;
@@ -88,12 +88,12 @@ int Dictionary::build(std::vector<seqan3::dna4> &text)
     s_select = sd_vector<>::select_1_type(&sds);
 
     size_t offset_width = std::bit_width(text.size());
-    // size_t span_width = std::bit_width(k);
+    size_t span_width = std::bit_width(k);
     // offset.width(offset_width + span_width);
     offset.width(offset_width);
     offset.resize(n);
-    // span.width(span_width);
-    // span.resize(n);
+    span.width(span_width);
+    span.resize(n);
     // std::cout << "offset width " << offset_width << ", span width " << span_width << std::endl;
     // std::cout << "total width " << (int) offset.width() << ", total bits " << offset.bit_size() << std::endl;
 
@@ -101,25 +101,23 @@ int Dictionary::build(std::vector<seqan3::dna4> &text)
     // zero CB
 
     for (auto && minimiser : text | view) {
-        seqan3::debug_stream << minimiser.minimiser_value << ',' << kmer_to_string(minimiser.minimiser_value, m)
-                             << ',' << minimiser.range_position << ',' << minimiser.occurrences << '\n';
+        // seqan3::debug_stream << minimiser.minimiser_value << ',' << kmer_to_string(minimiser.minimiser_value, m)
+        //                      << ',' << minimiser.range_position << ',' << minimiser.occurrences << '\n';
         uint64_t r = r_rank(minimiser.minimiser_value);
         uint64_t s = s_select(r+1);
-        std::cout << "r: " << r << " s: " << s << '\n';
         int mo = minimiser.occurrences;
         int j = 0;
         while(mo > k) {
             mo -= k;
             // offset[s + count[r]] = (minimiser.range_position + j*k << offset_width) | k;
             offset[s + count[r]] = minimiser.range_position + j*k;
-            // span[s + count[r]] = k;
+            span[s + count[r]] = k;
             j++;
             count[r]++;
         }
         // offset[s + count[r]] = (minimiser.range_position + j*k << offset_width) | mo;
-        // std::cout << "s: " << s << "count: " << +count[r] << '\n';
         offset[s + count[r]] = minimiser.range_position + j*k;
-        // span[s + count[r]] = mo;
+        span[s + count[r]] = mo;
         count[r]++;
     }
 
@@ -131,22 +129,21 @@ int Dictionary::build(std::vector<seqan3::dna4> &text)
         std::cout << offset[i] << " ";
     std::cout << "\n";
     // for (size_t i=0; i<n; i++)
-    //     std::cout << span[i] << "\n";
+    //     std::cout << span[i] << " ";
     // std::cout << "\n";
 
     return 0;
 }
 
 
-// todo: parallelize queries
-int Dictionary::streaming_query(std::vector<seqan3::dna4> &text,
-                                std::vector<seqan3::dna4> &query,
+int Dictionary::streaming_query(const std::vector<seqan3::dna4> &text,
+                                const std::vector<seqan3::dna4> &query,
                                 std::vector<uint64_t> &positions)
 {
     auto query_view = bsc::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
     uint64_t const seed = 0;
     auto kmer_view = seqan3::views::kmer_hash(seqan3::ungapped{k})
-                        | std::views::transform([](uint64_t i) {return i ^ seed;});
+                      | std::views::transform([](uint64_t i) {return i ^ seed;});
 
     // todo: test hashtable instead of vector
     std::vector<uint64_t> kmerbuffer;
@@ -166,12 +163,13 @@ int Dictionary::streaming_query(std::vector<seqan3::dna4> &text,
             size_t b = q - p;
 
             for(int i = 0; i < b; i++) {
-                // seqan3::debug_stream << "offset: " << offset[p+i] << " span: "  << span[p+i] << '\n';
-                // seqan3::debug_stream << "text: " << std::span(text).subspan(offset[p+i], span[p+i]+k-1) << '\n';
-
-                // todo: test no span!
+                // todo: test with(out) span
                 // size_t sp = k - m + 1;
                 size_t sp = span[p+i]+k-1;
+
+                // seqan3::debug_stream << "offset: " << offset[p+i] << '\n';
+                // seqan3::debug_stream << "offset: " << offset[p+i] << " span: "  << span[p+i] << '\n';
+                // seqan3::debug_stream << "text: " << std::span(text).subspan(offset[p+i], sp) << '\n';
                 int j = 0;
                 for (auto && hash : text | std::views::drop(offset[p+i])
                                          | std::views::take(sp) | kmer_view) {
@@ -202,17 +200,16 @@ int Dictionary::streaming_query(std::vector<seqan3::dna4> &text,
 }
 
 
-int Dictionary::save(std::filesystem::path &filepath) {
-    std::ofstream file;
-    file.open(filepath);
-    file << "k: " << +this->k << " m: " << +this->m << "\n";
-
-    file.close();
+int Dictionary::save(const std::filesystem::path &filepath) {
+    // std::ofstream file;
+    // file.open(filepath);
+    // file << "k: " << +this->k << " m: " << +this->m << "\n";
+    // file.close();
 
     return 0;
 }
 
-int Dictionary::load(std::filesystem::path &filepath) {
+int Dictionary::load(const std::filesystem::path &filepath) {
     // uint8_t k;
     // uint8_t m;
     // bit_vector r;
