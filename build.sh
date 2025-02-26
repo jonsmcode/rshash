@@ -1,1 +1,0 @@
-cmake -DCMAKE_BUILD_TYPE=Release ../source -D CMAKE_CXX_COMPILER=g++-14
