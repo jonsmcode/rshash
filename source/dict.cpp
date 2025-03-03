@@ -65,7 +65,7 @@ int Dictionary::build(const std::vector<seqan3::dna4> &text)
         count[r]++; // + CB[minimiser] (if > 255)
         n++;
     }
-    std::cout  << n <<  "\n";
+    // std::cout  << n <<  "\n";
     // for (size_t i=0; i<c; i++)
     //     std::cout  << +count[i] <<  " ";
     // std::cout << "\n";
@@ -205,7 +205,6 @@ int Dictionary::save(const std::filesystem::path &filepath) {
     // file.open(filepath);
     // file << "k: " << +this->k << " m: " << +this->m << "\n";
     // file.close();
-
     return 0;
 }
 
@@ -218,7 +217,6 @@ int Dictionary::load(const std::filesystem::path &filepath) {
     // int span_width;
     // int_vector<0> offset;
     // int_vector<0> span;
-
     return 0;
 }
 

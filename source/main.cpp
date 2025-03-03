@@ -78,11 +78,11 @@ int main(int argc, char** argv)
         load_file(args.i, input);
         Dictionary dict(args.k, args.m);
         dict.build(input);
-        std::cout << "built dict!\n";
+        // std::cout << "built dict!\n";
 
         std::vector<std::vector<seqan3::dna4>> queries;
         load_files(args.q, queries);
-        std::cout << "no queries: " << queries.size() << '\n';
+        // std::cout << "no queries: " << queries.size() << '\n';
 
         for(auto query : queries) {
             std::vector<uint64_t> positions;
