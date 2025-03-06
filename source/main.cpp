@@ -12,6 +12,7 @@ struct cmd_arguments {
     std::filesystem::path d{};
     uint8_t k{};
     uint8_t m{};
+    bool p{false};
 };
 
 struct my_traits:seqan3::sequence_file_input_default_traits_dna {
@@ -29,6 +30,7 @@ void initialise_argument_parser(seqan3::argument_parser &parser, cmd_arguments &
     parser.add_option(args.d, 'd', "dict", "provide dict file");
     parser.add_option(args.k, 'k', "k-mer", "k-mer length");
     parser.add_option(args.m, 'm', "minimiser", "minimiser length");
+    parser.add_flag(args.p, 'p', "positions", "specify if you want to output positions or membership.");
 }
 
 int load_file(const std::filesystem::path &filepath, std::vector<seqan3::dna4> &output) {
@@ -61,8 +63,6 @@ int main(int argc, char** argv)
         return -1;
     }
 
-    // std::vector<seqan3::dna4> input{"TCATCAGTAGCTACATTACG"_dna4};
-    // std::vector<seqan3::dna4> query{"GTAGCTA"_dna4};
     std::vector<seqan3::dna4> input;
 
     if(args.cmd == "bq") {
@@ -74,25 +74,37 @@ int main(int argc, char** argv)
             std::cout << "provide query file\n";
             return -1;
         }
-
+        if(!parser.is_option_set('k')) {
+            std::cout << "specify k\n";
+            return -1;
+        }
         load_file(args.i, input);
         Dictionary dict(args.k, args.m);
         dict.build(input);
-        // std::cout << "built dict!\n";
 
         std::vector<std::vector<seqan3::dna4>> queries;
         load_files(args.q, queries);
-        // std::cout << "no queries: " << queries.size() << '\n';
 
-        for(auto query : queries) {
-            std::vector<uint64_t> positions;
-            dict.streaming_query(input, query, positions);
-            for (auto pos : positions)
-                std::cout << pos << ' ';
-            // std::cout << '\n';
+        if(args.p) {
+            for(auto query : queries) {
+                std::vector<uint64_t> positions;
+                dict.streaming_query(input, query, positions);
+                for (auto pos : positions)
+                    std::cout << pos << ' ';
+                std::cout << '\n';
+            }
         }
-        std::cout << '\n';
+        else {
+            for(auto query : queries) {
+                int occurences = dict.streaming_query(input, query);
+                std::cout << occurences << '\n';
+            }
+        }
     }
+
+
+
+
     else if(args.cmd == "build") {
         if(!parser.is_option_set('i')) {
             std::cout << "provide input file\n";
@@ -102,9 +114,12 @@ int main(int argc, char** argv)
             std::cout << "provide dict output file\n";
             return -1;
         }
-        if(!parser.is_option_set('k') || !parser.is_option_set('m')) {
-            std::cout << "specify k and m\n";
+        if(!parser.is_option_set('k')) {
+            std::cout << "specify k\n";
             return -1;
+        }
+        if(!parser.is_option_set('m')) {
+            // m = ceil(log_4(N)) + 2;
         }
         load_file(args.i, input);
         Dictionary dict(args.k, args.m);

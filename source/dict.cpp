@@ -200,6 +200,53 @@ int Dictionary::streaming_query(const std::vector<seqan3::dna4> &text,
 }
 
 
+int Dictionary::streaming_query(const std::vector<seqan3::dna4> &text,
+                                const std::vector<seqan3::dna4> &query)
+{
+    auto query_view = bsc::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
+    uint64_t const seed = 0;
+    auto kmer_view = seqan3::views::kmer_hash(seqan3::ungapped{k})
+                      | std::views::transform([](uint64_t i) {return i ^ seed;});
+
+    std::vector<uint64_t> kmerbuffer;
+    int cur_minimiser = -1;
+    int occurences = 0;
+
+    for(auto && minimiser : query | query_view) {
+        if(minimiser.minimiser_value != cur_minimiser) {
+            kmerbuffer.clear();
+
+            size_t r = r_rank(minimiser.minimiser_value);
+            size_t p = s_select(r+1);
+            size_t q = s_select(r+2);
+            size_t b = q - p;
+
+            for(int i = 0; i < b; i++) {
+                size_t sp = span[p+i]+k-1;
+
+                int j = 0;
+                for (auto && hash : text | std::views::drop(offset[p+i])
+                                         | std::views::take(sp) | kmer_view) {
+                    kmerbuffer.push_back(hash);
+                    j++;
+                }
+            }
+            cur_minimiser = minimiser.minimiser_value;
+        }
+
+        for(int i = 0; i < kmerbuffer.size(); i++) {
+            if(minimiser.window_value == kmerbuffer[i]) {
+                occurences++;
+                break;
+            }
+        }
+
+    }
+
+    return occurences;
+}
+
+
 int Dictionary::save(const std::filesystem::path &filepath) {
     // std::ofstream file;
     // file.open(filepath);

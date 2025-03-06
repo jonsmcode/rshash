@@ -24,8 +24,10 @@ public:
     Dictionary(uint8_t const k, uint8_t const m);
     int build(const std::vector<seqan3::dna4>&);
     int streaming_query(const std::vector<seqan3::dna4>&,
-        const std::vector<seqan3::dna4>&,
-        std::vector<uint64_t> &);
+                        const std::vector<seqan3::dna4>&,
+                        std::vector<uint64_t> &);
+    int streaming_query(const std::vector<seqan3::dna4>&,
+                        const std::vector<seqan3::dna4>&);
     int save(const std::filesystem::path&);
     int load(const std::filesystem::path&);
 };
