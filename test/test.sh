@@ -5,7 +5,7 @@ PROGRAM="../build/source/main"
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/datasets" >/dev/null 2>&1 && pwd )"
 LOG="log.txt"
 
-m=13
+m=15
 
 run_program()
 {
@@ -37,7 +37,7 @@ run_program()
 }
 
 
-for data in $(find $DIR -mindepth 0 -maxdepth 0 -type d); do
+for data in $(find $DIR -mindepth 1 -maxdepth 1 -type d); do
   FILENAME=$(basename $data)
   run_program $data/
 done

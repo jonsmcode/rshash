@@ -23,8 +23,6 @@ struct my_traits:seqan3::sequence_file_input_default_traits_dna {
 void initialise_argument_parser(seqan3::argument_parser &parser, cmd_arguments &args)
 {
     parser.add_positional_option(args.cmd, "command options: build, query");
-    // parser.add_option(args.t, 't', "text", "provide text file", seqan3::input_file_validator{{"fa","fasta"}});
-    // parser.add_option(args.q, 'q', "query", "provide query file", seqan3::input_file_validator{{"fa","fasta"}});
     parser.add_option(args.i, 'i', "input", "provide input file");
     parser.add_option(args.q, 'q', "query", "provide query file");
     parser.add_option(args.d, 'd', "dict", "provide dict file");
@@ -50,6 +48,35 @@ int load_files(const std::filesystem::path &filepath, std::vector<std::vector<se
     return 0;
 }
 
+int check_arguments(seqan3::argument_parser &parser, cmd_arguments &args) {
+    if(args.cmd == "bq") {
+        if(!parser.is_option_set('i'))
+            throw seqan3::user_input_error("provide input file.");
+        if(!parser.is_option_set('q'))
+            throw seqan3::user_input_error("provide query file.");
+        if(!parser.is_option_set('k'))
+            throw seqan3::user_input_error("specify k");
+    }
+    else if(args.cmd == "build") {
+        if(!parser.is_option_set('i'))
+            throw seqan3::user_input_error("provide input file.");
+        if(!parser.is_option_set('d'))
+            throw seqan3::user_input_error("provide dict output file.");
+        if(!parser.is_option_set('k'))
+            throw seqan3::user_input_error("specify k");
+    }
+    else if(args.cmd == "query") {
+        if(!parser.is_option_set('d'))
+            throw seqan3::user_input_error("provide dict file.");
+        if(!parser.is_option_set('q'))
+            throw seqan3::user_input_error("provide query file.");
+    }
+    else
+        throw seqan3::user_input_error("illegal command");
+
+    return 0;
+}
+
 
 int main(int argc, char** argv)
 {
@@ -58,29 +85,23 @@ int main(int argc, char** argv)
     initialise_argument_parser(parser, args);
     try {
         parser.parse();
+        check_arguments(parser, args);
     }
     catch (seqan3::argument_parser_error const &ext) {
         return -1;
     }
+    
+    std::vector<seqan3::dna4> text;
+    load_file(args.i, text);
 
-    std::vector<seqan3::dna4> input;
+    // if(!parser.is_option_set('m'))
+    //     m = ceil(log_4(N)) + 2;
+    // else 
+    //     m = args.m;
 
     if(args.cmd == "bq") {
-        if(!parser.is_option_set('i')) {
-            std::cout << "provide input file\n";
-            return -1;
-        }
-        if(!parser.is_option_set('q')) {
-            std::cout << "provide query file\n";
-            return -1;
-        }
-        if(!parser.is_option_set('k')) {
-            std::cout << "specify k\n";
-            return -1;
-        }
-        load_file(args.i, input);
         Dictionary dict(args.k, args.m);
-        dict.build(input);
+        dict.build(text);
 
         std::vector<std::vector<seqan3::dna4>> queries;
         load_files(args.q, queries);
@@ -88,7 +109,7 @@ int main(int argc, char** argv)
         if(args.p) {
             for(auto query : queries) {
                 std::vector<uint64_t> positions;
-                dict.streaming_query(input, query, positions);
+                dict.streaming_query(text, query, positions);
                 for (auto pos : positions)
                     std::cout << pos << ' ';
                 std::cout << '\n';
@@ -96,65 +117,31 @@ int main(int argc, char** argv)
         }
         else {
             for(auto query : queries) {
-                int occurences = dict.streaming_query(input, query);
+                int occurences = dict.streaming_query(text, query);
                 std::cout << occurences << '\n';
             }
         }
     }
+    // else if(args.cmd == "build") {
+    //     Dictionary dict(args.k, args.m);
+    //     dict.build(input);
+    //     dict.save(args.d);
+    // }
+    // else if(args.cmd == "query") {
+    //     Dictionary dict;
+    //     dict.load(args.d);
 
+    //     std::vector<std::vector<seqan3::dna4>> queries;
+    //     load_files(args.q, queries);
 
-
-
-    else if(args.cmd == "build") {
-        if(!parser.is_option_set('i')) {
-            std::cout << "provide input file\n";
-            return -1;
-        }
-        if(!parser.is_option_set('d')) {
-            std::cout << "provide dict output file\n";
-            return -1;
-        }
-        if(!parser.is_option_set('k')) {
-            std::cout << "specify k\n";
-            return -1;
-        }
-        if(!parser.is_option_set('m')) {
-            // m = ceil(log_4(N)) + 2;
-        }
-        load_file(args.i, input);
-        Dictionary dict(args.k, args.m);
-        // seqan3::debug_stream << input;
-        dict.build(input);
-        dict.save(args.d);
-    }
-    else if(args.cmd == "query") {
-        if(!parser.is_option_set('d')) {
-            std::cout << "provide dict file\n";
-            return -1;
-        }
-        if(!parser.is_option_set('q')) {
-            std::cout << "provide query file\n";
-            return -1;
-        }
-        Dictionary dict;
-        dict.load(args.d);
-
-        std::vector<std::vector<seqan3::dna4>> queries;
-        load_files(args.q, queries);
-        std::cout << "no queries: " << queries.size() << '\n';
-
-        // todo: parallelize queries
-        for(auto query : queries) {
-            std::vector<uint64_t> positions;
-            dict.streaming_query(input, query, positions);
-            for (auto pos : positions)
-                std::cout << pos << ' ';
-        }
-    }
-    else {
-        std::cout << "illegal command\n";
-        return -1;
-    }
+    //     // todo: parallelize queries
+    //     for(auto query : queries) {
+    //         std::vector<uint64_t> positions;
+    //         dict.streaming_query(input, query, positions);
+    //         for (auto pos : positions)
+    //             std::cout << pos << ' ';
+    //     }
+    // }
  
     return 0;
 }
