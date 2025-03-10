@@ -49,17 +49,15 @@ int load_files(const std::filesystem::path &filepath, std::vector<std::vector<se
 }
 
 int check_arguments(seqan3::argument_parser &parser, cmd_arguments &args) {
+    if(!parser.is_option_set('i'))
+        throw seqan3::user_input_error("provide input file.");
     if(args.cmd == "bq") {
-        if(!parser.is_option_set('i'))
-            throw seqan3::user_input_error("provide input file.");
         if(!parser.is_option_set('q'))
             throw seqan3::user_input_error("provide query file.");
         if(!parser.is_option_set('k'))
             throw seqan3::user_input_error("specify k");
     }
     else if(args.cmd == "build") {
-        if(!parser.is_option_set('i'))
-            throw seqan3::user_input_error("provide input file.");
         if(!parser.is_option_set('d'))
             throw seqan3::user_input_error("provide dict output file.");
         if(!parser.is_option_set('k'))
@@ -90,7 +88,7 @@ int main(int argc, char** argv)
     catch (seqan3::argument_parser_error const &ext) {
         return -1;
     }
-    
+
     std::vector<seqan3::dna4> text;
     load_file(args.i, text);
 
@@ -122,26 +120,35 @@ int main(int argc, char** argv)
             }
         }
     }
-    // else if(args.cmd == "build") {
-    //     Dictionary dict(args.k, args.m);
-    //     dict.build(input);
-    //     dict.save(args.d);
-    // }
-    // else if(args.cmd == "query") {
-    //     Dictionary dict;
-    //     dict.load(args.d);
+    else if(args.cmd == "build") {
+        Dictionary dict(args.k, args.m);
+        dict.build(text);
+        dict.save(args.d);
+    }
+    else if(args.cmd == "query") {
+        Dictionary dict;
+        dict.load(args.d);
 
-    //     std::vector<std::vector<seqan3::dna4>> queries;
-    //     load_files(args.q, queries);
+        std::vector<std::vector<seqan3::dna4>> queries;
+        load_files(args.q, queries);
 
-    //     // todo: parallelize queries
-    //     for(auto query : queries) {
-    //         std::vector<uint64_t> positions;
-    //         dict.streaming_query(input, query, positions);
-    //         for (auto pos : positions)
-    //             std::cout << pos << ' ';
-    //     }
-    // }
+        // todo: parallelize queries
+        if(args.p) {
+            for(auto query : queries) {
+                std::vector<uint64_t> positions;
+                dict.streaming_query(text, query, positions);
+                for (auto pos : positions)
+                    std::cout << pos << ' ';
+                std::cout << '\n';
+            }
+        }
+        else {
+            for(auto query : queries) {
+                int occurences = dict.streaming_query(text, query);
+                std::cout << occurences << '\n';
+            }
+        }
+    }
  
     return 0;
 }

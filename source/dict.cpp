@@ -248,22 +248,28 @@ int Dictionary::streaming_query(const std::vector<seqan3::dna4> &text,
 
 
 int Dictionary::save(const std::filesystem::path &filepath) {
-    // std::ofstream file;
-    // file.open(filepath);
-    // file << "k: " << +this->k << " m: " << +this->m << "\n";
-    // file.close();
+    std::ofstream out(filepath, std::ios::binary);
+    seqan3::contrib::sdsl::serialize(this->k, out);
+    seqan3::contrib::sdsl::serialize(this->m, out);
+    seqan3::contrib::sdsl::serialize(this->sdr, out);
+    seqan3::contrib::sdsl::serialize(this->sds, out);
+    seqan3::contrib::sdsl::serialize(this->offset, out);
+    seqan3::contrib::sdsl::serialize(this->span, out);
+    out.close();
     return 0;
 }
 
 int Dictionary::load(const std::filesystem::path &filepath) {
-    // uint8_t k;
-    // uint8_t m;
-    // bit_vector r;
-    // bit_vector s;
-    // this->offset_width = offset_width;
-    // int span_width;
-    // int_vector<0> offset;
-    // int_vector<0> span;
+    std::ifstream in(filepath, std::ios::binary);
+    seqan3::contrib::sdsl::load(this->k, in);
+    seqan3::contrib::sdsl::load(this->m, in);
+    seqan3::contrib::sdsl::load(this->sdr, in);
+    this->r_rank = sd_vector<>::rank_1_type(&sdr);
+    seqan3::contrib::sdsl::load(this->sds, in);
+    this->s_select = sd_vector<>::select_1_type(&sds);
+    seqan3::contrib::sdsl::load(this->offset, in);
+    seqan3::contrib::sdsl::load(this->span, in);
+    in.close();
     return 0;
 }
 

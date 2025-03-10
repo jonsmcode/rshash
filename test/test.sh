@@ -20,7 +20,8 @@ run_program()
     QUERY="${BASENAME}_query.fasta"
     k=$(echo "${BASENAME##*k}" | grep -o '[0-9]*')
 
-    $PROGRAM bq -i "$f" -q "$QUERY" -k $k -m $m -p > prog_out.txt 2>&1
+    $PROGRAM build -i "$f" -d "${BASENAME}.dict" -k $k -m $m
+    $PROGRAM query -i "$f" -d "${BASENAME}.dict" -q "$QUERY" -k $k -m $m -p > prog_out.txt 2>&1
 
     cat prog_out.txt >> $LOG
 
