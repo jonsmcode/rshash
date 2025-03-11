@@ -45,10 +45,10 @@ int Dictionary::build(const std::vector<seqan3::dna4> &text)
     // std::cout << "\n";
 
     uint64_t c = r_rank((1 << (2*m))-1);
-    // std::cout  << c <<  "\n";
+    std::cout  << c <<  "\n";
 
-    uint8_t count[c];
-    std::fill(count, count + c, 0);
+    uint8_t* count = new uint8_t[c];
+    std::memset(count, 0, c*sizeof(uint8_t));
     // zero CB
 
     // todo: hashtable CB for more than 255 minimisers
@@ -57,15 +57,28 @@ int Dictionary::build(const std::vector<seqan3::dna4> &text)
     for(auto && minimiser : text | view) {
         int r = r_rank(minimiser.minimiser_value);
         int mo = minimiser.occurrences;
+        // count[r] += mo?!
         while(mo > k) {
             mo -= k;
-            count[r]++; // + CB[minimiser] (if > 255)
+            if(count[r] == 255) {
+                // + CB[minimiser] (if > 255)
+                // std::cout << " frequent minimiser: " << minimiser.minimiser_value << '\n';
+            }
+            else {
+                count[r]++; 
+            }
             n++;
         }
-        count[r]++; // + CB[minimiser] (if > 255)
+        if(count[r] == 255) {
+            // + CB[minimiser] (if > 255)
+            // std::cout << " frequent minimiser: " << minimiser.minimiser_value << '\n';
+        }
+        else {
+            count[r]++;
+        }
         n++;
     }
-    // std::cout  << n <<  "\n";
+    std::cout << "no minimiser: " << n <<  "\n";
     // for (size_t i=0; i<c; i++)
     //     std::cout  << +count[i] <<  " ";
     // std::cout << "\n";
@@ -92,17 +105,20 @@ int Dictionary::build(const std::vector<seqan3::dna4> &text)
     offset.resize(n);
     span.width(span_width);
     span.resize(n);
+
+    std::cout << "allocated memory.\n";
     // std::cout << "offset width " << offset_width << ", span width " << span_width << std::endl;
     // std::cout << "total width " << (int) offset.width() << ", total bits " << offset.bit_size() << std::endl;
 
-    std::fill(count, count + c, 0);
+    std::memset(count, 0, c*sizeof(uint8_t));
     // zero CB
 
     for (auto && minimiser : text | view) {
         // seqan3::debug_stream << minimiser.minimiser_value << ',' << kmer_to_string(minimiser.minimiser_value, m)
-        //                      << ',' << minimiser.range_position << ',' << minimiser.occurrences << '\n';
+                             // << ',' << minimiser.range_position << ',' << minimiser.occurrences << '\n';
         uint64_t r = r_rank(minimiser.minimiser_value);
         uint64_t s = s_select(r+1);
+        // seqan3::debug_stream << r << ' ' << s << '\n';
         int mo = minimiser.occurrences;
         int j = 0;
         while(mo > k) {
@@ -129,6 +145,7 @@ int Dictionary::build(const std::vector<seqan3::dna4> &text)
     // for (size_t i=0; i<n; i++)
     //     std::cout << span[i] << " ";
     // std::cout << "\n";
+    delete[] count;
 
     return 0;
 }

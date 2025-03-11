@@ -48,6 +48,15 @@ int load_files(const std::filesystem::path &filepath, std::vector<std::vector<se
     return 0;
 }
 
+int load_file_concat(const std::filesystem::path &filepath, std::vector<seqan3::dna4> &output) {
+    auto stream = seqan3::sequence_file_input<my_traits>{filepath};
+    for (auto & record : stream) {
+        // std::ranges::move(record.sequence(), std::back_inserter(output));
+        output.insert(output.end(), record.sequence().begin(), record.sequence().end());
+    }
+    return 0;
+}
+
 int check_arguments(seqan3::argument_parser &parser, cmd_arguments &args) {
     if(!parser.is_option_set('i'))
         throw seqan3::user_input_error("provide input file.");
@@ -88,41 +97,24 @@ int main(int argc, char** argv)
     catch (seqan3::argument_parser_error const &ext) {
         return -1;
     }
+    // std::cout << "loading text file...\n";
 
     std::vector<seqan3::dna4> text;
-    load_file(args.i, text);
+    // load_file(args.i, text);
+    load_file_concat(args.i, text);
+
+    // std::cout << "done. size: " << text.size() << '\n';
 
     // if(!parser.is_option_set('m'))
     //     m = ceil(log_4(N)) + 2;
     // else 
     //     m = args.m;
 
-    if(args.cmd == "bq") {
+    if(args.cmd == "build") {
+        std::cout << "building dict...\n";
         Dictionary dict(args.k, args.m);
         dict.build(text);
-
-        std::vector<std::vector<seqan3::dna4>> queries;
-        load_files(args.q, queries);
-
-        if(args.p) {
-            for(auto query : queries) {
-                std::vector<uint64_t> positions;
-                dict.streaming_query(text, query, positions);
-                for (auto pos : positions)
-                    std::cout << pos << ' ';
-                std::cout << '\n';
-            }
-        }
-        else {
-            for(auto query : queries) {
-                int occurences = dict.streaming_query(text, query);
-                std::cout << occurences << '\n';
-            }
-        }
-    }
-    else if(args.cmd == "build") {
-        Dictionary dict(args.k, args.m);
-        dict.build(text);
+        std::cout << "done.\n";
         dict.save(args.d);
     }
     else if(args.cmd == "query") {
