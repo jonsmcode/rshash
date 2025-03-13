@@ -32,67 +32,54 @@ int Dictionary::build(const std::vector<seqan3::dna4> &text)
 {
     auto view = bsc::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k});
 
-    r = bit_vector(1 << (2*m)); // bitvector for 4^m minimizers
+    const uint64_t M = 1 << (m+m); // 4^m
+
+    r = bit_vector(M);
     for(auto && minimiser : text | view) {
         r[minimiser.minimiser_value] = 1;
     }
-    // todo: not sparse, faster library
+    // todo: dense bv, faster library
     sdr = sd_vector<>(r);
     r_rank = sd_vector<>::rank_1_type(&sdr);
 
-    // for (size_t i=0; i<r.size(); i++)
-    //     seqan3::debug_stream  << r[i] << " ";
-    // std::cout << "\n";
-
-    uint64_t c = r_rank((1 << (2*m))-1);
+    uint64_t c = r_rank(M);
     std::cout  << c <<  "\n";
 
     uint8_t* count = new uint8_t[c];
     std::memset(count, 0, c*sizeof(uint8_t));
-    // zero CB
 
-    // todo: hashtable CB for more than 255 minimisers
-    // todo: implement minmizer s.t. minmizer range at most window length
+    // todo: init hashtable with adequate size, faster hashtable
+    std::unordered_map<uint64_t, uint32_t> cb;
+    
     int n = 0;
+    // (todo: implement minmizer s.t. minmizer range at most window length)
     for(auto && minimiser : text | view) {
-        int r = r_rank(minimiser.minimiser_value);
-        int mo = minimiser.occurrences;
-        // count[r] += mo?!
-        while(mo > k) {
-            mo -= k;
-            if(count[r] == 255) {
-                // + CB[minimiser] (if > 255)
-                // std::cout << " frequent minimiser: " << minimiser.minimiser_value << '\n';
-            }
-            else {
-                count[r]++; 
-            }
-            n++;
+        uint64_t r = r_rank(minimiser.minimiser_value);
+        uint64_t o = minimiser.occurrences;
+
+        int w = o/k + 1;
+        if(count[r] == 255)
+            cb[r] += w;
+        else if(count[r] + w >= 255) {
+            cb[r] = w - (255 - count[r]);
+            count[r] = 255;
         }
-        if(count[r] == 255) {
-            // + CB[minimiser] (if > 255)
-            // std::cout << " frequent minimiser: " << minimiser.minimiser_value << '\n';
-        }
-        else {
-            count[r]++;
-        }
-        n++;
+        else
+            count[r] += w;
+        n += w;
     }
     std::cout << "no minimiser: " << n <<  "\n";
-    // for (size_t i=0; i<c; i++)
-    //     std::cout  << +count[i] <<  " ";
-    // std::cout << "\n";
+    std::cout << "freq kmers: " << (float) cb.size()/n *100 << "%\n";
 
-    s = bit_vector(n, 0);
+    s = bit_vector(n+1, 0);
     s[0] = 1;
     int j = 0;
-    for (size_t i=0; i<c-1; i++) {
-        j += count[i]; // + CB
+    for (size_t i=0; i < c; i++) {
+        j += count[i];
+        if(count[i] == 255)
+            j += cb[i];
         s[j] = 1;
     }
-    // for (size_t i=0; i<n; i++)
-    //     std::cout  << s[i] <<  " ";
-    // std::cout << "\n";
 
     // todo: test runtime allocated (and compressed) sdsl::int_vector<0> sizes
     sds = sd_vector<>(s);
@@ -111,7 +98,8 @@ int Dictionary::build(const std::vector<seqan3::dna4> &text)
     // std::cout << "total width " << (int) offset.width() << ", total bits " << offset.bit_size() << std::endl;
 
     std::memset(count, 0, c*sizeof(uint8_t));
-    // zero CB
+    for (const auto& [key, value] : cb)
+        cb[key] = 0;
 
     for (auto && minimiser : text | view) {
         // seqan3::debug_stream << minimiser.minimiser_value << ',' << kmer_to_string(minimiser.minimiser_value, m)
@@ -119,33 +107,37 @@ int Dictionary::build(const std::vector<seqan3::dna4> &text)
         uint64_t r = r_rank(minimiser.minimiser_value);
         uint64_t s = s_select(r+1);
         // seqan3::debug_stream << r << ' ' << s << '\n';
-        int mo = minimiser.occurrences;
+        int o = minimiser.occurrences;
         int j = 0;
-        while(mo > k) {
-            mo -= k;
+        while(o > k) {
             // offset[s + count[r]] = (minimiser.range_position + j*k << offset_width) | k;
-            offset[s + count[r]] = minimiser.range_position + j*k;
-            span[s + count[r]] = k;
+            if(count[r] == 255) {
+                offset[s + count[r] + cb[r]] = minimiser.range_position + j*k;
+                span[s + count[r] + cb[r]] = k;
+                cb[r]++;
+            }
+            else {
+                offset[s + count[r]] = minimiser.range_position + j*k;
+                span[s + count[r]] = k;
+                count[r]++;
+            }
+            o -= k;
             j++;
+        }
+        // offset[s + count[r]] = (minimiser.range_position + j*k << offset_width) | o;
+        if(count[r] == 255) {
+            offset[s + count[r] + cb[r]] = minimiser.range_position + j*k;
+            span[s + count[r] + cb[r]] = o;
+            cb[r]++;
+        }
+        else {
+            offset[s + count[r]] = minimiser.range_position + j*k;
+            span[s + count[r]] = o;
             count[r]++;
         }
-        // offset[s + count[r]] = (minimiser.range_position + j*k << offset_width) | mo;
-        offset[s + count[r]] = minimiser.range_position + j*k;
-        span[s + count[r]] = mo;
-        count[r]++;
     }
 
-    // uint64_t mask = (1 << span_width) - 1;
-    // for (size_t i=0; i<n; i++)
-    //     std::cout << (offset[i] >> offset_width) << " " << (offset[i] & mask) << "\n";
-    // std::cout << "\n";
-    // for (size_t i=0; i<n; i++)
-    //     std::cout << offset[i] << " ";
-    // std::cout << "\n";
-    // for (size_t i=0; i<n; i++)
-    //     std::cout << span[i] << " ";
-    // std::cout << "\n";
-    delete[] count;
+    delete[] count; // delete cb?
 
     return 0;
 }
@@ -168,47 +160,39 @@ int Dictionary::streaming_query(const std::vector<seqan3::dna4> &text,
     int cur_minimiser = -1;
 
     for(auto && minimiser : query | query_view) {
-        // seqan3::debug_stream << "minimiser: " << kmer_to_string(minimiser.minimiser_value, m) << '\n';
-        if(minimiser.minimiser_value != cur_minimiser) {
-            kmerbuffer.clear();
-            startpositions.clear();
+        if(sdr[minimiser.minimiser_value]) {
+            if(minimiser.minimiser_value != cur_minimiser) {
+                kmerbuffer.clear();
+                startpositions.clear();
 
-            size_t r = r_rank(minimiser.minimiser_value);
-            // todo: fast select bitvector implementation
-            size_t p = s_select(r+1);
-            size_t q = s_select(r+2);
-            size_t b = q - p;
+                // todo: fast select bitvector implementation
+                size_t r = r_rank(minimiser.minimiser_value);
+                size_t p = s_select(r+1);
+                size_t q = s_select(r+2);
+                size_t b = q - p;
 
-            for(int i = 0; i < b; i++) {
-                // todo: test with(out) span
-                // size_t sp = k - m + 1;
-                size_t sp = span[p+i]+k-1;
+                for(int i = 0; i < b; i++) {
+                    // todo: test with(out) span
+                    // size_t sp = k - m + 1;
+                    size_t sp = span[p+i]+k-1;
 
-                // seqan3::debug_stream << "offset: " << offset[p+i] << '\n';
-                // seqan3::debug_stream << "offset: " << offset[p+i] << " span: "  << span[p+i] << '\n';
-                // seqan3::debug_stream << "text: " << std::span(text).subspan(offset[p+i], sp) << '\n';
-                int j = 0;
-                for (auto && hash : text | std::views::drop(offset[p+i])
-                                         | std::views::take(sp) | kmer_view) {
-                    // seqan3::debug_stream << kmer_to_string(hash, k) << '\n';
-                    kmerbuffer.push_back(hash);
-                    startpositions.push_back(offset[p+i] + j);
-                    j++;
+                    int j = 0;
+                    for (auto && hash : text | std::views::drop(offset[p+i])
+                                             | std::views::take(sp) | kmer_view) {
+                        // seqan3::debug_stream << kmer_to_string(hash, k) << '\n';
+                        kmerbuffer.push_back(hash);
+                        startpositions.push_back(offset[p+i] + j);
+                        j++;
+                    }
                 }
-            }
-            // for (auto kmer : kmerbuffer)
-            //     seqan3::debug_stream << kmer_to_string(kmer, k) << ' ';
-            // seqan3::debug_stream << '\n';
-            // for (auto pos : startpositions)
-            //     std::cout << pos << ' ';
-            // std::cout << '\n';
 
-            cur_minimiser = minimiser.minimiser_value;
-        }
-        // todo: simd for buffer
-        for(int i = 0; i < kmerbuffer.size(); i++) {
-            if(minimiser.window_value == kmerbuffer[i])
-                positions.push_back(startpositions[i]);
+                cur_minimiser = minimiser.minimiser_value;
+            }
+            // todo: simd for buffer
+            for(int i = 0; i < kmerbuffer.size(); i++) {
+                if(minimiser.window_value == kmerbuffer[i])
+                    positions.push_back(startpositions[i]);
+            }
         }
         
     }
@@ -230,31 +214,33 @@ int Dictionary::streaming_query(const std::vector<seqan3::dna4> &text,
     int occurences = 0;
 
     for(auto && minimiser : query | query_view) {
-        if(minimiser.minimiser_value != cur_minimiser) {
-            kmerbuffer.clear();
+        if(sdr[minimiser.minimiser_value]) {
+            if(minimiser.minimiser_value != cur_minimiser) {
+                kmerbuffer.clear();
 
-            size_t r = r_rank(minimiser.minimiser_value);
-            size_t p = s_select(r+1);
-            size_t q = s_select(r+2);
-            size_t b = q - p;
+                size_t r = r_rank(minimiser.minimiser_value);
+                size_t p = s_select(r+1);
+                size_t q = s_select(r+2);
+                size_t b = q - p;
 
-            for(int i = 0; i < b; i++) {
-                size_t sp = span[p+i]+k-1;
+                for(int i = 0; i < b; i++) {
+                    size_t sp = span[p+i]+k-1;
 
-                int j = 0;
-                for (auto && hash : text | std::views::drop(offset[p+i])
-                                         | std::views::take(sp) | kmer_view) {
-                    kmerbuffer.push_back(hash);
-                    j++;
+                    int j = 0;
+                    for (auto && hash : text | std::views::drop(offset[p+i])
+                                             | std::views::take(sp) | kmer_view) {
+                        kmerbuffer.push_back(hash);
+                        j++;
+                    }
                 }
+                cur_minimiser = minimiser.minimiser_value;
             }
-            cur_minimiser = minimiser.minimiser_value;
-        }
 
-        for(int i = 0; i < kmerbuffer.size(); i++) {
-            if(minimiser.window_value == kmerbuffer[i]) {
-                occurences++;
-                break;
+            for(int i = 0; i < kmerbuffer.size(); i++) {
+                if(minimiser.window_value == kmerbuffer[i]) {
+                    occurences++;
+                    break;
+                }
             }
         }
 

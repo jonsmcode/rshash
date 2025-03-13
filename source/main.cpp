@@ -20,8 +20,7 @@ struct my_traits:seqan3::sequence_file_input_default_traits_dna {
 };
 
 
-void initialise_argument_parser(seqan3::argument_parser &parser, cmd_arguments &args)
-{
+void initialise_argument_parser(seqan3::argument_parser &parser, cmd_arguments &args) {
     parser.add_positional_option(args.cmd, "command options: build, query");
     parser.add_option(args.i, 'i', "input", "provide input file");
     parser.add_option(args.q, 'q', "query", "provide query file");
@@ -31,28 +30,33 @@ void initialise_argument_parser(seqan3::argument_parser &parser, cmd_arguments &
     parser.add_flag(args.p, 'p', "positions", "specify if you want to output positions or membership.");
 }
 
-int load_file(const std::filesystem::path &filepath, std::vector<seqan3::dna4> &output) {
-    auto stream = seqan3::sequence_file_input<my_traits>{filepath};
-    for (auto & record : stream) {
-        output = record.sequence();
-        return 0;
-    }
-    return -1;
-}
-
 int load_files(const std::filesystem::path &filepath, std::vector<std::vector<seqan3::dna4>> &output) {
     auto stream = seqan3::sequence_file_input<my_traits>{filepath};
     for (auto & record : stream) {
-        output.push_back(record.sequence());
+        output.push_back(std::move(record.sequence()));
     }
     return 0;
+    // seqan3::sequence_file_input fin{filepath};
+    // using record_type = decltype(fin)::record_type;
+    // std::vector<record_type> records{};
+ 
+    // for (auto & record : fin)
+    //     records.push_back(std::move(record));
+
+    // return 0;
 }
 
-int load_file_concat(const std::filesystem::path &filepath, std::vector<seqan3::dna4> &output) {
+int load_file(const std::filesystem::path &filepath, std::vector<seqan3::dna4> &output) {
+    // auto stream = seqan3::sequence_file_input<my_traits>{filepath};
+    // for (auto & record : stream) {
+    //     output = record.sequence();
+    //     return 0;
+    // }
+    // return -1;
     auto stream = seqan3::sequence_file_input<my_traits>{filepath};
     for (auto & record : stream) {
-        // std::ranges::move(record.sequence(), std::back_inserter(output));
-        output.insert(output.end(), record.sequence().begin(), record.sequence().end());
+        std::ranges::move(record.sequence(), std::back_inserter(output));
+        // output.insert(output.end(), record.sequence().begin(), record.sequence().end());
     }
     return 0;
 }
@@ -100,8 +104,7 @@ int main(int argc, char** argv)
     // std::cout << "loading text file...\n";
 
     std::vector<seqan3::dna4> text;
-    // load_file(args.i, text);
-    load_file_concat(args.i, text);
+    load_file(args.i, text);
 
     // std::cout << "done. size: " << text.size() << '\n';
 
@@ -124,6 +127,7 @@ int main(int argc, char** argv)
         std::vector<std::vector<seqan3::dna4>> queries;
         load_files(args.q, queries);
 
+        uint64_t n = 0;
         // todo: parallelize queries
         if(args.p) {
             for(auto query : queries) {
@@ -137,8 +141,10 @@ int main(int argc, char** argv)
         else {
             for(auto query : queries) {
                 int occurences = dict.streaming_query(text, query);
-                std::cout << occurences << '\n';
+                // std::cout << occurences << '\n';
+                n += occurences;
             }
+            std::cout << "total k-mers found: " << n << '\n';
         }
     }
  
