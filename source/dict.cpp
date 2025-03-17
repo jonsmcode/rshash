@@ -38,9 +38,7 @@ int Dictionary::build(const std::vector<seqan3::dna4> &text)
     for(auto && minimiser : text | view) {
         r[minimiser.minimiser_value] = 1;
     }
-    // todo: dense bv, faster library
-    sdr = sd_vector<>(r);
-    r_rank = sd_vector<>::rank_1_type(&sdr);
+    r_rank = rank_support_v<1>(&r);
 
     uint64_t c = r_rank(M);
     std::cout  << c <<  "\n";
@@ -54,18 +52,18 @@ int Dictionary::build(const std::vector<seqan3::dna4> &text)
     int n = 0;
     // (todo: implement minmizer s.t. minmizer range at most window length)
     for(auto && minimiser : text | view) {
-        uint64_t r = r_rank(minimiser.minimiser_value);
+        uint64_t i = r_rank(minimiser.minimiser_value);
         uint64_t o = minimiser.occurrences;
 
         int w = o/k + 1;
-        if(count[r] == 255)
-            cb[r] += w;
-        else if(count[r] + w >= 255) {
-            cb[r] = w - (255 - count[r]);
-            count[r] = 255;
+        if(count[i] == 255)
+            cb[i] += w;
+        else if(count[i] + w >= 255) {
+            cb[i] = w - (255 - count[i]);
+            count[i] = 255;
         }
         else
-            count[r] += w;
+            count[i] += w;
         n += w;
     }
     std::cout << "no minimiser: " << n <<  "\n";
@@ -82,8 +80,7 @@ int Dictionary::build(const std::vector<seqan3::dna4> &text)
     }
 
     // todo: test runtime allocated (and compressed) sdsl::int_vector<0> sizes
-    sds = sd_vector<>(s);
-    s_select = sd_vector<>::select_1_type(&sds);
+    simple_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s.data()), n+1, 3);
 
     size_t offset_width = std::bit_width(text.size());
     size_t span_width = std::bit_width(k);
@@ -104,36 +101,36 @@ int Dictionary::build(const std::vector<seqan3::dna4> &text)
     for (auto && minimiser : text | view) {
         // seqan3::debug_stream << minimiser.minimiser_value << ',' << kmer_to_string(minimiser.minimiser_value, m)
                              // << ',' << minimiser.range_position << ',' << minimiser.occurrences << '\n';
-        uint64_t r = r_rank(minimiser.minimiser_value);
-        uint64_t s = s_select(r+1);
+        uint64_t i = r_rank(minimiser.minimiser_value);
+        uint64_t s = simple_select.select(i);
         // seqan3::debug_stream << r << ' ' << s << '\n';
         int o = minimiser.occurrences;
         int j = 0;
         while(o > k) {
             // offset[s + count[r]] = (minimiser.range_position + j*k << offset_width) | k;
-            if(count[r] == 255) {
-                offset[s + count[r] + cb[r]] = minimiser.range_position + j*k;
-                span[s + count[r] + cb[r]] = k;
-                cb[r]++;
+            if(count[i] == 255) {
+                offset[s + count[i] + cb[i]] = minimiser.range_position + j*k;
+                span[s + count[i] + cb[i]] = k;
+                cb[i]++;
             }
             else {
-                offset[s + count[r]] = minimiser.range_position + j*k;
-                span[s + count[r]] = k;
-                count[r]++;
+                offset[s + count[i]] = minimiser.range_position + j*k;
+                span[s + count[i]] = k;
+                count[i]++;
             }
             o -= k;
             j++;
         }
         // offset[s + count[r]] = (minimiser.range_position + j*k << offset_width) | o;
-        if(count[r] == 255) {
-            offset[s + count[r] + cb[r]] = minimiser.range_position + j*k;
-            span[s + count[r] + cb[r]] = o;
-            cb[r]++;
+        if(count[i] == 255) {
+            offset[s + count[i] + cb[i]] = minimiser.range_position + j*k;
+            span[s + count[i] + cb[i]] = o;
+            cb[i]++;
         }
         else {
-            offset[s + count[r]] = minimiser.range_position + j*k;
-            span[s + count[r]] = o;
-            count[r]++;
+            offset[s + count[i]] = minimiser.range_position + j*k;
+            span[s + count[i]] = o;
+            count[i]++;
         }
     }
 
@@ -160,15 +157,14 @@ int Dictionary::streaming_query(const std::vector<seqan3::dna4> &text,
     int cur_minimiser = -1;
 
     for(auto && minimiser : query | query_view) {
-        if(sdr[minimiser.minimiser_value]) {
+        if(r[minimiser.minimiser_value]) {
             if(minimiser.minimiser_value != cur_minimiser) {
                 kmerbuffer.clear();
                 startpositions.clear();
 
-                // todo: fast select bitvector implementation
-                size_t r = r_rank(minimiser.minimiser_value);
-                size_t p = s_select(r+1);
-                size_t q = s_select(r+2);
+                size_t i = r_rank(minimiser.minimiser_value);
+                size_t p = simple_select.select(i);
+                size_t q = simple_select.select(i+1);
                 size_t b = q - p;
 
                 for(int i = 0; i < b; i++) {
@@ -214,23 +210,21 @@ int Dictionary::streaming_query(const std::vector<seqan3::dna4> &text,
     int occurences = 0;
 
     for(auto && minimiser : query | query_view) {
-        if(sdr[minimiser.minimiser_value]) {
+        if(r[minimiser.minimiser_value]) {
             if(minimiser.minimiser_value != cur_minimiser) {
                 kmerbuffer.clear();
 
-                size_t r = r_rank(minimiser.minimiser_value);
-                size_t p = s_select(r+1);
-                size_t q = s_select(r+2);
+                size_t i = r_rank(minimiser.minimiser_value);
+                size_t p = simple_select.select(i);
+                size_t q = simple_select.select(i+1);
                 size_t b = q - p;
 
                 for(int i = 0; i < b; i++) {
                     size_t sp = span[p+i]+k-1;
 
-                    int j = 0;
                     for (auto && hash : text | std::views::drop(offset[p+i])
                                              | std::views::take(sp) | kmer_view) {
                         kmerbuffer.push_back(hash);
-                        j++;
                     }
                 }
                 cur_minimiser = minimiser.minimiser_value;
@@ -254,8 +248,22 @@ int Dictionary::save(const std::filesystem::path &filepath) {
     std::ofstream out(filepath, std::ios::binary);
     seqan3::contrib::sdsl::serialize(this->k, out);
     seqan3::contrib::sdsl::serialize(this->m, out);
-    seqan3::contrib::sdsl::serialize(this->sdr, out);
-    seqan3::contrib::sdsl::serialize(this->sds, out);
+    seqan3::contrib::sdsl::serialize(this->r, out);
+    seqan3::contrib::sdsl::serialize(this->s, out);
+    seqan3::contrib::sdsl::serialize(this->offset, out);
+    seqan3::contrib::sdsl::serialize(this->span, out);
+    out.close();
+    return 0;
+}
+
+int Dictionary::save2(const std::filesystem::path &filepath) {
+    std::ofstream out(filepath, std::ios::binary);
+    seqan3::contrib::sdsl::serialize(this->k, out);
+    seqan3::contrib::sdsl::serialize(this->m, out);
+    seqan3::contrib::sdsl::rrr_vector<> rrr(r);
+    seqan3::contrib::sdsl::serialize(rrr, out);
+    seqan3::contrib::sdsl::sd_vector<> sds(s);
+    seqan3::contrib::sdsl::serialize(sds, out);
     seqan3::contrib::sdsl::serialize(this->offset, out);
     seqan3::contrib::sdsl::serialize(this->span, out);
     out.close();
@@ -266,10 +274,32 @@ int Dictionary::load(const std::filesystem::path &filepath) {
     std::ifstream in(filepath, std::ios::binary);
     seqan3::contrib::sdsl::load(this->k, in);
     seqan3::contrib::sdsl::load(this->m, in);
-    seqan3::contrib::sdsl::load(this->sdr, in);
-    this->r_rank = sd_vector<>::rank_1_type(&sdr);
-    seqan3::contrib::sdsl::load(this->sds, in);
-    this->s_select = sd_vector<>::select_1_type(&sds);
+    seqan3::contrib::sdsl::load(this->r, in);
+    r_rank = rank_support_v<1>(&r);
+    seqan3::contrib::sdsl::load(this->s, in);
+    this->simple_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s.data()), s.size(), 3);
+    seqan3::contrib::sdsl::load(this->offset, in);
+    seqan3::contrib::sdsl::load(this->span, in);
+    in.close();
+    return 0;
+}
+
+int Dictionary::load2(const std::filesystem::path &filepath) {
+    std::ifstream in(filepath, std::ios::binary);
+    seqan3::contrib::sdsl::load(this->k, in);
+    seqan3::contrib::sdsl::load(this->m, in);
+    seqan3::contrib::sdsl::rrr_vector<> rrr;
+    seqan3::contrib::sdsl::load(rrr, in);
+    this->r = bit_vector(rrr.size(), 0);
+    for (size_t i = 0; i < rrr.size(); i++)
+        r[i] = rrr[i];
+    r_rank = rank_support_v<1>(&r);
+    seqan3::contrib::sdsl::sd_vector<> sds;
+    seqan3::contrib::sdsl::load(sds, in);
+    this->s = bit_vector(sds.size(), 0);
+    for (size_t i = 0; i < s.size(); i++)
+        s[i] = sds[i];
+    this->simple_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s.data()), s.size(), 3);
     seqan3::contrib::sdsl::load(this->offset, in);
     seqan3::contrib::sdsl::load(this->span, in);
     in.close();

@@ -1,14 +1,13 @@
 #!/bin/bash
 
-# PROGRAM="../build/source/main"
-PROGRAM="../../sshash/build/sshash"
+PROGRAM="../build/source/main"
 
 today=$(date +%Y-%m-%d-%H-%M-%S)
 
 # DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../test/datasets" >/dev/null 2>&1 && pwd )"
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../../../datasets/unitigs" >/dev/null 2>&1 && pwd )"
 LOG="log.txt"
-CSV="results-$today.csv"
+CSV="our-results-$today.csv"
 
 m=15
 
@@ -26,13 +25,11 @@ run()
 
       echo $f >> $LOG
 
-      # /usr/bin/time -l -o time.txt $PROGRAM build -i "$f" -d "${BASENAME}.dict" -k $k -m $m > prog_out.txt 2>&1
-      /usr/bin/time -l -o time.txt $PROGRAM build -i "$f" -o "${BASENAME}.index" -k $k -m $m > prog_out.txt 2>&1
+      /usr/bin/time -l -o time.txt $PROGRAM build -i "$f" -d "${BASENAME}.dict" -k $k -m $m > prog_out.txt 2>&1
 
       cat prog_out.txt >> $LOG
 
-      # file_size=$(stat -f%z "${BASENAME}.dict")
-      file_size=$(stat -f%z "${BASENAME}.index")
+      file_size=$(stat -f%z "${BASENAME}.dict")
       buildtime=$(cat time.txt | grep "real" | awk '{print $1}')
       buildmem=$(cat time.txt  | grep "maximum resident set size" | awk '{print $1}')
 
@@ -52,8 +49,7 @@ run()
       echo $f >> $LOG
       echo $query >> $LOG
       echo $query
-      # /usr/bin/time -l -o time.txt $PROGRAM query -i "$f" -d "${BASENAME}.dict" -q $query -k $k -m $m > prog_out.txt 2>&1
-      /usr/bin/time -l -o time.txt $PROGRAM query -i "${BASENAME}.index" -q $query > prog_out.txt 2>&1
+      /usr/bin/time -l -o time.txt $PROGRAM query -i "$f" -d "${BASENAME}.dict" -q $query -k $k -m $m > prog_out.txt 2>&1
 
       cat prog_out.txt >> $LOG
       

@@ -1,5 +1,6 @@
 #include <seqan3/alphabet/nucleotide/dna4.hpp>
 #include <seqan3/contrib/sdsl-lite.hpp>
+#include <sux/bits/SimpleSelect.hpp>
 
 using namespace seqan3::literals;
 using namespace seqan3::contrib::sdsl;
@@ -10,10 +11,8 @@ private:
     uint8_t k, m;
     bit_vector r;
     bit_vector s;
-    sd_vector<> sdr;
-    sd_vector<> sds;
-    sd_vector<>::rank_1_type r_rank;
-    sd_vector<>::select_1_type s_select;
+    rank_support_v<1> r_rank;
+    sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> simple_select;
     int_vector<0> offset;
     int_vector<0> span;
     int offset_width;
@@ -30,4 +29,6 @@ public:
                         const std::vector<seqan3::dna4>&);
     int save(const std::filesystem::path&);
     int load(const std::filesystem::path&);
+    int save2(const std::filesystem::path&);
+    int load2(const std::filesystem::path&);
 };

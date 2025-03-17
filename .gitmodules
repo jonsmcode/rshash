@@ -1,3 +1,6 @@
 [submodule "seqan3"]
 	path = seqan3
 	url = https://github.com/seqan/seqan3
+[submodule "sux"]
+	path = sux
+	url = https://github.com/vigna/sux.git
