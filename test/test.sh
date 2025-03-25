@@ -1,6 +1,8 @@
 #!/bin/bash
 
-PROGRAM="../build/source/main"
+# PROGRAM="../build/source/main"
+# PROGRAM="../build/source/lookup"
+PROGRAM="../build/source/locate"
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/datasets" >/dev/null 2>&1 && pwd )"
 LOG="log.txt"
@@ -21,7 +23,8 @@ run_program()
     k=$(echo "${BASENAME##*k}" | grep -o '[0-9]*')
 
     $PROGRAM build -i "$f" -d "${BASENAME}.dict" -k $k -m $m
-    $PROGRAM query -i "$f" -d "${BASENAME}.dict" -q "$QUERY" -k $k -m $m -p > prog_out.txt 2>&1
+    # $PROGRAM query -i "$f" -d "${BASENAME}.dict" -q "$QUERY" -k $k -m $m -p > prog_out.txt 2>&1
+    $PROGRAM query -i "$f" -d "${BASENAME}.dict" -q "$QUERY" -k $k -m $m > prog_out.txt 2>&1
 
     cat prog_out.txt >> $LOG
 
