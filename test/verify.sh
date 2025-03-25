@@ -24,14 +24,14 @@ run()
         if [ "$k" -le 32 ]; then
           echo $BASENAME
 
-          $PROGRAM build -i "$f" -d "${BASENAME}.dict" -k $k -m $m
+          # $PROGRAM build -i "$f" -d "${BASENAME}.dict" -k $k -m $m
 
           parent_dir=$(dirname "$f")
           file_name=$(basename "$f")
           
           query="${parent_dir/unitigs/queries}/SRR5901135_1.fastq.gz"
 
-          $PROGRAM query -i "$f" -d "${BASENAME}.dict" -q $query -k $k -m $m > "${BASENAME}.positions" 2>&1
+          # $PROGRAM query -i "$f" -d "${BASENAME}.dict" -q $query -k $k -m $m > "${BASENAME}.positions" 2>&1
           ../build/test/verify -i $f -q $query -p "${BASENAME}.positions" -k $k > correct.txt
 
           cat correct.txt

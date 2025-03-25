@@ -105,8 +105,10 @@ int main(int argc, char** argv)
 
     int q = 0;
     for(auto query : queries) {
-        if(positions[q].size() == 0)
+        if(positions[q].size() == 0) {
+            q++;
             continue;
+        }
         int h = 0;
         int p = positions[q][0];
         for (auto && hash : query | kmer_view) {
@@ -122,7 +124,7 @@ int main(int argc, char** argv)
             }
             h++;
         }
-        h++;
+        q++;
     }
     std::cout << "correct\n";
  
