@@ -47,13 +47,7 @@ int load_file(const std::filesystem::path &filepath, std::vector<seqan3::dna4> &
 int check_arguments(seqan3::argument_parser &parser, cmd_arguments &args) {
     if(!parser.is_option_set('i'))
         throw seqan3::user_input_error("provide input file.");
-    if(args.cmd == "bq") {
-        if(!parser.is_option_set('q'))
-            throw seqan3::user_input_error("provide query file.");
-        if(!parser.is_option_set('k'))
-            throw seqan3::user_input_error("specify k");
-    }
-    else if(args.cmd == "build") {
+    if(args.cmd == "build") {
         if(!parser.is_option_set('d'))
             throw seqan3::user_input_error("provide dict output file.");
         if(!parser.is_option_set('k'))
@@ -87,11 +81,6 @@ int main(int argc, char** argv)
 
     std::vector<seqan3::dna4> text;
     load_file(args.i, text);
-
-    // if(!parser.is_option_set('m'))
-    //     m = ceil(log_4(N)) + 2;
-    // else 
-    //     m = args.m;
 
     if(args.cmd == "build") {
         std::cout << "building dict...\n";

@@ -47,13 +47,7 @@ int load_file(const std::filesystem::path &filepath, std::vector<seqan3::dna4> &
 int check_arguments(seqan3::argument_parser &parser, cmd_arguments &args) {
     if(!parser.is_option_set('i'))
         throw seqan3::user_input_error("provide input file.");
-    if(args.cmd == "bq") {
-        if(!parser.is_option_set('q'))
-            throw seqan3::user_input_error("provide query file.");
-        if(!parser.is_option_set('k'))
-            throw seqan3::user_input_error("specify k");
-    }
-    else if(args.cmd == "build") {
+    if(args.cmd == "build") {
         if(!parser.is_option_set('d'))
             throw seqan3::user_input_error("provide dict output file.");
         if(!parser.is_option_set('k'))
@@ -94,6 +88,7 @@ int main(int argc, char** argv)
     //     m = args.m;
 
     if(args.cmd == "build") {
+        std::cout << "text length: " << text.size() << '\n';
         std::cout << "building dict...\n";
         LookupDictionary dict(args.k, args.m);
         dict.build(text);
@@ -107,14 +102,16 @@ int main(int argc, char** argv)
         std::vector<std::vector<seqan3::dna4>> queries;
         load_files(args.q, queries);
 
-        uint64_t n = 0;
+        int kmers = 0;
+        int found = 0;
         // todo: parallelize queries
         for(auto query : queries) {
             int occurences = dict.streaming_query(text, query);
             // std::cout << occurences << '\n';
-            n += occurences;
+            kmers += query.size()-dict.getk()+1;
+            found += occurences;
         }
-        std::cout << "total k-mers found: " << n << '\n';
+        std::cout << "k-mers: " << kmers << " found: " << found << '\n';
     }
  
     return 0;

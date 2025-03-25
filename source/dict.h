@@ -48,11 +48,15 @@ private:
 public:
     LookupDictionary();
     LookupDictionary(uint8_t const k, uint8_t const m);
+    uint8_t getk() { return k; }
     int build(const std::vector<seqan3::dna4>&);
     int streaming_query(const std::vector<seqan3::dna4>&,
                         const std::vector<seqan3::dna4>&);
     int save(const std::filesystem::path&);
     int load(const std::filesystem::path&);
+    int load_comp(const std::filesystem::path &);
+    int save_comp(const std::filesystem::path &);
+    void print_statistics();
 };
 
 

@@ -90,7 +90,6 @@ int LocateDictionary::build(const std::vector<seqan3::dna4> &text)
     span.width(span_width);
     span.resize(n);
 
-    std::cout << "allocated memory.\n";
     // std::cout << "offset width " << offset_width << ", span width " << span_width << std::endl;
     // std::cout << "total width " << (int) offset.width() << ", total bits " << offset.bit_size() << std::endl;
 
@@ -145,11 +144,7 @@ int LocateDictionary::streaming_query(const std::vector<seqan3::dna4> &text,
                                       std::vector<uint64_t> &positions)
 {
     auto query_view = bsc::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
-    // uint64_t const seed = 347692;
-    uint64_t const seed = 0;
-    // uint64_t const seed = 0x8F'3F'73'B5'CF'1C'9A'DE;
-    auto kmer_view = seqan3::views::kmer_hash(seqan3::ungapped{k})
-                      | std::views::transform([](uint64_t i) {return i ^ seed;});
+    auto kmer_view = seqan3::views::kmer_hash(seqan3::ungapped{k});
 
     // todo: test hashtable instead of vector
     std::vector<uint64_t> kmerbuffer;
@@ -193,15 +188,12 @@ int LocateDictionary::streaming_query(const std::vector<seqan3::dna4> &text,
     return 0;
 }
 
-
 int LocateDictionary::save(const std::filesystem::path &filepath) {
     std::ofstream out(filepath, std::ios::binary);
     seqan3::contrib::sdsl::serialize(this->k, out);
     seqan3::contrib::sdsl::serialize(this->m, out);
-    seqan3::contrib::sdsl::rrr_vector<> rrr(r);
-    seqan3::contrib::sdsl::serialize(rrr, out);
-    seqan3::contrib::sdsl::sd_vector<> sds(s);
-    seqan3::contrib::sdsl::serialize(sds, out);
+    seqan3::contrib::sdsl::serialize(r, out);
+    seqan3::contrib::sdsl::serialize(s, out);
     seqan3::contrib::sdsl::serialize(this->offset, out);
     seqan3::contrib::sdsl::serialize(this->span, out);
     out.close();
@@ -212,21 +204,50 @@ int LocateDictionary::load(const std::filesystem::path &filepath) {
     std::ifstream in(filepath, std::ios::binary);
     seqan3::contrib::sdsl::load(this->k, in);
     seqan3::contrib::sdsl::load(this->m, in);
-    seqan3::contrib::sdsl::rrr_vector<> rrr;
-    seqan3::contrib::sdsl::load(rrr, in);
-    this->r = bit_vector(rrr.size());
-    for (size_t i = 0; i < rrr.size(); i++)
-        r[i] = rrr[i];
+    seqan3::contrib::sdsl::load(r, in);
     r_rank = rank_support_v<1>(&r);
-    seqan3::contrib::sdsl::sd_vector<> sds;
-    seqan3::contrib::sdsl::load(sds, in);
-    this->s = bit_vector(sds.size());
-    for (size_t i = 0; i < s.size(); i++)
-        s[i] = sds[i];
+    seqan3::contrib::sdsl::load(s, in);
     this->simple_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s.data()), s.size(), 3);
     seqan3::contrib::sdsl::load(this->offset, in);
     seqan3::contrib::sdsl::load(this->span, in);
     in.close();
     return 0;
 }
+
+// todo: faster io with cereal ?
+// int LocateDictionary::save(const std::filesystem::path &filepath) {
+//     std::ofstream out(filepath, std::ios::binary);
+//     seqan3::contrib::sdsl::serialize(this->k, out);
+//     seqan3::contrib::sdsl::serialize(this->m, out);
+//     seqan3::contrib::sdsl::rrr_vector<> rrr(r);
+//     seqan3::contrib::sdsl::serialize(rrr, out);
+//     // seqan3::contrib::sdsl::serialize(r, out);
+//     seqan3::contrib::sdsl::sd_vector<> sds(s);
+//     seqan3::contrib::sdsl::serialize(sds, out);
+//     // seqan3::contrib::sdsl::serialize(s, out);
+//     seqan3::contrib::sdsl::serialize(this->offset, out);
+//     seqan3::contrib::sdsl::serialize(this->span, out);
+//     out.close();
+//     return 0;
+// }
+
+// int LocateDictionary::load(const std::filesystem::path &filepath) {
+//     std::ifstream in(filepath, std::ios::binary);
+//     seqan3::contrib::sdsl::load(this->k, in);
+//     seqan3::contrib::sdsl::load(this->m, in);
+//     seqan3::contrib::sdsl::rrr_vector<> rrr;
+//     seqan3::contrib::sdsl::load(rrr, in);
+//     this->r.assign(rrr.begin(), rrr.end());
+//     // seqan3::contrib::sdsl::load(r, in);
+//     this->r_rank = rank_support_v<1>(&r);
+//     seqan3::contrib::sdsl::sd_vector<> sds;
+//     seqan3::contrib::sdsl::load(sds, in);
+//     this->s.assign(sds.begin(), sds.end());
+//     // seqan3::contrib::sdsl::load(s, in);
+//     this->simple_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s.data()), s.size(), 3);
+//     seqan3::contrib::sdsl::load(this->offset, in);
+//     seqan3::contrib::sdsl::load(this->span, in);
+//     in.close();
+//     return 0;
+// }
 
