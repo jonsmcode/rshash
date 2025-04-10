@@ -72,11 +72,9 @@ private:
     bit_vector s;
     rank_support_v<1> r_rank;
     sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> simple_select;
-    int_vector<0> offset;
-    int_vector<0> span;
-    size_t offset_width;
-    size_t span_width;
-    std::vector<seqan3::dna4> text;
+    int_vector<0> sequences;
+    int_vector<0> positions;
+    std::vector<std::vector<seqan3::dna4>> text;
 
 public:
     LookupUnitigsDictionary();
@@ -84,9 +82,7 @@ public:
     uint8_t getk() { return k; }
     int build(const std::vector<std::vector<seqan3::dna4>>&);
     int streaming_query(const std::vector<seqan3::dna4>&);
-    // int streaming_query(const std::vector<seqan3::dna4>&,
-    //                     const std::vector<seqan3::dna4>&,
-    //                     std::vector<std::pair<uint64_t, uint64_t>> &);
+    int streaming_query(const std::vector<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
     int save(const std::filesystem::path&);
     int load(const std::filesystem::path&);
 };

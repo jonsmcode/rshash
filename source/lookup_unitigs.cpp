@@ -87,27 +87,27 @@ int main(int argc, char** argv)
         std::vector<std::vector<seqan3::dna4>> queries;
         load_file(args.q, queries);
 
-        int kmers = 0;
-        int found = 0;
-        // todo: parallelize queries
-        for(auto query : queries) {
-            int occurences = dict.streaming_query(query);
-            // std::cout << occurences << '\n';
-            kmers += query.size()-dict.getk()+1;
-            found += occurences;
-        }
-        std::cout << "k-mers: " << kmers << " found: " << found << " (" << (double) found/kmers*100 << "%)\n";
+        // int kmers = 0;
+        // int found = 0;
+        // // todo: parallelize queries
+        // for(auto query : queries) {
+        //     int occurences = dict.streaming_query(query);
+        //     // std::cout << occurences << '\n';
+        //     kmers += query.size()-dict.getk()+1;
+        //     found += occurences;
+        // }
+        // std::cout << "k-mers: " << kmers << " found: " << found << " (" << (double) found/kmers*100 << "%)\n";
         // std::cout << "==== query report:\n";
         // std::cout << "num_kmers = " << kmers << '\n';
         // std::cout << "num_positive_kmers = " << found << " (" << (double) found/kmers*100 << "%)\n";
-
-        // for(auto query : queries) {
-        //     std::vector<std::pair<uint64_t, uint64_t>> positions;
-        //     dict.streaming_query(text, query, positions);
-        //     for (auto pos : positions)
-        //         std::cout << '(' << pos.first << ',' << pos.second << ") ";
-        //     std::cout << '\n';
-        // }
+        int q = 0;
+        for(auto query : queries) {
+            std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> positions;
+            dict.streaming_query(query, positions);
+            for (auto const& [kmer, seq, pos] : positions)
+                std::cout << '(' << q << ','<< kmer << ',' << seq << ',' << pos << ") ";
+            q++;
+        }
     }
  
     return 0;
