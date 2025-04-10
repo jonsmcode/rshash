@@ -14,11 +14,6 @@ struct cmd_arguments {
     uint8_t m{};
 };
 
-struct my_traits:seqan3::sequence_file_input_default_traits_dna {
-    using sequence_alphabet = seqan3::dna4;
-};
-
-
 void initialise_argument_parser(seqan3::argument_parser &parser, cmd_arguments &args) {
     parser.add_positional_option(args.cmd, "command options: build, query");
     parser.add_option(args.i, 'i', "input", "provide input file");
@@ -28,40 +23,36 @@ void initialise_argument_parser(seqan3::argument_parser &parser, cmd_arguments &
     parser.add_option(args.m, 'm', "minimiser", "minimiser length");
 }
 
-int load_files(const std::filesystem::path &filepath, std::vector<std::vector<seqan3::dna4>> &output) {
-    auto stream = seqan3::sequence_file_input<my_traits>{filepath};
-    for (auto & record : stream) {
-        output.push_back(std::move(record.sequence()));
-    }
-    return 0;
-}
-
-int load_file(const std::filesystem::path &filepath, std::vector<seqan3::dna4> &output) {
-    auto stream = seqan3::sequence_file_input<my_traits>{filepath};
-    for (auto & record : stream) {
-        std::ranges::move(record.sequence(), std::back_inserter(output));
-    }
-    return 0;
-}
-
 int check_arguments(seqan3::argument_parser &parser, cmd_arguments &args) {
-    if(!parser.is_option_set('i'))
-        throw seqan3::user_input_error("provide input file.");
+    if(!parser.is_option_set('d'))
+            throw seqan3::user_input_error("provide dict file.");
     if(args.cmd == "build") {
-        if(!parser.is_option_set('d'))
-            throw seqan3::user_input_error("provide dict output file.");
+        if(!parser.is_option_set('i'))
+            throw seqan3::user_input_error("provide input file.");
         if(!parser.is_option_set('k'))
             throw seqan3::user_input_error("specify k");
+        if(!parser.is_option_set('m'))
+            throw seqan3::user_input_error("specify m");
     }
     else if(args.cmd == "query") {
-        if(!parser.is_option_set('d'))
-            throw seqan3::user_input_error("provide dict file.");
         if(!parser.is_option_set('q'))
             throw seqan3::user_input_error("provide query file.");
     }
     else
         throw seqan3::user_input_error("illegal command");
 
+    return 0;
+}
+
+struct my_traits:seqan3::sequence_file_input_default_traits_dna {
+    using sequence_alphabet = seqan3::dna4;
+};
+
+int load_file(const std::filesystem::path &filepath, std::vector<std::vector<seqan3::dna4>> &output) {
+    auto stream = seqan3::sequence_file_input<my_traits>{filepath};
+    for (auto & record : stream) {
+        output.push_back(std::move(record.sequence()));
+    }
     return 0;
 }
 
@@ -79,34 +70,28 @@ int main(int argc, char** argv)
         return -1;
     }
 
-    std::vector<seqan3::dna4> text;
-    load_file(args.i, text);
-
-    // if(!parser.is_option_set('m'))
-    //     m = ceil(log_4(N)) + 2;
-    // else 
-    //     m = args.m;
-
     if(args.cmd == "build") {
-        std::cout << "text length: " << text.size() << '\n';
+        std::cout << "loading text...\n";
+        std::vector<std::vector<seqan3::dna4>> text;
+        load_file(args.i, text);
         std::cout << "building dict...\n";
-        LookupDictionary dict(args.k, args.m);
+        LookupUnitigsDictionary dict(args.k, args.m);
         dict.build(text);
         std::cout << "done.\n";
         dict.save(args.d);
     }
     else if(args.cmd == "query") {
-        LookupDictionary dict;
+        LookupUnitigsDictionary dict;
         dict.load(args.d);
 
         std::vector<std::vector<seqan3::dna4>> queries;
-        load_files(args.q, queries);
+        load_file(args.q, queries);
 
         int kmers = 0;
         int found = 0;
         // todo: parallelize queries
         for(auto query : queries) {
-            int occurences = dict.streaming_query(text, query);
+            int occurences = dict.streaming_query(query);
             // std::cout << occurences << '\n';
             kmers += query.size()-dict.getk()+1;
             found += occurences;

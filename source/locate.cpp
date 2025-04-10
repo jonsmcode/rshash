@@ -97,11 +97,18 @@ int main(int argc, char** argv)
         load_files(args.q, queries);
 
         // todo: parallelize queries
+        // for(auto query : queries) {
+        //     std::vector<uint64_t> positions;
+        //     dict.streaming_query(text, query, positions);
+        //     for (auto pos : positions)
+        //         std::cout << pos << ' ';
+        //     std::cout << '\n';
+        // }
         for(auto query : queries) {
-            std::vector<uint64_t> positions;
+            std::vector<std::pair<uint64_t, uint64_t>> positions;
             dict.streaming_query(text, query, positions);
             for (auto pos : positions)
-                std::cout << pos << ' ';
+                std::cout << '(' << pos.first << ',' << pos.second << ") ";
             std::cout << '\n';
         }
     }

@@ -11,16 +11,17 @@ private:
     uint8_t k, m;
     bit_vector r;
     bit_vector s;
-    rank_support_v<1> r_rank;
-    sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> simple_select;
+    // rank_support_v<1> r_rank;
+    // sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> simple_select;
     int_vector<0> offset;
-    int_vector<0> span;
+    // int_vector<0> span;
     int offset_width;
-    int span_width;
+    // int span_width;
 
 public:
     Dictionary();
     Dictionary(uint8_t const k, uint8_t const m);
+    uint8_t getk() { return k; }
     int build(const std::vector<seqan3::dna4>&);
     int streaming_query(const std::vector<seqan3::dna4>&,
                         const std::vector<seqan3::dna4>&,
@@ -29,11 +30,12 @@ public:
                         const std::vector<seqan3::dna4>&);
     int save(const std::filesystem::path&);
     int load(const std::filesystem::path&);
-    int save2(const std::filesystem::path&);
-    int load2(const std::filesystem::path&);
+    // int save2(const std::filesystem::path&);
+    // int load2(const std::filesystem::path&);
 };
 
 
+// class LookupDictionary : public Dictionary
 class LookupDictionary
 {
 private:
@@ -52,11 +54,41 @@ public:
     int build(const std::vector<seqan3::dna4>&);
     int streaming_query(const std::vector<seqan3::dna4>&,
                         const std::vector<seqan3::dna4>&);
+    int streaming_query(const std::vector<seqan3::dna4>&,
+                        const std::vector<seqan3::dna4>&,
+                        std::vector<std::pair<uint64_t, uint64_t>> &);
     int save(const std::filesystem::path&);
     int load(const std::filesystem::path&);
-    int load_comp(const std::filesystem::path &);
-    int save_comp(const std::filesystem::path &);
-    void print_statistics();
+//     int load_comp(const std::filesystem::path &);
+//     int save_comp(const std::filesystem::path &);
+//     void print_statistics();
+};
+
+class LookupUnitigsDictionary
+{
+private:
+    uint8_t k, m;
+    bit_vector r;
+    bit_vector s;
+    rank_support_v<1> r_rank;
+    sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> simple_select;
+    int_vector<0> offset;
+    int_vector<0> span;
+    size_t offset_width;
+    size_t span_width;
+    std::vector<seqan3::dna4> text;
+
+public:
+    LookupUnitigsDictionary();
+    LookupUnitigsDictionary(uint8_t const k, uint8_t const m);
+    uint8_t getk() { return k; }
+    int build(const std::vector<std::vector<seqan3::dna4>>&);
+    int streaming_query(const std::vector<seqan3::dna4>&);
+    // int streaming_query(const std::vector<seqan3::dna4>&,
+    //                     const std::vector<seqan3::dna4>&,
+    //                     std::vector<std::pair<uint64_t, uint64_t>> &);
+    int save(const std::filesystem::path&);
+    int load(const std::filesystem::path&);
 };
 
 
@@ -80,6 +112,9 @@ public:
     int streaming_query(const std::vector<seqan3::dna4>&,
                         const std::vector<seqan3::dna4>&,
                         std::vector<uint64_t> &);
+    int streaming_query(const std::vector<seqan3::dna4>&,
+                        const std::vector<seqan3::dna4>&,
+                        std::vector<std::pair<uint64_t, uint64_t>> &);
     int save(const std::filesystem::path&);
     int load(const std::filesystem::path&);
 };

@@ -256,19 +256,19 @@ int Dictionary::save(const std::filesystem::path &filepath) {
     return 0;
 }
 
-int Dictionary::save2(const std::filesystem::path &filepath) {
-    std::ofstream out(filepath, std::ios::binary);
-    seqan3::contrib::sdsl::serialize(this->k, out);
-    seqan3::contrib::sdsl::serialize(this->m, out);
-    seqan3::contrib::sdsl::rrr_vector<> rrr(r);
-    seqan3::contrib::sdsl::serialize(rrr, out);
-    seqan3::contrib::sdsl::sd_vector<> sds(s);
-    seqan3::contrib::sdsl::serialize(sds, out);
-    seqan3::contrib::sdsl::serialize(this->offset, out);
-    seqan3::contrib::sdsl::serialize(this->span, out);
-    out.close();
-    return 0;
-}
+// int Dictionary::save2(const std::filesystem::path &filepath) {
+//     std::ofstream out(filepath, std::ios::binary);
+//     seqan3::contrib::sdsl::serialize(this->k, out);
+//     seqan3::contrib::sdsl::serialize(this->m, out);
+//     seqan3::contrib::sdsl::rrr_vector<> rrr(r);
+//     seqan3::contrib::sdsl::serialize(rrr, out);
+//     seqan3::contrib::sdsl::sd_vector<> sds(s);
+//     seqan3::contrib::sdsl::serialize(sds, out);
+//     seqan3::contrib::sdsl::serialize(this->offset, out);
+//     seqan3::contrib::sdsl::serialize(this->span, out);
+//     out.close();
+//     return 0;
+// }
 
 int Dictionary::load(const std::filesystem::path &filepath) {
     std::ifstream in(filepath, std::ios::binary);
@@ -284,25 +284,25 @@ int Dictionary::load(const std::filesystem::path &filepath) {
     return 0;
 }
 
-int Dictionary::load2(const std::filesystem::path &filepath) {
-    std::ifstream in(filepath, std::ios::binary);
-    seqan3::contrib::sdsl::load(this->k, in);
-    seqan3::contrib::sdsl::load(this->m, in);
-    seqan3::contrib::sdsl::rrr_vector<> rrr;
-    seqan3::contrib::sdsl::load(rrr, in);
-    this->r = bit_vector(rrr.size(), 0);
-    for (size_t i = 0; i < rrr.size(); i++)
-        r[i] = rrr[i];
-    r_rank = rank_support_v<1>(&r);
-    seqan3::contrib::sdsl::sd_vector<> sds;
-    seqan3::contrib::sdsl::load(sds, in);
-    this->s = bit_vector(sds.size(), 0);
-    for (size_t i = 0; i < s.size(); i++)
-        s[i] = sds[i];
-    this->simple_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s.data()), s.size(), 3);
-    seqan3::contrib::sdsl::load(this->offset, in);
-    seqan3::contrib::sdsl::load(this->span, in);
-    in.close();
-    return 0;
-}
+// int Dictionary::load2(const std::filesystem::path &filepath) {
+//     std::ifstream in(filepath, std::ios::binary);
+//     seqan3::contrib::sdsl::load(this->k, in);
+//     seqan3::contrib::sdsl::load(this->m, in);
+//     seqan3::contrib::sdsl::rrr_vector<> rrr;
+//     seqan3::contrib::sdsl::load(rrr, in);
+//     this->r = bit_vector(rrr.size(), 0);
+//     for (size_t i = 0; i < rrr.size(); i++)
+//         r[i] = rrr[i];
+//     r_rank = rank_support_v<1>(&r);
+//     seqan3::contrib::sdsl::sd_vector<> sds;
+//     seqan3::contrib::sdsl::load(sds, in);
+//     this->s = bit_vector(sds.size(), 0);
+//     for (size_t i = 0; i < s.size(); i++)
+//         s[i] = sds[i];
+//     this->simple_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s.data()), s.size(), 3);
+//     seqan3::contrib::sdsl::load(this->offset, in);
+//     seqan3::contrib::sdsl::load(this->span, in);
+//     in.close();
+//     return 0;
+// }
 

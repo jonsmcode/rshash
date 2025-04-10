@@ -118,11 +118,11 @@ int main(int argc, char** argv)
         Dictionary dict(args.k, args.m);
         dict.build(text);
         std::cout << "done.\n";
-        dict.save2(args.d);
+        dict.save(args.d);
     }
     else if(args.cmd == "query") {
         Dictionary dict;
-        dict.load2(args.d);
+        dict.load(args.d);
 
         std::vector<std::vector<seqan3::dna4>> queries;
         load_files(args.q, queries);

@@ -178,11 +178,62 @@ int LocateDictionary::streaming_query(const std::vector<seqan3::dna4> &text,
             }
             // todo: simd for buffer
             for(int i = 0; i < kmerbuffer.size(); i++) {
-                if(minimiser.window_value == kmerbuffer[i])
+                if(minimiser.window_value == kmerbuffer[i]) 
                     positions.push_back(startpositions[i]);
             }
         }
         
+    }
+
+    return 0;
+}
+
+
+int LocateDictionary::streaming_query(const std::vector<seqan3::dna4> &text,
+                                      const std::vector<seqan3::dna4> &query,
+                                      std::vector<std::pair<uint64_t, uint64_t>> &positions)
+{
+    auto query_view = bsc::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
+    auto kmer_view = seqan3::views::kmer_hash(seqan3::ungapped{k});
+
+    // todo: test hashtable instead of vector
+    std::vector<uint64_t> kmerbuffer;
+    std::vector<uint64_t> startpositions;
+    int cur_minimiser = -1;
+    int kmer = 0;
+
+    for(auto && minimiser : query | query_view) {
+        if(r[minimiser.minimiser_value]) {
+            if(minimiser.minimiser_value != cur_minimiser) {
+                kmerbuffer.clear();
+                startpositions.clear();
+
+                size_t i = r_rank(minimiser.minimiser_value);
+                size_t p = simple_select.select(i);
+                size_t q = simple_select.select(i+1);
+                size_t b = q - p;
+
+                for(int i = 0; i < b; i++) {
+                    size_t sp = span[p+i]+k-1;
+
+                    int j = 0;
+                    for (auto && hash : text | std::views::drop(offset[p+i])
+                                             | std::views::take(sp) | kmer_view) {
+                        kmerbuffer.push_back(hash);
+                        startpositions.push_back(offset[p+i] + j);
+                        j++;
+                    }
+                }
+
+                cur_minimiser = minimiser.minimiser_value;
+            }
+            // todo: simd for buffer
+            for(int i = 0; i < kmerbuffer.size(); i++) {
+                if(minimiser.window_value == kmerbuffer[i]) 
+                    positions.push_back({kmer, startpositions[i]});
+            }
+        }
+        kmer++;
     }
 
     return 0;
@@ -193,6 +244,7 @@ int LocateDictionary::save(const std::filesystem::path &filepath) {
     seqan3::contrib::sdsl::serialize(this->k, out);
     seqan3::contrib::sdsl::serialize(this->m, out);
     seqan3::contrib::sdsl::serialize(r, out);
+    // seqan3::contrib::sdsl::serialize(r, out); todo: save r_rank?!!
     seqan3::contrib::sdsl::serialize(s, out);
     seqan3::contrib::sdsl::serialize(this->offset, out);
     seqan3::contrib::sdsl::serialize(this->span, out);
