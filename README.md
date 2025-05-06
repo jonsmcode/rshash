@@ -12,6 +12,8 @@ git clone --recurse-submodules git@github.com:jonasschultemattler/kmerdict.git
 mkdir build
 cd build
 cmake -DCMAKE_BUILD_TYPE=Release .. -D CMAKE_CXX_COMPILER=g++-14
+
+cmake -DCMAKE_BUILD_TYPE=Release .. -D DCMAKE_CXX_COMPILER=$(brew --prefix llvm@19)/bin/clang++
 ```
 
 ### Datasets

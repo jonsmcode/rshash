@@ -27,30 +27,40 @@ int LookupUnitigsDictionary::build(const std::vector<std::vector<seqan3::dna4>> 
     const uint64_t M = 1 << (m+m); // 4^m
 
     std::cout << "extracting minimizers...\n";
-    // todo: simons bitvector
-    r = bit_vector(M);
-    // todo: faster minimiser only view
+    // todo: test simons bitvector
+    r = bit_vector(M, 0);
 
-    size_t longest_sequence = 0;
     size_t N = 0;
-    uint64_t n_sequences = 0;
+    uint64_t number_sequences = 0;
     for(auto & record : input) {
         for(auto && minimiser : record | view) {
             r[minimiser.minimiser_value] = 1;
         }
-        longest_sequence = std::max(longest_sequence, record.size());
-        n_sequences++;
         N += record.size();
+        number_sequences++;
     }
     r_rank = rank_support_v<1>(&r);
 
-    size_t c = r_rank(M);
+    std::cout << "filling bitvector sequences and sequence lengths...\n";
+    // todo: Elias Fano
+    sequences = bit_vector(N, 0);
+    endpoints.width(std::bit_width(N));
+    endpoints.resize(number_sequences+1);
+    endpoints[0] = 0;
+    uint64_t j = 0;
+    for(int i=0; i < number_sequences; i++) {
+        j += input[i].size();
+        sequences[j] = 1;
+        endpoints[i+1] = j;
+    }
+    sequences_rank = rank_support_v<1>(&sequences);
 
     std::cout << "counting minimizers...\n";
+    size_t c = r_rank(M);
     uint8_t* count = new uint8_t[c];
     std::memset(count, 0, c*sizeof(uint8_t));
 
-    // todo: init hashtable with adequate size, faster hashtable
+    // todo: init hashtable with adequate size, better ht?
     std::unordered_map<uint64_t, uint32_t> cb;
     
     uint64_t n = 0;
@@ -73,96 +83,85 @@ int LookupUnitigsDictionary::build(const std::vector<std::vector<seqan3::dna4>> 
             kmers += o;
         }
     }
-
+    std::cout << "filling bitvector S...\n";
     s = bit_vector(n+1, 0);
     s[0] = 1;
-    int j = 0;
+    j = 0;
     for (size_t i=0; i < c; i++) {
         j += count[i];
         if(count[i] == 255)
             j += cb[i];
         s[j] = 1;
     }
-    simple_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s.data()), n+1, 3);
+    s_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s.data()), n+1, 3);
 
-    size_t sequences_width = std::bit_width(n_sequences);
-    size_t positions_width = std::bit_width(longest_sequence);
-    sequences.width(sequences_width);
-    sequences.resize(n);
-    positions.width(positions_width);
-    positions.resize(n);
+    size_t offset_width = std::bit_width(N);
+    offsets.width(offset_width);
+    offsets.resize(n);
 
-    std::cout << "allocated " << n*(sequences_width + positions_width)/8 << " bytes for index\n";
+    std::cout << "allocated " << n*(offset_width)/8000000 << " Mega bytes for O\n";
 
     std::memset(count, 0, c*sizeof(uint8_t));
     // faster?
     for (const auto& [key, value] : cb)
         cb[key] = 0;
 
-    std::cout << "building index...\n";
+    std::cout << "filling O...\n";
 
-    uint64_t sequence_id = 0;
+    uint64_t length = 0;
     for(auto & sequence : input) {
         for (auto && minimiser : sequence | view) {
             uint64_t i = r_rank(minimiser.minimiser_value);
-            uint64_t s = simple_select.select(i);
+            uint64_t s = s_select.select(i);
             int o = minimiser.occurrences;
             int j = 0;
             while(o > k) {
                 if(count[i] == 255) {
-                    positions[s + count[i] + cb[i]] = minimiser.range_position + j*k;
-                    sequences[s + count[i] + cb[i]] = sequence_id;
+                    offsets[s + count[i] + cb[i]] = length + minimiser.range_position + j*k;
                     cb[i]++;
                 }
                 else {
-                    positions[s + count[i]] = minimiser.range_position + j*k;
-                    sequences[s + count[i]] = sequence_id;
+                    offsets[s + count[i]] = length + minimiser.range_position + j*k;
                     count[i]++;
                 }
                 o -= k;
                 j++;
             }
             if(count[i] == 255) {
-                positions[s + count[i] + cb[i]] = minimiser.range_position + j*k;
-                sequences[s + count[i] + cb[i]] = sequence_id;
+                offsets[s + count[i] + cb[i]] = length + minimiser.range_position + j*k;
                 cb[i]++;
             }
             else {
-                positions[s + count[i]] = minimiser.range_position + j*k;
-                sequences[s + count[i]] = sequence_id;
+                offsets[s + count[i]] = length + minimiser.range_position + j*k;
                 count[i]++;
             }
         }
-        sequence_id++;
+        length += sequence.size();
     }
 
     delete[] count; // delete cb?
 
 
-    // for(auto & record : input) {
-    //     std::ranges::move(record, std::back_inserter(text));
-    // }
-    text = input;
+    for(auto & record : input) {
+        std::ranges::move(record, std::back_inserter(text));
+    }
 
-    // report
     std::cout << "====== report ======\n";
-    std::cout << "number sequences: " << n_sequences << "\n";
-    std::cout << "longest sequence: " << longest_sequence << "\n";
     std::cout << "text length: " << N << "\n";
-    std::cout << "avg sequence length: " << (float) N/n_sequences << "\n";
     std::cout << "no kmers: " << kmers <<  '\n';
     std::cout << "no distinct kmers: " << c << '\n';
     std::cout << "no minimiser: " << n <<  '\n';
     std::cout << "freq minimiser: " << cb.size() << '\n';
     std::cout << "density r: " << (float) c/M*100 << "%\n";
-    std::cout << "density s: " << (float) simple_select.bitCount()/(n+1)*100 <<  "%\n";
+    std::cout << "density s: " << (float) s_select.bitCount()/(n+1)*100 <<  "%\n";
     std::cout << "\nspace per kmer in bit:\n";
-    std::cout << "sequences: " << (float) n*sequences_width/kmers << "\n";
-    std::cout << "positions: " << (float) n*positions_width/kmers << "\n";
+    std::cout << "offsets: " << (float) n*offset_width/kmers << "\n";
     std::cout << "text: " << (float) 2*N/kmers << "\n";
-    std::cout << "r: " << (float) M/kmers << "\n";
-    std::cout << "s: " << (float) (n+1)/kmers << "\n";
-    std::cout << "total: " << (float) (n*(sequences_width+positions_width)+2*N+M+n+1)/kmers << "\n";
+    std::cout << "R: " << (float) M/kmers << "\n";
+    std::cout << "S: " << (float) (n+1)/kmers << "\n";
+    std::cout << "Sequences: " << (float) N/kmers << "\n";
+    std::cout << "endpoints: " << (float) (std::bit_width(N)*number_sequences)/kmers << "\n";
+    std::cout << "total: " << (float) (n*offset_width+2*N+M+n+1+N+std::bit_width(N)*number_sequences)/kmers << "\n";
 
     return 0;
 }
@@ -189,18 +188,18 @@ int LookupUnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &qu
 
     for(auto && minimiser : query | query_view) {
         if(r[minimiser.minimiser_value]) {
-            size_t r = r_rank(minimiser.minimiser_value);
-            size_t p = simple_select.select(r);
-            size_t q = simple_select.select(r+1);
+            size_t minimizer_id = r_rank(minimiser.minimiser_value);
+            size_t p = s_select.select(minimizer_id);
+            size_t q = s_select.select(minimizer_id+1);
             size_t b = q - p;
 
             bool found = false;
-            for(int i = 0; !found && i < b; i++) {
+            for(uint64_t i = 0; !found && i < b; i++) {
                 uint64_t hash = 0;
-                size_t seq = sequences[p+i];
-                size_t pos = positions[p+i];
-                for (int j=pos; j < pos+k; j++) {
-                    uint64_t const new_rank = seqan3::to_rank(text[seq][j]);
+                size_t o = offsets[p+i];
+                size_t sequence_id = sequences_rank(o);
+                for (uint64_t j=o; j < o+k; j++) {
+                    uint64_t const new_rank = seqan3::to_rank(text[j]);
                     hash <<= 2;
                     hash |= new_rank;
                     hash &= mask;
@@ -209,8 +208,8 @@ int LookupUnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &qu
                     occurences++;
                     break;
                 }
-                for(int j=pos+k; j < std::min(pos+2*k, text[seq].size()); j++) {
-                    uint64_t const new_rank = seqan3::to_rank(text[seq][j]);
+                for(uint64_t j=o+k; j < std::min<uint64_t>(o + 2*k, (size_t) endpoints[sequence_id+1]); j++) {
+                    uint64_t const new_rank = seqan3::to_rank(text[j]);
                     hash <<= 2;
                     hash |= new_rank;
                     hash &= mask;
@@ -223,7 +222,6 @@ int LookupUnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &qu
             }
 
         }
-        // todo: else ht lookup
     }
 
     return occurences;
@@ -233,49 +231,52 @@ int LookupUnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &qu
 int LookupUnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &query,
     std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &result)
 {
-    auto query_view = bsc::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
+    auto view = bsc::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
 
-    uint64_t kmer = 0;
     const uint64_t mask = compute_mask(k);
+    uint64_t kmer = 0;
 
-    for(auto && minimiser : query | query_view) {
+    for(auto && minimiser : query | view) {
         if(r[minimiser.minimiser_value]) {
-            size_t r = r_rank(minimiser.minimiser_value);
-            size_t p = simple_select.select(r);
-            size_t q = simple_select.select(r+1);
-            size_t b = q - p;
+            uint64_t minimizer_id = r_rank(minimiser.minimiser_value);
+            uint64_t p = s_select.select(minimizer_id);
+            uint64_t q = s_select.select(minimizer_id+1);
 
             bool found = false;
-            for(int i = 0; !found && i < b; i++) {
+            for(uint64_t i = 0; !found && i < q-p; i++) {
                 uint64_t hash = 0;
-                size_t seq = sequences[p+i];
-                size_t pos = positions[p+i];
-                for (int j=pos; j < pos+k; j++) {
-                    uint64_t const new_rank = seqan3::to_rank(text[seq][j]);
+                uint64_t o = offsets[p+i];
+                uint64_t sequence_id = sequences_rank(o);
+                for (uint64_t j=o; j < o+k; j++) {
+                    uint64_t const new_rank = seqan3::to_rank(text[j]);
                     hash <<= 2;
                     hash |= new_rank;
                     hash &= mask;
                 }
                 if(minimiser.window_value == hash) {
-                    result.push_back({kmer, seq, pos});
+                    result.push_back({kmer, sequence_id, o-endpoints[sequence_id]});
                     break;
                 }
-                for(int j=pos+k; j < std::min(pos+2*k, text[seq].size()); j++) {
-                    uint64_t const new_rank = seqan3::to_rank(text[seq][j]);
+                uint64_t e = o+k+k;
+                if(e > endpoints[sequence_id+1])
+                    e = endpoints[sequence_id+1];
+                for(uint64_t j=o+k; j < e; j++) {
+                    uint64_t const new_rank = seqan3::to_rank(text[j]);
                     hash <<= 2;
                     hash |= new_rank;
                     hash &= mask;
                     if(minimiser.window_value == hash) {
                         found = true;
-                        result.push_back({kmer, seq, j-k+1});
+                        result.push_back({kmer, sequence_id, j-k+1-endpoints[sequence_id]});
                         break;
                     }
                 }
             }
 
         }
-        // todo: else ht lookup
-
+        // else {
+        //     cb.find(minimiser.window_value)
+        // }
         kmer++;
     }
 
@@ -289,8 +290,9 @@ int LookupUnitigsDictionary::save(const std::filesystem::path &filepath) {
     seqan3::contrib::sdsl::serialize(this->m, out);
     seqan3::contrib::sdsl::serialize(r, out); // save r_rank?
     seqan3::contrib::sdsl::serialize(s, out);
-    seqan3::contrib::sdsl::serialize(this->sequences, out);
-    seqan3::contrib::sdsl::serialize(this->positions, out);
+    seqan3::contrib::sdsl::serialize(sequences, out);
+    seqan3::contrib::sdsl::serialize(this->offsets, out);
+    seqan3::contrib::sdsl::serialize(this->endpoints, out);
 
     cereal::BinaryOutputArchive archive(out);
     archive(this->text);
@@ -306,9 +308,11 @@ int LookupUnitigsDictionary::load(const std::filesystem::path &filepath) {
     seqan3::contrib::sdsl::load(r, in);
     r_rank = rank_support_v<1>(&r);
     seqan3::contrib::sdsl::load(s, in);
-    this->simple_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s.data()), s.size(), 3);
-    seqan3::contrib::sdsl::load(this->sequences, in);
-    seqan3::contrib::sdsl::load(this->positions, in);
+    this->s_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s.data()), s.size(), 3);
+    seqan3::contrib::sdsl::load(sequences, in);
+    sequences_rank = rank_support_v<1>(&sequences);
+    seqan3::contrib::sdsl::load(this->offsets, in);
+    seqan3::contrib::sdsl::load(this->endpoints, in);
 
     cereal::BinaryInputArchive archive(in);
     archive(this->text);

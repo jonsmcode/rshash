@@ -64,17 +64,21 @@ public:
 //     void print_statistics();
 };
 
+
 class LookupUnitigsDictionary
 {
 private:
     uint8_t k, m;
     bit_vector r;
     bit_vector s;
+    bit_vector sequences;
+    int_vector<0> endpoints;
     rank_support_v<1> r_rank;
-    sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> simple_select;
-    int_vector<0> sequences;
-    int_vector<0> positions;
-    std::vector<std::vector<seqan3::dna4>> text;
+    sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s_select;
+    rank_support_v<1> sequences_rank;
+    int_vector<0> offsets;
+    std::vector<seqan3::dna4> text;
+    // std::vector<std::vector<seqan3::dna4>> text;
 
 public:
     LookupUnitigsDictionary();
