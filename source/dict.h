@@ -1,6 +1,8 @@
 #include <seqan3/alphabet/nucleotide/dna4.hpp>
+#include <seqan3/alphabet/container/bitpacked_sequence.hpp>
 #include <seqan3/contrib/sdsl-lite.hpp>
 #include <sux/bits/SimpleSelect.hpp>
+#include <sux/bits/EliasFano.hpp>
 
 using namespace seqan3::literals;
 using namespace seqan3::contrib::sdsl;
@@ -65,24 +67,55 @@ public:
 };
 
 
-class LookupUnitigsDictionary
+class UnitigsDictionary
 {
 private:
     uint8_t k, m;
     bit_vector r;
     bit_vector s;
-    bit_vector sequences;
-    int_vector<0> endpoints;
+    std::unordered_set<uint64_t> cbk;
+    seqan3::contrib::sdsl::sd_vector<> endpoints;
+    seqan3::contrib::sdsl::rank_support_sd<> endpoints_rank;
+    seqan3::contrib::sdsl::select_support_sd<> endpoints_select;
+    // int_vector<0> endpoints;
     rank_support_v<1> r_rank;
     sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s_select;
-    rank_support_v<1> sequences_rank;
     int_vector<0> offsets;
-    std::vector<seqan3::dna4> text;
+    seqan3::bitpacked_sequence<seqan3::dna4> text;
+    // std::vector<seqan3::dna4> text;
     // std::vector<std::vector<seqan3::dna4>> text;
+    void fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t b);
 
 public:
-    LookupUnitigsDictionary();
-    LookupUnitigsDictionary(uint8_t const k, uint8_t const m);
+    UnitigsDictionary();
+    UnitigsDictionary(uint8_t const k, uint8_t const m);
+    uint8_t getk() { return k; }
+    int build(const std::vector<std::vector<seqan3::dna4>>&);
+    uint64_t streaming_query(const std::vector<seqan3::dna4>&);
+    uint64_t streaming_query(const std::vector<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
+    int save(const std::filesystem::path&);
+    int load(const std::filesystem::path&);
+};
+
+
+class CompUnitigsDictionary
+{
+private:
+    uint8_t k, m;
+    seqan3::contrib::sdsl::sd_vector<> r;
+    bit_vector s;
+    std::unordered_set<uint64_t> cbk;
+    sd_vector<> endpoints;
+    rank_support_sd<> endpoints_rank;
+    select_support_sd<> endpoints_select;
+    rank_support_sd<> r_rank;
+    sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s_select;
+    int_vector<0> offsets;
+    seqan3::bitpacked_sequence<seqan3::dna4> text;
+
+public:
+    CompUnitigsDictionary();
+    CompUnitigsDictionary(uint8_t const k, uint8_t const m);
     uint8_t getk() { return k; }
     int build(const std::vector<std::vector<seqan3::dna4>>&);
     int streaming_query(const std::vector<seqan3::dna4>&);

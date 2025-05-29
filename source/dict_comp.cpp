@@ -1,6 +1,4 @@
 #include <filesystem>
-// #include <cstdint>
-// #include <immintrin.h>
 
 #include <seqan3/core/debug_stream.hpp>
 #include <seqan3/search/views/kmer_hash.hpp>
@@ -17,33 +15,34 @@ const uint8_t m_thres = 5;
 
 
 
-UnitigsDictionary::UnitigsDictionary() {}
+CompUnitigsDictionary::CompUnitigsDictionary() {}
 
-UnitigsDictionary::UnitigsDictionary(uint8_t const k, uint8_t const m) {
+CompUnitigsDictionary::CompUnitigsDictionary(uint8_t const k, uint8_t const m) {
     this->k = k;
     this->m = m;
 }
 
 
-int UnitigsDictionary::build(const std::vector<std::vector<seqan3::dna4>> &input)
+int CompUnitigsDictionary::build(const std::vector<std::vector<seqan3::dna4>> &input)
 {
     auto view = bsc::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k});
 
     const uint64_t M = 1 << (m+m); // 4^m
 
     std::cout << "extracting minimizers...\n";
-    r = bit_vector(M, 0);
+    bit_vector r_ = bit_vector(M, 0);
 
     size_t N = 0;
     uint64_t no_sequences = 0;
     for(auto & record : input) {
         for(auto && minimiser : record | view) {
-            r[minimiser.minimiser_value] = 1;
+            r_[minimiser.minimiser_value] = 1;
         }
         N += record.size();
         no_sequences++;
     }
-    r_rank = rank_support_v<1>(&r);
+    r = sd_vector<>(r_);
+    r_rank = rank_support_sd(&r);
 
     bit_vector sequences = bit_vector(N+1, 0);
     uint64_t j = 0;
@@ -179,11 +178,11 @@ int UnitigsDictionary::build(const std::vector<std::vector<seqan3::dna4>> &input
     // std::cout << "endpoints: " << (double) endpoints.size()/(8*kmers) << "\n";
     std::cout << "endpoints: " << (double) size_in_bytes(endpoints)/(8*kmers) << "\n";
     std::cout << "offsets: " << (double) n*offset_width/kmers << "\n";
-    std::cout << "R: " << (double) M/kmers << "\n";
+    std::cout << "R: " << (double) size_in_bytes(r)/(8*kmers) << "\n";
     std::cout << "S: " << (double) (n+1)/kmers << "\n";
     std::cout << "HT: " << (double) sizeof(*cbk.begin())*cbk.size()/(8*kmers) << "\n";
 
-    std::cout << "total: " << (double) (n*offset_width+2*N+M+n+1+size_in_bytes(endpoints)/8)/kmers << "\n";
+    std::cout << "total: " << (double) (n*offset_width+2*N+size_in_bytes(r)/8+n+1+size_in_bytes(endpoints)/8)/kmers << "\n";
 
     return 0;
 }
@@ -201,98 +200,62 @@ static inline constexpr uint64_t compute_mask(uint64_t const kmer_size)
 }
 
 
-inline void UnitigsDictionary::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t b) {
-    for(uint64_t i = 0; i < b; i++) {
-        uint64_t hash = 0;
-        size_t o = offsets[p+i];
-        for (uint64_t j=o; j < o+k; j++) {
-            uint64_t const new_rank = seqan3::to_rank(text[j]);
-            hash <<= 2;
-            hash |= new_rank;
-            hash &= mask;
-        }
-        buffer.push_back(hash);
-        size_t next_endpoint = endpoints_select(endpoints_rank(o+1)+1);
-        size_t e = o+k+k;
-        if(e > next_endpoint)
-            e = next_endpoint;
-        for(size_t j=o+k; j < e; j++) {
-            uint64_t const new_rank = seqan3::to_rank(text[j]);
-            hash <<= 2;
-            hash |= new_rank;
-            hash &= mask;
-            buffer.push_back(hash);
-        }
-    }
-}
-
-
-inline bool search_serial(std::vector<uint64_t> &array, uint64_t query) {
-    for(uint64_t i=0; i < array.size(); i++) {
-        if(array[i] == query)
-            return true;
-    }
-    return false;
-}
-
-// inline bool contains_uint64_avx512(const std::vector<uint64_t>& arr, uint64_t value) {
-//     const uint64_t* data = arr.data();
-//     size_t len = arr.size();
-//     __m512i target = _mm512_set1_epi64(value);
-//     size_t i = 0;
-//     for (; i + 8 <= len; i += 8) {
-//         __m512i chunk = _mm512_loadu_si512((__m512i const*)(data + i));
-//         __mmask8 mask = _mm512_cmpeq_epi64_mask(chunk, target);
-//         if (mask != 0)
-//             return true;
-//     }
-//     for (; i < len; ++i) {
-//         if (data[i] == value)
-//             return true;
-//     }
-//     return false;
-// }
-
-
-uint64_t UnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &query)
+int CompUnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &query)
 {
     auto query_view = bsc::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
 
-    uint64_t occurences = 0;
+    int occurences = 0;
     const uint64_t mask = compute_mask(k);
-    uint64_t current_minimiser = 0; // lets hope the first minimiser is not 0, todo: uint64_t invalid minimiser value
-    std::vector<uint64_t> buffer;
 
-    for(auto && minimiser : query | query_view)
-    {
-        if(minimiser.minimiser_value == current_minimiser) {
-            occurences += search_serial(buffer, minimiser.window_value);
-        }
-        else {
-            if(r[minimiser.minimiser_value]) {
-                size_t minimizer_id = r_rank(minimiser.minimiser_value);
-                size_t p = s_select.select(minimizer_id);
-                size_t q = s_select.select(minimizer_id+1);
-                size_t b = q - p;
+    for(auto && minimiser : query | query_view) {
+        if(r[minimiser.minimiser_value]) {
+            size_t minimizer_id = r_rank(minimiser.minimiser_value);
+            size_t p = s_select.select(minimizer_id);
+            size_t q = s_select.select(minimizer_id+1);
+            size_t b = q - p;
 
-                buffer.clear();
-                fill_buffer(buffer, mask, p, b);
-                occurences += search_serial(buffer, minimiser.window_value);
-                current_minimiser = minimiser.minimiser_value;
+            bool found = false;
+            for(uint64_t i = 0; !found && i < b; i++) {
+                uint64_t hash = 0;
+                size_t o = offsets[p+i];
+                for (uint64_t j=o; j < o+k; j++) {
+                    uint64_t const new_rank = seqan3::to_rank(text[j]);
+                    hash <<= 2;
+                    hash |= new_rank;
+                    hash &= mask;
+                }
+                if(minimiser.window_value == hash) {
+                    occurences++;
+                    break;
+                }
+                size_t next_endpoint = endpoints_select(endpoints_rank(o+1)+1);
+                size_t e = o+k+k;
+                if(e > next_endpoint)
+                    e = next_endpoint;
+                for(size_t j=o+k; j < e; j++) {
+                    uint64_t const new_rank = seqan3::to_rank(text[j]);
+                    hash <<= 2;
+                    hash |= new_rank;
+                    hash &= mask;
+                    if(minimiser.window_value == hash) {
+                        found = true;
+                        occurences++;
+                        break;
+                    }
+                }
             }
-            // else {
-            //    occurences += cbk.contains(minimiser.window_value);
-            // }
         }
-        
+        // else {
+        //    occurences += cbk.contains(minimiser.window_value);
+        // }
     }
 
     return occurences;
 }
 
 
-uint64_t UnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &query,
-                                            std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &result)
+int CompUnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &query,
+    std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &result)
 {
     auto view = bsc::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
 
@@ -356,7 +319,7 @@ uint64_t UnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &que
 }
 
 
-int UnitigsDictionary::save(const std::filesystem::path &filepath) {
+int CompUnitigsDictionary::save(const std::filesystem::path &filepath) {
     std::ofstream out(filepath, std::ios::binary);
     seqan3::contrib::sdsl::serialize(this->k, out);
     seqan3::contrib::sdsl::serialize(this->m, out);
@@ -374,12 +337,12 @@ int UnitigsDictionary::save(const std::filesystem::path &filepath) {
     return 0;
 }
 
-int UnitigsDictionary::load(const std::filesystem::path &filepath) {
+int CompUnitigsDictionary::load(const std::filesystem::path &filepath) {
     std::ifstream in(filepath, std::ios::binary);
     seqan3::contrib::sdsl::load(this->k, in);
     seqan3::contrib::sdsl::load(this->m, in);
     seqan3::contrib::sdsl::load(r, in);
-    r_rank = rank_support_v<1>(&r);
+    r_rank = rank_support_sd<>(&r);
     seqan3::contrib::sdsl::load(s, in);
     // this->s_select << in;
     this->s_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s.data()), s.size(), 3);

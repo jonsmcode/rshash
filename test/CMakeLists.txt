@@ -3,3 +3,11 @@ target_link_libraries (datasets seqan3::seqan3)
 
 add_executable(verify verify.cpp)
 target_link_libraries (verify seqan3::seqan3)
+
+#add_executable(cmp cmp_results.cpp)
+#target_link_libraries (cmp seqan3::seqan3)
+
+add_executable(shrink shrink_queries.cpp)
+target_link_libraries (shrink seqan3::seqan3)
+
+add_executable(convert convert.cpp)
