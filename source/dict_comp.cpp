@@ -200,119 +200,183 @@ static inline constexpr uint64_t compute_mask(uint64_t const kmer_size)
 }
 
 
-int CompUnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &query)
+inline void CompUnitigsDictionary::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q) {
+    for(uint64_t i = 0; i < q-p; i++) {
+        uint64_t hash = 0;
+        size_t o = offsets[p+i];
+        for (uint64_t j=o; j < o+k; j++) {
+            uint64_t const new_rank = seqan3::to_rank(text[j]);
+            hash <<= 2;
+            hash |= new_rank;
+            hash &= mask;
+        }
+        buffer.push_back(hash);
+        size_t next_endpoint = endpoints_select(endpoints_rank(o+1)+1);
+        size_t e = o+k+k;
+        if(e > next_endpoint)
+            e = next_endpoint;
+        for(size_t j=o+k; j < e; j++) {
+            uint64_t const new_rank = seqan3::to_rank(text[j]);
+            hash <<= 2;
+            hash |= new_rank;
+            hash &= mask;
+            buffer.push_back(hash);
+        }
+    }
+}
+
+
+inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query) {
+    for(uint64_t i=0; i < array.size(); i++) {
+        if(array[i] == query)
+            return true;
+    }
+    return false;
+}
+
+// inline bool contains_uint64_avx512(const std::vector<uint64_t>& arr, uint64_t value) {
+//     const uint64_t* data = arr.data();
+//     size_t len = arr.size();
+//     __m512i target = _mm512_set1_epi64(value);
+//     size_t i = 0;
+//     for (; i + 8 <= len; i += 8) {
+//         __m512i chunk = _mm512_loadu_si512((__m512i const*)(data + i));
+//         __mmask8 mask = _mm512_cmpeq_epi64_mask(chunk, target);
+//         if (mask != 0)
+//             return true;
+//     }
+//     for (; i < len; ++i) {
+//         if (data[i] == value)
+//             return true;
+//     }
+//     return false;
+// }
+
+
+uint64_t CompUnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &query)
 {
     auto query_view = bsc::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
 
-    int occurences = 0;
+    uint64_t occurences = 0;
     const uint64_t mask = compute_mask(k);
+    uint64_t current_minimiser = 0; // lets hope the first minimiser is not 0
+    std::vector<uint64_t> buffer;
 
-    for(auto && minimiser : query | query_view) {
-        if(r[minimiser.minimiser_value]) {
-            size_t minimizer_id = r_rank(minimiser.minimiser_value);
-            size_t p = s_select.select(minimizer_id);
-            size_t q = s_select.select(minimizer_id+1);
-            size_t b = q - p;
-
-            bool found = false;
-            for(uint64_t i = 0; !found && i < b; i++) {
-                uint64_t hash = 0;
-                size_t o = offsets[p+i];
-                for (uint64_t j=o; j < o+k; j++) {
-                    uint64_t const new_rank = seqan3::to_rank(text[j]);
-                    hash <<= 2;
-                    hash |= new_rank;
-                    hash &= mask;
-                }
-                if(minimiser.window_value == hash) {
-                    occurences++;
-                    break;
-                }
-                size_t next_endpoint = endpoints_select(endpoints_rank(o+1)+1);
-                size_t e = o+k+k;
-                if(e > next_endpoint)
-                    e = next_endpoint;
-                for(size_t j=o+k; j < e; j++) {
-                    uint64_t const new_rank = seqan3::to_rank(text[j]);
-                    hash <<= 2;
-                    hash |= new_rank;
-                    hash &= mask;
-                    if(minimiser.window_value == hash) {
-                        found = true;
-                        occurences++;
-                        break;
-                    }
-                }
-            }
+    for(auto && minimiser : query | query_view)
+    {
+        if(minimiser.minimiser_value == current_minimiser) {
+            occurences += lookup_serial(buffer, minimiser.window_value);
         }
-        // else {
-        //    occurences += cbk.contains(minimiser.window_value);
-        // }
+        else {
+            if(r[minimiser.minimiser_value]) {
+                size_t minimizer_id = r_rank(minimiser.minimiser_value);
+                size_t p = s_select.select(minimizer_id);
+                size_t q = s_select.select(minimizer_id+1);
+
+                buffer.clear();
+                fill_buffer(buffer, mask, p, q);
+                occurences += lookup_serial(buffer, minimiser.window_value);
+                current_minimiser = minimiser.minimiser_value;
+            }
+            // else {
+            //    occurences += cbk.contains(minimiser.window_value);
+            // }
+        }
+        
     }
 
     return occurences;
 }
 
 
-int CompUnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &query,
-    std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &result)
+
+inline void CompUnitigsDictionary::fill_buffer(std::vector<std::vector<uint64_t>> &buffer, std::vector<std::vector<uint64_t>> &positions,
+                                           std::vector<uint64_t> &sequences, const uint64_t mask, size_t p, size_t q)
+{
+    for(uint64_t i = 0; i < q-p; i++)
+    {
+        std::vector<uint64_t> buff;
+        std::vector<uint64_t> pos;
+
+        uint64_t hash = 0;
+        size_t o = offsets[p+i];
+        size_t sequence_id = endpoints_rank(o+1);
+        size_t endpoint = endpoints_select(sequence_id);
+        size_t next_endpoint = endpoints_select(sequence_id+1);
+
+        size_t e = o+k+k;
+        if(e > next_endpoint)
+            e = next_endpoint;
+
+        for (uint64_t j=o; j < o+k; j++) {
+            uint64_t const new_rank = seqan3::to_rank(text[j]);
+            hash <<= 2;
+            hash |= new_rank;
+            hash &= mask;
+        }
+        buff.push_back(hash);
+        pos.push_back(o-endpoint);
+        for(size_t j=o+k; j < e; j++) {
+            uint64_t const new_rank = seqan3::to_rank(text[j]);
+            hash <<= 2;
+            hash |= new_rank;
+            hash &= mask;
+            buff.push_back(hash);
+            pos.push_back(j-k+1-endpoint);
+        }
+
+        buffer.push_back(buff);
+        positions.push_back(pos);
+        sequences.push_back(sequence_id);
+    }
+}
+
+
+inline void locate_serial(std::vector<std::vector<uint64_t>> &buffer, std::vector<std::vector<uint64_t>> &positions,
+                          std::vector<uint64_t> &sequences, const uint64_t query, const uint64_t kmer,
+                          std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &result) {
+    for(uint64_t i=0; i < buffer.size(); i++) {
+        for(uint64_t j=0; j < buffer[i].size(); j++) {
+            if(buffer[i][j] == query)
+                result.push_back({kmer, sequences[i], positions[i][j]});
+        }
+    }
+}
+
+
+uint64_t CompUnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &query,
+                                            std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &result)
 {
     auto view = bsc::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
 
     const uint64_t mask = compute_mask(k);
     uint64_t kmer = 0;
+    uint64_t current_minimiser = 0;
+    std::vector<std::vector<uint64_t>> buffer;
+    std::vector<std::vector<uint64_t>> positions;
+    std::vector<uint64_t> sequences;
 
     for(auto && minimiser : query | view) {
-        uint64_t minimiser_value = minimiser.minimiser_value;
-        if(r[minimiser_value]) {
-            uint64_t window_value = minimiser.window_value;
-
-            size_t minimizer_id = r_rank(minimiser_value);
-            size_t p = s_select.select(minimizer_id);
-            size_t q = s_select.select(minimizer_id+1);
-
-            bool found = false;
-            for(uint64_t i = 0; !found && i < q-p; i++) {
-                uint64_t hash = 0;
-                size_t o = offsets[p+i];
-                size_t sequence_id = endpoints_rank(o+1);
-                // std::cout << "offset: " << o << '\n';
-                // std::cout << "seq id: " << sequence_id << '\n';
-                // std::cout << "next endpoint: " << endpoints_select(sequence_id+1) << '\n';
-                // std::cout << "endpoint: " << endpoints_select(sequence_id) << '\n';
-
-                for (uint64_t j=o; j < o+k; j++) {
-                    uint64_t const new_rank = seqan3::to_rank(text[j]);
-                    hash <<= 2;
-                    hash |= new_rank;
-                    hash &= mask;
-                }
-                if(window_value == hash) {
-                    result.push_back({kmer, sequence_id, 0});
-                    break;
-                }
-                uint64_t e = o+k+k;
-                uint64_t next_endpoint = endpoints_select(sequence_id+1);
-                if(e > next_endpoint)
-                    e = next_endpoint;
-                for(uint64_t j=o+k; j < e; j++) {
-                    uint64_t const new_rank = seqan3::to_rank(text[j]);
-                    hash <<= 2;
-                    hash |= new_rank;
-                    hash &= mask;
-                    if(window_value == hash) {
-                        found = true;
-                        result.push_back({kmer, sequence_id, j-k+1-endpoints_select(sequence_id)});
-                        break;
-                    }
-                }
-            }
-
+        if(minimiser.minimiser_value == current_minimiser) {
+            locate_serial(buffer, positions, sequences, minimiser.window_value, kmer, result);
         }
-        // else {
-        //     cb.find(minimiser.window_value)
-        // }
+        else {
+            if(r[minimiser.minimiser_value]) {
+                size_t minimizer_id = r_rank(minimiser.minimiser_value);
+                size_t p = s_select.select(minimizer_id);
+                size_t q = s_select.select(minimizer_id+1);
+
+                buffer.clear();
+                positions.clear();
+                sequences.clear();
+                fill_buffer(buffer, positions, sequences, mask, p, q);
+                locate_serial(buffer, positions, sequences, minimiser.window_value, kmer, result);
+
+                current_minimiser = minimiser.minimiser_value;
+            }
+        }
         kmer++;
+
     }
 
     return 0;

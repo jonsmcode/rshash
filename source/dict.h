@@ -82,9 +82,9 @@ private:
     sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s_select;
     int_vector<0> offsets;
     seqan3::bitpacked_sequence<seqan3::dna4> text;
-    // std::vector<seqan3::dna4> text;
-    // std::vector<std::vector<seqan3::dna4>> text;
-    void fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t b);
+    void fill_buffer(std::vector<uint64_t> &, const uint64_t, size_t, size_t);
+    void fill_buffer(std::vector<std::vector<uint64_t>>&, std::vector<std::vector<uint64_t>>&, std::vector<uint64_t>&, const uint64_t, size_t, size_t);
+
 
 public:
     UnitigsDictionary();
@@ -112,14 +112,16 @@ private:
     sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s_select;
     int_vector<0> offsets;
     seqan3::bitpacked_sequence<seqan3::dna4> text;
+    void fill_buffer(std::vector<uint64_t> &, const uint64_t, size_t, size_t);
+    void fill_buffer(std::vector<std::vector<uint64_t>>&, std::vector<std::vector<uint64_t>>&, std::vector<uint64_t>&, const uint64_t, size_t, size_t);
 
 public:
     CompUnitigsDictionary();
     CompUnitigsDictionary(uint8_t const k, uint8_t const m);
     uint8_t getk() { return k; }
     int build(const std::vector<std::vector<seqan3::dna4>>&);
-    int streaming_query(const std::vector<seqan3::dna4>&);
-    int streaming_query(const std::vector<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
+    uint64_t streaming_query(const std::vector<seqan3::dna4>&);
+    uint64_t streaming_query(const std::vector<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
     int save(const std::filesystem::path&);
     int load(const std::filesystem::path&);
 };
