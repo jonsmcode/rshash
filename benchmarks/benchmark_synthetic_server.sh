@@ -1,16 +1,15 @@
 #!/bin/bash
 
-PROGRAM="../build/source/lookup_unitigs"
 # PROGRAM="../build/source/comp_lookup"
+PROGRAM="../build/source/lookup_unitigs"
 
 today=$(date +%Y-%m-%d-%H-%M-%S)
 
-# DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../../../datasets/synthetic" >/dev/null 2>&1 && pwd )"
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../test/datasets/synthetic" >/dev/null 2>&1 && pwd )"
 LOG="log.txt"
-# CSV="comp_lookup-results-synthetic$today.csv"
-CSV="lookup-results-server-synthetic$today.csv"
-# CSV="sshash-results-synthetic$today.csv"
+
+# CSV="comp_lookup-results-server-synthetic-$today.csv"
+CSV="lookup-results-server-synthetic-$today.csv"
 
 run()
 {
@@ -40,8 +39,6 @@ run()
 
       file_size=$(stat -c%s "${DIR}/${BASENAME}.dict")
       buildtime=$(grep "User time" time.txt | awk -F': ' '{print $2}')
-      # buildtime=$(cat time.txt | grep "User time (seconds):" | awk '{print $1}')
-      # buildmem=$(cat time.txt  | grep "Maximum resident set size (kbytes):" | awk '{print $1}')
       buildmem=$(grep "Maximum resident set size" time.txt | awk -F': ' '{print $2}')
       textlength=$(grep "text length: " prog_out.txt | sed -E 's/.*text length: ([0-9]+).*/\1/')
       no_distinct_kmers=$(awk '/no distinct kmers/ {print $4}' prog_out.txt | tr -d ',')
@@ -68,14 +65,11 @@ run()
 
       cat prog_out.txt >> $LOG
       
-      # querytime=$(cat time.txt | grep "User time (seconds):" | awk '{print $1}')
       querytime=$(grep "User time" time.txt | awk -F': ' '{print $2}')
-      # querymem=$(cat time.txt  | grep "Maximum resident set size (kbytes):" | awk '{print $1}')
       querymem=$(grep "Maximum resident set size" time.txt | awk -F': ' '{print $2}')
       k_mers=$(grep "num_kmers" prog_out.txt | sed -E 's/.*num_kmers = ([0-9]+).*/\1/')
       found=$(grep "num_positive_kmers" prog_out.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
       
-      # echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$querytime,$querymem,$k_mers",$found" >> "$CSV"
       echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$spaceoffsets,$spacer,$spaces,$spacetotal,$density_r,$density_s,$querytime,$querymem,$k_mers",$found" >> "$CSV"
     done
 
@@ -85,7 +79,6 @@ run()
 
 for data in $(find $DIR -mindepth 0 -maxdepth 0 -type d); do
   FILENAME=$(basename $data)
-  echo "textfile,queryfile,k,m,buildtime [s],buildmem [MB],indexsize [MB],spaceoffsets [bits/kmer],spaceR [bits/kmer],spaceS [bits/kmer],spacetotal [bits/kmer],density_r [%],density_s [%],querytime [s],querymem [MB],kmers,found" > "$CSV"
-  # echo "textfile,queryfile,k,m,buildtime,buildmem,filesize,querytime,querymem,kmers,found" > "$CSV"
+  echo "textfile,queryfile,k,m,buildtime [s],buildmem [B],indexsize [B],spaceoffsets [bits/kmer],spaceR [bits/kmer],spaceS [bits/kmer],spacetotal [bits/kmer],density_r [%],density_s [%],querytime [s],querymem [B],kmers,found" > "$CSV"
   run $data/
 done
