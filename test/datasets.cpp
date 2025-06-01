@@ -252,7 +252,7 @@ void build_dataset(const std::string path, const uint8_t k, const uint64_t textl
 int main(int argc, char** argv)
 {
     // const uint64_t textlengths[] = {1000000, 10000000, 100000000, 1000000000};
-    const uint64_t textlengths[] = {10000000, 100000000, 1000000000};
+    const uint64_t textlengths[] = {10000000, 100000000};
     const uint8_t k = 31;
 
     // int n = 100;
@@ -270,7 +270,7 @@ int main(int argc, char** argv)
         std::cout << "building random dataset with text length " << textlength << "\n";
         // build_random_dataset("test/datasets/2-stream-random/", id, k, tl, query_length, number_queries, n);
         // build_dataset("/Users/adm_js4718fu/datasets/synthetic/", k, textlength, occurences, hitrate, querylength);
-        build_dataset("../../test/datasets/synthetic/", k, textlength, querylength, textlength/1000);
+        build_dataset("../test/datasets/synthetic/", k, textlength, querylength, textlength/1000);
     }
 
     return 0;
