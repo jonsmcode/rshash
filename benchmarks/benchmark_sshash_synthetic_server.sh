@@ -4,7 +4,7 @@ PROGRAM="../../sshash/build/sshash"
 
 today=$(date +%Y-%m-%d-%H-%M-%S)
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../../../datasets/synthetic" >/dev/null 2>&1 && pwd )"
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../test/datasets/synthetic" >/dev/null 2>&1 && pwd )"
 LOG="log.txt"
 CSV="sshash-results-server-synthetic$today.csv"
 
