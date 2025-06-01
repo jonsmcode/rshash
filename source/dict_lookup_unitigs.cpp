@@ -1,6 +1,6 @@
 #include <filesystem>
-// #include <cstdint>
-// #include <immintrin.h>
+#include <cstdint>
+#include <immintrin.h>
 
 #include <seqan3/core/debug_stream.hpp>
 #include <seqan3/search/views/kmer_hash.hpp>
@@ -235,23 +235,23 @@ inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query) {
     return false;
 }
 
-// inline bool contains_uint64_avx512(const std::vector<uint64_t>& arr, uint64_t value) {
-//     const uint64_t* data = arr.data();
-//     size_t len = arr.size();
-//     __m512i target = _mm512_set1_epi64(value);
-//     size_t i = 0;
-//     for (; i + 8 <= len; i += 8) {
-//         __m512i chunk = _mm512_loadu_si512((__m512i const*)(data + i));
-//         __mmask8 mask = _mm512_cmpeq_epi64_mask(chunk, target);
-//         if (mask != 0)
-//             return true;
-//     }
-//     for (; i < len; ++i) {
-//         if (data[i] == value)
-//             return true;
-//     }
-//     return false;
-// }
+inline bool contains_uint64_avx512(const std::vector<uint64_t>& arr, uint64_t value) {
+    const uint64_t* data = arr.data();
+    size_t len = arr.size();
+    __m512i target = _mm512_set1_epi64(value);
+    size_t i = 0;
+    for (; i + 8 <= len; i += 8) {
+        __m512i chunk = _mm512_loadu_si512((__m512i const*)(data + i));
+        __mmask8 mask = _mm512_cmpeq_epi64_mask(chunk, target);
+        if (mask != 0)
+            return true;
+    }
+    for (; i < len; ++i) {
+        if (data[i] == value)
+            return true;
+    }
+    return false;
+}
 
 
 uint64_t UnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &query)
@@ -266,7 +266,7 @@ uint64_t UnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &que
     for(auto && minimiser : query | query_view)
     {
         if(minimiser.minimiser_value == current_minimiser) {
-            occurences += lookup_serial(buffer, minimiser.window_value);
+            occurences += contains_uint64_avx512(buffer, minimiser.window_value);
         }
         else {
             if(r[minimiser.minimiser_value]) {
@@ -276,7 +276,7 @@ uint64_t UnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &que
 
                 buffer.clear();
                 fill_buffer(buffer, mask, p, q);
-                occurences += lookup_serial(buffer, minimiser.window_value);
+                occurences += contains_uint64_avx512(buffer, minimiser.window_value);
                 current_minimiser = minimiser.minimiser_value;
             }
             // else {
@@ -332,8 +332,8 @@ inline void locate_serial(std::vector<uint64_t> &buffer, std::vector<uint64_t> &
                           std::vector<uint64_t> &sequences, const uint64_t query, const uint64_t kmer,
                           std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &result) {
     for(uint64_t i=0; i < buffer.size(); i++) {
-            if(buffer[i] == query)
-                result.push_back({kmer, sequences[i], positions[i]});
+        if(buffer[i] == query)
+            result.push_back({kmer, sequences[i], positions[i]});
     }
 }
 

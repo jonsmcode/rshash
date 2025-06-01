@@ -16,6 +16,7 @@ target_include_directories(lookup PRIVATE ${CMAKE_SOURCE_DIR}/sux)
 target_link_libraries (lookup PRIVATE seqan3::seqan3)
 
 add_executable (lookup_unitigs lookup_unitigs.cpp dict_lookup_unitigs.cpp)
+target_compile_options(lookup_unitigs PRIVATE -mavx512f)
 target_include_directories(lookup_unitigs PRIVATE ${CMAKE_SOURCE_DIR}/sux)
 target_link_libraries (lookup_unitigs PRIVATE seqan3::seqan3)
 
