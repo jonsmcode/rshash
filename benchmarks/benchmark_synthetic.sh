@@ -89,7 +89,7 @@ run()
 
 for data in $(find $DIR -mindepth 0 -maxdepth 0 -type d); do
   FILENAME=$(basename $data)
-  echo "textfile,queryfile,k,m,buildtime,buildmem,indexsize,spaceoffsets,spaceR,spaceS,spacetotal,density_r,density_s,querytime,querymem,kmers,found" > "$CSV"
+  echo "textfile,queryfile,k,m,buildtime [s],buildmem [MB],indexsize [MB],spaceoffsets [bits/kmer],spaceR [bits/kmer],spaceS [bits/kmer],spacetotal [bits/kmer],density_r [%],density_s [%],querytime [s],querymem [MB],kmers,found" > "$CSV"
   # echo "textfile,queryfile,k,m,buildtime,buildmem,filesize,querytime,querymem,kmers,found" > "$CSV"
   run $data/
 done

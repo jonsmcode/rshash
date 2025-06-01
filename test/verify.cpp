@@ -1,7 +1,5 @@
-#include <seqan3/core/debug_stream.hpp>
 #include <seqan3/argument_parser/all.hpp>
 #include <seqan3/io/sequence_file/all.hpp>
-#include <seqan3/search/views/kmer_hash.hpp>
 
 
 struct cmd_arguments {
@@ -23,33 +21,39 @@ void initialise_argument_parser(seqan3::argument_parser &parser, cmd_arguments &
     parser.add_option(args.k, 'k', "k-mer", "k-mer length");
 }
 
-int load_text(const std::filesystem::path &filepath, std::vector<seqan3::dna4> &output) {
+int load_file(const std::filesystem::path &filepath, std::vector<std::vector<seqan3::dna4>> &output) {
     auto stream = seqan3::sequence_file_input<my_traits>{filepath};
     for (auto & record : stream) {
-        std::ranges::move(record.sequence(), std::back_inserter(output));
+        output.push_back(std::move(record.sequence()));
     }
     return 0;
 }
 
-int load_queries(const std::filesystem::path &filepath, std::vector<std::vector<seqan3::dna4>> &queries) {
-    auto stream = seqan3::sequence_file_input<my_traits>{filepath};
-    for (auto & record : stream) {
-        queries.push_back(std::move(record.sequence()));
-    }
-    return 0;
-}
-
-int load_positions(const std::filesystem::path &filepath, std::vector<std::vector<uint64_t>> &positions) {
+int load_positions(const std::filesystem::path &filepath,
+    std::vector<std::tuple<uint64_t, uint64_t, uint64_t, uint64_t>> &positions)
+{
     std::ifstream file(filepath);
     std::string line;
     while (std::getline(file, line)) {
-        std::istringstream line_stream(line);
-        std::vector<uint64_t> line_positions;
-        uint64_t number;
-        while (line_stream >> number) {
-            line_positions.push_back(number);
+        std::istringstream stream(line);
+        std::string tupleStr;
+
+        // Parse each tuple in the line
+        while (stream >> tupleStr) {
+            // Remove parentheses
+            tupleStr.erase(0, 1); // Remove '('
+            tupleStr.erase(tupleStr.size() - 1); // Remove ')'
+
+            // Split the tuple into integers
+            std::istringstream tupleStream(tupleStr);
+            uint64_t a, b, c, d;
+            char comma;
+
+            tupleStream >> a >> comma >> b >> comma >> c >> comma >> d;
+
+            // Add the tuple to the positions vector
+            positions.emplace_back(a, b, c, d);
         }
-        positions.push_back(line_positions);
     }
     file.close();
     return 0;
@@ -69,18 +73,6 @@ int check_arguments(seqan3::argument_parser &parser, cmd_arguments &args) {
 }
 
 
-seqan3::dna4_vector kmer_to_string(uint64_t kmer, size_t const kmer_size)
-{
-    seqan3::dna4_vector result(kmer_size);
-    for (size_t i = 0; i < kmer_size; ++i)
-    {
-        result[kmer_size - 1 - i].assign_rank(kmer & 0b11);
-        kmer >>= 2;
-    }
-    return result;
-}
-
-
 int main(int argc, char** argv)
 {
     seqan3::argument_parser parser{"verify", argc, argv};
@@ -94,38 +86,23 @@ int main(int argc, char** argv)
         return -1;
     }
 
-    std::vector<seqan3::dna4> text;
-    load_text(args.i, text);
-    std::vector<std::vector<uint64_t>> positions;
+    std::vector<std::vector<seqan3::dna4>> text;
+    load_file(args.i, text);
+    std::vector<std::tuple<uint64_t, uint64_t, uint64_t, uint64_t>> positions;
     load_positions(args.p, positions);
     std::vector<std::vector<seqan3::dna4>> queries;
-    load_queries(args.q, queries);
+    load_file(args.q, queries);
 
-    auto kmer_view = seqan3::views::kmer_hash(seqan3::ungapped{args.k});
-
-    int q = 0;
-    for(auto query : queries) {
-        if(positions[q].size() == 0) {
-            q++;
-            continue;
-        }
-        int h = 0;
-        int p = positions[q][0];
-        for (auto && hash : query | kmer_view) {
-            if(h == p) {
-                seqan3::dna4_vector kmer = kmer_to_string(hash, args.k);
-                for(int i=0; i < args.k; i++) {
-                    if(text[positions[q][p]+i] != kmer[i]) {
-                        std::cout << "not correct\n";
-                        return -1;
-                    }
-                }
-                p++;
+    
+    for(auto const & [q, k, u, i] : positions) {
+        for(int j=0; j < args.k; j++) {
+            if(queries[q][k + j] != text[u][i+j]) {
+                std::cout << "not correct\n";
+                return -1;
             }
-            h++;
         }
-        q++;
     }
+    
     std::cout << "correct\n";
  
     return 0;

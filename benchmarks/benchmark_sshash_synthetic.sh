@@ -38,6 +38,7 @@ run()
       file_size=$(stat -f%z "${DIR}/${BASENAME}.index")
       buildtime=$(cat time.txt | grep "real" | awk '{print $1}')
       buildmem=$(cat time.txt  | grep "maximum resident set size" | awk '{print $1}')
+      space=$(grep "total:" prog_out.txt | sed -E 's/^ *total: *([0-9.eE+-]+).*/\1/')
 
       parent_dir=$(dirname "$f")
       file_name=$(basename "$f")
@@ -56,11 +57,10 @@ run()
       
       querytime=$(cat time.txt | grep "real" | awk '{print $1}')
       querymem=$(cat time.txt  | grep "maximum resident set size" | awk '{print $1}')
-      space=$(grep "total:" prog_out.txt | sed -E 's/.*num_kmers = ([0-9]+).*/\1/')
       k_mers=$(grep "num_kmers" prog_out.txt | sed -E 's/.*num_kmers = ([0-9]+).*/\1/')
       found=$(grep "num_positive_kmers" prog_out.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
       
-      echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$querytime,$querymem,$k_mers",$found" >> "$CSV"
+      echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$space,$querytime,$querymem,$k_mers",$found" >> "$CSV"
     done
 
   done
@@ -69,6 +69,6 @@ run()
 
 for data in $(find $DIR -mindepth 0 -maxdepth 0 -type d); do
   FILENAME=$(basename $data)
-  echo "textfile,queryfile,k,m,buildtime,buildmem,indexsize,querytime,querymem,kmers,found" > "$CSV"
+  echo "textfile,queryfile,k,m,buildtime [s],buildmem [MB],indexsize [MB], space [bits\kmer],querytime [s],querymem [MB],kmers,found" > "$CSV"
   run $data/
 done

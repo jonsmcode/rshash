@@ -83,7 +83,7 @@ private:
     int_vector<0> offsets;
     seqan3::bitpacked_sequence<seqan3::dna4> text;
     void fill_buffer(std::vector<uint64_t> &, const uint64_t, size_t, size_t);
-    void fill_buffer(std::vector<std::vector<uint64_t>>&, std::vector<std::vector<uint64_t>>&, std::vector<uint64_t>&, const uint64_t, size_t, size_t);
+    void fill_buffer(std::vector<uint64_t>&, std::vector<uint64_t>&, std::vector<uint64_t>&, const uint64_t, size_t, size_t);
 
 
 public:
@@ -113,7 +113,7 @@ private:
     int_vector<0> offsets;
     seqan3::bitpacked_sequence<seqan3::dna4> text;
     void fill_buffer(std::vector<uint64_t> &, const uint64_t, size_t, size_t);
-    void fill_buffer(std::vector<std::vector<uint64_t>>&, std::vector<std::vector<uint64_t>>&, std::vector<uint64_t>&, const uint64_t, size_t, size_t);
+    void fill_buffer(std::vector<uint64_t>&, std::vector<uint64_t>&, std::vector<uint64_t>&, const uint64_t, size_t, size_t);
 
 public:
     CompUnitigsDictionary();

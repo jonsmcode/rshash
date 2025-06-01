@@ -1,48 +1,55 @@
 #include <filesystem>
+// #include <cstdint>
+// #include <immintrin.h>
 
 #include <seqan3/core/debug_stream.hpp>
 #include <seqan3/search/views/kmer_hash.hpp>
 #include <seqan3/search/views/minimiser_hash.hpp>
 #include <seqan3/alphabet/container/bitpacked_sequence.hpp>
-
 #include <cereal/archives/binary.hpp>
 
 #include "dict.h"
-#include "kmer_minimiser_hash.hpp"
+#include "minimiser_views.hpp"
 
 
 const uint8_t m_thres = 5;
 
 
 
-CompUnitigsDictionary::CompUnitigsDictionary() {}
+UnitigsDictionary::UnitigsDictionary() {}
 
-CompUnitigsDictionary::CompUnitigsDictionary(uint8_t const k, uint8_t const m) {
+UnitigsDictionary::UnitigsDictionary(uint8_t const k, uint8_t const m) {
     this->k = k;
     this->m = m;
 }
 
 
-int CompUnitigsDictionary::build(const std::vector<std::vector<seqan3::dna4>> &input)
+int UnitigsDictionary::build(const std::vector<std::vector<seqan3::dna4>> &input)
 {
     auto view = bsc::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k});
+    // auto minimiser_hash_view = seqan3::views::minimiser_hash(m, seqan3::window_size{k});
+    // std::vector<uint64_t> minimiser;
 
-    const uint64_t M = 1 << (m+m); // 4^m
+    // for(auto & record : input) {
+    //     auto minimiser_view = record | hash_adaptor | std::views::common;
+    //     minimiser.assign(minimiser_view.begin(), minimiser_view.end());
+    // }
+
+    const uint64_t M = 1ULL << (m+m); // 4^m
 
     std::cout << "extracting minimizers...\n";
-    bit_vector r_ = bit_vector(M, 0);
+    r = bit_vector(M, 0);
 
     size_t N = 0;
     uint64_t no_sequences = 0;
     for(auto & record : input) {
         for(auto && minimiser : record | view) {
-            r_[minimiser.minimiser_value] = 1;
+            r[minimiser.minimiser_value] = 1;
         }
         N += record.size();
         no_sequences++;
     }
-    r = sd_vector<>(r_);
-    r_rank = rank_support_sd(&r);
+    r_rank = rank_support_v<1>(&r);
 
     bit_vector sequences = bit_vector(N+1, 0);
     uint64_t j = 0;
@@ -178,11 +185,11 @@ int CompUnitigsDictionary::build(const std::vector<std::vector<seqan3::dna4>> &i
     // std::cout << "endpoints: " << (double) endpoints.size()/(8*kmers) << "\n";
     std::cout << "endpoints: " << (double) size_in_bytes(endpoints)/(8*kmers) << "\n";
     std::cout << "offsets: " << (double) n*offset_width/kmers << "\n";
-    std::cout << "R: " << (double) size_in_bytes(r)/(8*kmers) << "\n";
+    std::cout << "R: " << (double) M/kmers << "\n";
     std::cout << "S: " << (double) (n+1)/kmers << "\n";
     std::cout << "HT: " << (double) sizeof(*cbk.begin())*cbk.size()/(8*kmers) << "\n";
 
-    std::cout << "total: " << (double) (n*offset_width+2*N+size_in_bytes(r)/8+n+1+size_in_bytes(endpoints)/8)/kmers << "\n";
+    std::cout << "total: " << (double) (n*offset_width+2*N+M+n+1+size_in_bytes(endpoints)/8)/kmers << "\n";
 
     return 0;
 }
@@ -200,7 +207,7 @@ static inline constexpr uint64_t compute_mask(uint64_t const kmer_size)
 }
 
 
-inline void CompUnitigsDictionary::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q) {
+inline void UnitigsDictionary::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q) {
     for(uint64_t i = 0; i < q-p; i++) {
         uint64_t hash = 0;
         size_t o = offsets[p+i];
@@ -253,7 +260,7 @@ inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query) {
 // }
 
 
-uint64_t CompUnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &query)
+uint64_t UnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &query)
 {
     auto query_view = bsc::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
 
@@ -290,7 +297,7 @@ uint64_t CompUnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> 
 
 
 
-inline void CompUnitigsDictionary::fill_buffer(std::vector<uint64_t> &buffer, std::vector<uint64_t> &positions,
+inline void UnitigsDictionary::fill_buffer(std::vector<uint64_t> &buffer, std::vector<uint64_t> &positions,
                                            std::vector<uint64_t> &sequences, const uint64_t mask, size_t p, size_t q)
 {
     for(uint64_t i = 0; i < q-p; i++)
@@ -337,7 +344,7 @@ inline void locate_serial(std::vector<uint64_t> &buffer, std::vector<uint64_t> &
 }
 
 
-uint64_t CompUnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &query,
+uint64_t UnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &query,
                                             std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &result)
 {
     auto view = bsc::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
@@ -376,7 +383,7 @@ uint64_t CompUnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> 
 }
 
 
-int CompUnitigsDictionary::save(const std::filesystem::path &filepath) {
+int UnitigsDictionary::save(const std::filesystem::path &filepath) {
     std::ofstream out(filepath, std::ios::binary);
     seqan3::contrib::sdsl::serialize(this->k, out);
     seqan3::contrib::sdsl::serialize(this->m, out);
@@ -394,12 +401,12 @@ int CompUnitigsDictionary::save(const std::filesystem::path &filepath) {
     return 0;
 }
 
-int CompUnitigsDictionary::load(const std::filesystem::path &filepath) {
+int UnitigsDictionary::load(const std::filesystem::path &filepath) {
     std::ifstream in(filepath, std::ios::binary);
     seqan3::contrib::sdsl::load(this->k, in);
     seqan3::contrib::sdsl::load(this->m, in);
     seqan3::contrib::sdsl::load(r, in);
-    r_rank = rank_support_sd<>(&r);
+    r_rank = rank_support_v<1>(&r);
     seqan3::contrib::sdsl::load(s, in);
     // this->s_select << in;
     this->s_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s.data()), s.size(), 3);

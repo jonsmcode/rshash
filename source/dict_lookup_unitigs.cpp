@@ -29,7 +29,7 @@ int UnitigsDictionary::build(const std::vector<std::vector<seqan3::dna4>> &input
 {
     auto view = bsc::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k});
 
-    const uint64_t M = 1 << (m+m); // 4^m
+    const uint64_t M = 1ULL << (m+m); // 4^m
 
     std::cout << "extracting minimizers...\n";
     r = bit_vector(M, 0);
@@ -291,14 +291,11 @@ uint64_t UnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &que
 
 
 
-inline void UnitigsDictionary::fill_buffer(std::vector<std::vector<uint64_t>> &buffer, std::vector<std::vector<uint64_t>> &positions,
+inline void UnitigsDictionary::fill_buffer(std::vector<uint64_t> &buffer, std::vector<uint64_t> &positions,
                                            std::vector<uint64_t> &sequences, const uint64_t mask, size_t p, size_t q)
 {
     for(uint64_t i = 0; i < q-p; i++)
     {
-        std::vector<uint64_t> buff;
-        std::vector<uint64_t> pos;
-
         uint64_t hash = 0;
         size_t o = offsets[p+i];
         size_t sequence_id = endpoints_rank(o+1);
@@ -315,32 +312,28 @@ inline void UnitigsDictionary::fill_buffer(std::vector<std::vector<uint64_t>> &b
             hash |= new_rank;
             hash &= mask;
         }
-        buff.push_back(hash);
-        pos.push_back(o-endpoint);
+        buffer.push_back(hash);
+        positions.push_back(o-endpoint);
+        sequences.push_back(sequence_id);
         for(size_t j=o+k; j < e; j++) {
             uint64_t const new_rank = seqan3::to_rank(text[j]);
             hash <<= 2;
             hash |= new_rank;
             hash &= mask;
-            buff.push_back(hash);
-            pos.push_back(j-k+1-endpoint);
+            buffer.push_back(hash);
+            positions.push_back(j-k+1-endpoint);
+            sequences.push_back(sequence_id);
         }
-
-        buffer.push_back(buff);
-        positions.push_back(pos);
-        sequences.push_back(sequence_id);
     }
 }
 
 
-inline void locate_serial(std::vector<std::vector<uint64_t>> &buffer, std::vector<std::vector<uint64_t>> &positions,
+inline void locate_serial(std::vector<uint64_t> &buffer, std::vector<uint64_t> &positions,
                           std::vector<uint64_t> &sequences, const uint64_t query, const uint64_t kmer,
                           std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &result) {
     for(uint64_t i=0; i < buffer.size(); i++) {
-        for(uint64_t j=0; j < buffer[i].size(); j++) {
-            if(buffer[i][j] == query)
-                result.push_back({kmer, sequences[i], positions[i][j]});
-        }
+            if(buffer[i] == query)
+                result.push_back({kmer, sequences[i], positions[i]});
     }
 }
 
@@ -353,8 +346,8 @@ uint64_t UnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &que
     const uint64_t mask = compute_mask(k);
     uint64_t kmer = 0;
     uint64_t current_minimiser = 0;
-    std::vector<std::vector<uint64_t>> buffer;
-    std::vector<std::vector<uint64_t>> positions;
+    std::vector<uint64_t> buffer;
+    std::vector<uint64_t> positions;
     std::vector<uint64_t> sequences;
 
     for(auto && minimiser : query | view) {
