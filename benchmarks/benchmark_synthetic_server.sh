@@ -9,7 +9,7 @@ today=$(date +%Y-%m-%d-%H-%M-%S)
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../test/datasets/synthetic" >/dev/null 2>&1 && pwd )"
 LOG="log.txt"
 # CSV="comp_lookup-results-synthetic$today.csv"
-CSV="lookup-results-synthetic$today.csv"
+CSV="lookup-results-server-synthetic$today.csv"
 # CSV="sshash-results-synthetic$today.csv"
 
 run()
@@ -38,7 +38,7 @@ run()
 
       cat prog_out.txt >> $LOG
 
-      file_size=$(stat -c%z "${DIR}/${BASENAME}.dict")
+      file_size=$(stat -c%s "${DIR}/${BASENAME}.dict")
       buildtime=$(grep "User time" time.txt | awk -F': ' '{print $2}')
       # buildtime=$(cat time.txt | grep "User time (seconds):" | awk '{print $1}')
       # buildmem=$(cat time.txt  | grep "Maximum resident set size (kbytes):" | awk '{print $1}')
