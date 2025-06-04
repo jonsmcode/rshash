@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # PROGRAM="../build/source/comp_lookup"
-PROGRAM="../build/source/lookup_unitigs"
+PROGRAM="../build/source/lookup_unitigs_simd"
 
 today=$(date +%Y-%m-%d-%H-%M-%S)
 
