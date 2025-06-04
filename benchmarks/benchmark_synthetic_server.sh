@@ -74,6 +74,7 @@ run()
       found=$(grep "num_positive_kmers" prog_out.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
       querymem=$(grep "Maximum resident set size" time.txt | awk -F': ' '{print $2}')
       querytime=$(grep "User time" time.txt | awk -F': ' '{print $2}')
+      echo "scale=10; $querytime / $k_mers * 1e9"
       querytimekmer=$(echo "scale=10; $querytime * 1e9 / $k_mers" | bc)
       echo "$querytime"
       echo "$k_mers"
