@@ -79,7 +79,10 @@ run()
       # echo "$k_mers"
       # echo "scale=10; $querytime / $k_mers * 1e9"
       # echo "$querytimekmer"
+      querytime=$(echo "$querytime" | tr ',' '.' | tr -d ' ')
+      k_mers=$(echo "$k_mers" | tr ',' '.' | tr -d ' ')
       if [[ -n "$querytime" && -n "$k_mers" ]]; then
+        echo "scale=10; $querytime / $k_mers * 1e9"
         querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1e9" | bc)
         echo "$querytimekmer"
       else
