@@ -75,12 +75,12 @@ run()
       querymem=$(grep "Maximum resident set size" time.txt | awk -F': ' '{print $2}')
       querytime=$(grep "User time" time.txt | awk -F': ' '{print $2}')
       querytimekmer=$(echo "scale=10; $querytime * 1e9 / $k_mers" | bc)
-      echo "$querytime"
-      echo "$k_mers"
-      echo "scale=10; $querytime / $k_mers * 1e9"
-      echo "$querytimekmer"
+      # echo "$querytime"
+      # echo "$k_mers"
+      # echo "scale=10; $querytime / $k_mers * 1e9"
+      # echo "$querytimekmer"
       
-      echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$spaceoffsets,$spacer,$spaces,$spacetotal,$density_r,$density_s,$no_minimiser,$querytime,$querymem,$k_mers",$found" >> "$CSV"
+      echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$spaceoffsets,$spacer,$spaces,$spacetotal,$density_r,$density_s,$no_minimiser,$querytimekmer,$querymem,$k_mers",$found" >> "$CSV"
     done
 
   done
