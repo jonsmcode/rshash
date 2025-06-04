@@ -7,7 +7,7 @@
 
 #include <cereal/archives/binary.hpp>
 
-#include "dict.h"
+#include "dict.hpp"
 #include "kmer_minimiser_hash.hpp"
 
 

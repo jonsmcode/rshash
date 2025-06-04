@@ -1,18 +1,20 @@
 #include <filesystem>
-// #include <cstdint>
-// #include <immintrin.h>
+#include <cstdint>
+#include <immintrin.h>
 
 #include <seqan3/core/debug_stream.hpp>
 #include <seqan3/search/views/kmer_hash.hpp>
 #include <seqan3/search/views/minimiser_hash.hpp>
 #include <seqan3/alphabet/container/bitpacked_sequence.hpp>
+
 #include <cereal/archives/binary.hpp>
 
 #include "dict.hpp"
-#include "minimiser_views.hpp"
+#include "kmer_minimiser_hash.hpp"
 
 
 const uint8_t m_thres = 5;
+
 
 
 UnitigsDictionary::UnitigsDictionary() {}
@@ -26,13 +28,6 @@ UnitigsDictionary::UnitigsDictionary(uint8_t const k, uint8_t const m) {
 int UnitigsDictionary::build(const std::vector<std::vector<seqan3::dna4>> &input)
 {
     auto view = bsc::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k});
-    // auto minimiser_hash_view = seqan3::views::minimiser_hash(m, seqan3::window_size{k});
-    // std::vector<uint64_t> minimiser;
-
-    // for(auto & record : input) {
-    //     auto minimiser_view = record | hash_adaptor | std::views::common;
-    //     minimiser.assign(minimiser_view.begin(), minimiser_view.end());
-    // }
 
     const uint64_t M = 1ULL << (m+m); // 4^m
 
@@ -42,8 +37,7 @@ int UnitigsDictionary::build(const std::vector<std::vector<seqan3::dna4>> &input
     size_t N = 0;
     uint64_t no_sequences = 0;
     for(auto & record : input) {
-        for(auto && minimiser : record | view)
-        {
+        for(auto && minimiser : record | view) {
             r[minimiser.minimiser_value] = 1;
         }
         N += record.size();
@@ -67,7 +61,7 @@ int UnitigsDictionary::build(const std::vector<std::vector<seqan3::dna4>> &input
     uint8_t* count = new uint8_t[c];
     std::memset(count, 0, c*sizeof(uint8_t));
     std::unordered_map<uint64_t, uint32_t> cb;
-    // uint32_t max_minimizer_occs = 0;
+    uint32_t max_minimizer_occs = 0;
 
     uint64_t n = 0;
     uint64_t kmers = 0;
@@ -79,22 +73,23 @@ int UnitigsDictionary::build(const std::vector<std::vector<seqan3::dna4>> &input
             int w = o/k + 1;
             if(count[i] == m_thres) {
                 cb[i] += w;
-                // max_minimizer_occs = std::max(cb[i], max_minimizer_occs);
+                max_minimizer_occs = std::max(cb[i], max_minimizer_occs);
             }
             else if(count[i] + w >= m_thres) {
                 cb[i] = w - (m_thres - count[i]);
                 count[i] = m_thres;
-                // max_minimizer_occs = std::max(cb[i], max_minimizer_occs);
+                max_minimizer_occs = std::max(cb[i], max_minimizer_occs);
             }
             else {
                 count[i] += w;
+                // max_minimizer_occs = std::max(count[i], max_minimizer_occs);
             }
             n += w;
             kmers += o;
         }
     }
 
-    // std::cout << "max minimizer occurences: " << max_minimizer_occs << "\n";
+    std::cout << "max minimizer occurences: " << max_minimizer_occs << "\n";
 
     uint64_t freq_kmers = 0;
     for(auto & sequence : input) {
@@ -173,13 +168,15 @@ int UnitigsDictionary::build(const std::vector<std::vector<seqan3::dna4>> &input
     std::cout << "====== report ======\n";
     std::cout << "text length: " << N << "\n";
     std::cout << "no kmers: " << kmers <<  '\n';
+    std::cout << "no distinct kmers: " << c << '\n';
     std::cout << "no minimiser: " << n <<  '\n';
-    std::cout << "no distinct minimiser: " << c <<  '\n';
     std::cout << "freq minimiser: " << cb.size() << ", " << (float) cb.size()/n*100 << "%\n";
     std::cout << "density r: " << (double) c/M*100 << "%\n";
     std::cout << "density s: " << (double) s_select.bitCount()/(n+1)*100 <<  "%\n";
     std::cout << "\nspace per kmer in bit:\n";
     std::cout << "text: " << (double) 2*N/kmers << "\n";
+    // std::cout << "endpoints: " << (double) std::bit_width(max_seq_length)*no_sequences/(8*kmers) << "\n";
+    // std::cout << "endpoints: " << (double) endpoints.size()/(8*kmers) << "\n";
     std::cout << "endpoints: " << (double) size_in_bytes(endpoints)/(8*kmers) << "\n";
     std::cout << "offsets: " << (double) n*offset_width/kmers << "\n";
     std::cout << "R: " << (double) M/kmers << "\n";
@@ -205,27 +202,24 @@ static inline constexpr uint64_t compute_mask(uint64_t const kmer_size)
 
 
 inline void UnitigsDictionary::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q) {
-    const uint64_t seed = 0x8F'3F'73'B5'CF'1C'9A'DE;
     for(uint64_t i = 0; i < q-p; i++) {
         uint64_t hash = 0;
         size_t o = offsets[p+i];
-        size_t next_endpoint = endpoints_select(endpoints_rank(o+1)+1);
-        size_t e = o+k+k;
-        if(e > next_endpoint)
-            e = next_endpoint;
         for (uint64_t j=o; j < o+k; j++) {
             uint64_t const new_rank = seqan3::to_rank(text[j]);
             hash <<= 2;
             hash |= new_rank;
-            hash ^= seed; // random
             hash &= mask;
         }
         buffer.push_back(hash);
+        size_t next_endpoint = endpoints_select(endpoints_rank(o+1)+1);
+        size_t e = o+k+k;
+        if(e > next_endpoint)
+            e = next_endpoint;
         for(size_t j=o+k; j < e; j++) {
             uint64_t const new_rank = seqan3::to_rank(text[j]);
             hash <<= 2;
             hash |= new_rank;
-            hash ^= seed; // random
             hash &= mask;
             buffer.push_back(hash);
         }
@@ -241,23 +235,23 @@ inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query) {
     return false;
 }
 
-// inline bool contains_uint64_avx512(const std::vector<uint64_t>& arr, uint64_t value) {
-//     const uint64_t* data = arr.data();
-//     size_t len = arr.size();
-//     __m512i target = _mm512_set1_epi64(value);
-//     size_t i = 0;
-//     for (; i + 8 <= len; i += 8) {
-//         __m512i chunk = _mm512_loadu_si512((__m512i const*)(data + i));
-//         __mmask8 mask = _mm512_cmpeq_epi64_mask(chunk, target);
-//         if (mask != 0)
-//             return true;
-//     }
-//     for (; i < len; ++i) {
-//         if (data[i] == value)
-//             return true;
-//     }
-//     return false;
-// }
+inline bool contains_uint64_avx512(const std::vector<uint64_t>& arr, uint64_t value) {
+    const uint64_t* data = arr.data();
+    size_t len = arr.size();
+    __m512i target = _mm512_set1_epi64(value);
+    size_t i = 0;
+    for (; i + 8 <= len; i += 8) {
+        __m512i chunk = _mm512_loadu_si512((__m512i const*)(data + i));
+        __mmask8 mask = _mm512_cmpeq_epi64_mask(chunk, target);
+        if (mask != 0)
+            return true;
+    }
+    for (; i < len; ++i) {
+        if (data[i] == value)
+            return true;
+    }
+    return false;
+}
 
 
 uint64_t UnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &query)
@@ -272,7 +266,7 @@ uint64_t UnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &que
     for(auto && minimiser : query | query_view)
     {
         if(minimiser.minimiser_value == current_minimiser) {
-            occurences += lookup_serial(buffer, minimiser.window_value);
+            occurences += contains_uint64_avx512(buffer, minimiser.window_value);
         }
         else {
             if(r[minimiser.minimiser_value]) {
@@ -282,7 +276,7 @@ uint64_t UnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &que
 
                 buffer.clear();
                 fill_buffer(buffer, mask, p, q);
-                occurences += lookup_serial(buffer, minimiser.window_value);
+                occurences += contains_uint64_avx512(buffer, minimiser.window_value);
                 current_minimiser = minimiser.minimiser_value;
             }
             // else {
@@ -300,7 +294,6 @@ uint64_t UnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &que
 inline void UnitigsDictionary::fill_buffer(std::vector<uint64_t> &buffer, std::vector<uint64_t> &positions,
                                            std::vector<uint64_t> &sequences, const uint64_t mask, size_t p, size_t q)
 {
-    const uint64_t seed = 0x8F'3F'73'B5'CF'1C'9A'DE;
     for(uint64_t i = 0; i < q-p; i++)
     {
         uint64_t hash = 0;
@@ -313,12 +306,10 @@ inline void UnitigsDictionary::fill_buffer(std::vector<uint64_t> &buffer, std::v
         if(e > next_endpoint)
             e = next_endpoint;
 
-        // todo: simd?!
         for (uint64_t j=o; j < o+k; j++) {
-            uint64_t const new_rank = seqan3::to_rank(text[j]); // todo: to_rank vectorizable?
+            uint64_t const new_rank = seqan3::to_rank(text[j]);
             hash <<= 2;
             hash |= new_rank;
-            hash ^= seed; // random
             hash &= mask;
         }
         buffer.push_back(hash);
@@ -328,7 +319,6 @@ inline void UnitigsDictionary::fill_buffer(std::vector<uint64_t> &buffer, std::v
             uint64_t const new_rank = seqan3::to_rank(text[j]);
             hash <<= 2;
             hash |= new_rank;
-            hash ^= seed; // random
             hash &= mask;
             buffer.push_back(hash);
             positions.push_back(j-k+1-endpoint);
@@ -342,8 +332,8 @@ inline void locate_serial(std::vector<uint64_t> &buffer, std::vector<uint64_t> &
                           std::vector<uint64_t> &sequences, const uint64_t query, const uint64_t kmer,
                           std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &result) {
     for(uint64_t i=0; i < buffer.size(); i++) {
-            if(buffer[i] == query)
-                result.push_back({kmer, sequences[i], positions[i]});
+        if(buffer[i] == query)
+            result.push_back({kmer, sequences[i], positions[i]});
     }
 }
 

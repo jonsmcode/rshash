@@ -4,7 +4,7 @@
 #include <seqan3/search/views/kmer_hash.hpp>
 #include <seqan3/search/views/minimiser_hash.hpp>
 
-#include "dict.h"
+#include "dict.hpp"
 #include "kmer_minimiser_hash.hpp"
 
 

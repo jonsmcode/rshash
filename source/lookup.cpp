@@ -2,7 +2,7 @@
 #include <seqan3/argument_parser/all.hpp>
 #include <seqan3/io/sequence_file/all.hpp>
 
-#include "dict.h"
+#include "dict.hpp"
 
 
 struct cmd_arguments {

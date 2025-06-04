@@ -107,6 +107,7 @@ private:
 
     uint64_t kmer_mask{std::numeric_limits<uint64_t>::max()};
     uint64_t window_mask{std::numeric_limits<uint64_t>::max()};
+    uint64_t seed{0x8F'3F'73'B5'CF'1C'9A'DE};
 
     uint64_t kmer_value{};
     size_t minimiser_position{};
@@ -208,10 +209,12 @@ private:
 
         kmer_value <<= 2;
         kmer_value |= new_rank;
+        kmer_value ^= seed;
         kmer_value &= kmer_mask;
 
         current.window_value <<= 2;
         current.window_value |= new_rank;
+        current.window_value ^= seed;
         current.window_value &= window_mask;
     }
 
@@ -421,6 +424,7 @@ private:
 
     uint64_t kmer_mask{std::numeric_limits<uint64_t>::max()};
     uint64_t kmer_value{};
+    uint64_t seed{0x8F'3F'73'B5'CF'1C'9A'DE};
 
     size_t range_size{};
     size_t range_position{};
@@ -521,6 +525,7 @@ private:
 
         kmer_value <<= 2;
         kmer_value |= new_rank;
+        kmer_value ^= seed;
         kmer_value &= kmer_mask;
     }
 
@@ -758,6 +763,7 @@ private:
     range_iterator_t range_it{};
 
     uint64_t window_mask{std::numeric_limits<uint64_t>::max()};
+    uint64_t seed{0x8F'3F'73'B5'CF'1C'9A'DE};
 
     size_t range_size{};
     size_t range_position{};
@@ -849,6 +855,7 @@ private:
 
         current.window_value <<= 2;
         current.window_value |= new_rank;
+        current.window_value ^= seed;
         current.window_value &= window_mask;
     }
 
