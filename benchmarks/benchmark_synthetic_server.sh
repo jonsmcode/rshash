@@ -10,6 +10,7 @@ LOG="log.txt"
 
 # CSV="comp_lookup-results-server-synthetic-$today.csv"
 CSV="lookup-results-server-synthetic-$today.csv"
+compression=9
 
 run()
 {
@@ -18,7 +19,7 @@ run()
   for f in $FILES
   do
     BASENAME=$(basename "$f" .fasta)
-    k=$(echo "${BASENAME##*k}" | grep -o '[0-9]*')
+    # k=$(echo "${BASENAME##*k}" | grep -o '[0-9]*')
     length=$(awk -F'_n|_o' '{print $2}' <<< "$BASENAME")
 
     ms=()
@@ -32,6 +33,9 @@ run()
       echo $BASENAME
       echo $m
       echo $f >> $LOG
+
+      k=$((2 * compression + m - 2))
+      k=$(( k > 31 ? 31 : k ))
 
       /usr/bin/time -v -o time.txt $PROGRAM build -i $f -d "${DIR}/${BASENAME}.dict" -k $k -m $m > prog_out.txt 2>&1
 
@@ -70,7 +74,7 @@ run()
       k_mers=$(grep "num_kmers" prog_out.txt | sed -E 's/.*num_kmers = ([0-9]+).*/\1/')
       found=$(grep "num_positive_kmers" prog_out.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
       
-      echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$spaceoffsets,$spacer,$spaces,$spacetotal,$density_r,$density_s,$querytime,$querymem,$k_mers",$found" >> "$CSV"
+      echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$spaceoffsets,$spacer,$spaces,$spacetotal,$density_r,$density_s,$no_minimiser,$querytime,$querymem,$k_mers",$found" >> "$CSV"
     done
 
   done
@@ -79,6 +83,6 @@ run()
 
 for data in $(find $DIR -mindepth 0 -maxdepth 0 -type d); do
   FILENAME=$(basename $data)
-  echo "textfile,queryfile,k,m,buildtime [s],buildmem [B],indexsize [B],spaceoffsets [bits/kmer],spaceR [bits/kmer],spaceS [bits/kmer],spacetotal [bits/kmer],density_r [%],density_s [%],querytime [s],querymem [B],kmers,found" > "$CSV"
+  echo "textfile,queryfile,k,m,buildtime [s],buildmem [B],indexsize [B],spaceoffsets [bits/kmer],spaceR [bits/kmer],spaceS [bits/kmer],spacetotal [bits/kmer],density_r [%],density_s [%], no minimizer, querytime [s],querymem [B],kmers,found" > "$CSV"
   run $data/
 done

@@ -4,9 +4,11 @@ PROGRAM="../../sshash/build/sshash"
 
 today=$(date +%Y-%m-%d-%H-%M-%S)
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../../../datasets/synthetic" >/dev/null 2>&1 && pwd )"
+# DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../../../datasets/synthetic" >/dev/null 2>&1 && pwd )"
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../test/datasets/synthetic" >/dev/null 2>&1 && pwd )"
 LOG="log.txt"
 CSV="sshash-results-synthetic$today.csv"
+compression=9
 
 
 run()
@@ -16,11 +18,11 @@ run()
   for f in $FILES
   do
     BASENAME=$(basename "$f" .fasta)
-    k=$(echo "${BASENAME##*k}" | grep -o '[0-9]*')
+    # k=$(echo "${BASENAME##*k}" | grep -o '[0-9]*')
     length=$(awk -F'_n|_o' '{print $2}' <<< "$BASENAME")
 
     ms=()
-    for i in {1..2}; do
+    for ((i=-2; i<=2; i++)); do
         m=$(echo "l($length)/l(4)+$i" | bc -l)
         m=$(printf "%.0f" "$m")
         ms+=("$m")
@@ -30,6 +32,9 @@ run()
       echo $m
       echo $f >> $LOG
 
+      k=$((2 * compression + m - 2))
+      k=$(( k > 31 ? 31 : k ))
+
       # /usr/bin/time -l -o time.txt $PROGRAM build -i "$f" -o "${DIR}/${BASENAME}.index" -k $k -m $m > prog_out.txt 2>&1
       /usr/bin/time -l -o time.txt $PROGRAM build -i $f -o "${DIR}/${BASENAME}.index" -k $k -m $m > prog_out.txt 2>&1
 
@@ -38,7 +43,11 @@ run()
       file_size=$(stat -f%z "${DIR}/${BASENAME}.index")
       buildtime=$(cat time.txt | grep "real" | awk '{print $1}')
       buildmem=$(cat time.txt  | grep "maximum resident set size" | awk '{print $1}')
+      num_super_kmers=$(grep "^num_super_kmers" prog_out.txt | awk '{print $2}')
       space=$(grep "total:" prog_out.txt | sed -E 's/^ *total: *([0-9.eE+-]+).*/\1/')
+      space_o=$(grep "offsets:" prog_out.txt | sed -E 's/^ *offsets: *([0-9.eE+-]+).*/\1/')
+      space_m=$(grep "minimizers:" prog_out.txt | sed -E 's/^ *minimizers: *([0-9.eE+-]+).*/\1/')
+      bits_key=$(awk '/minimizers:/ {for(i=1;i<=NF;i++) if($i ~ /\[bits\/key\]/) print $(i-1)}' prog_out.txt | tr -d '(')
 
       parent_dir=$(dirname "$f")
       file_name=$(basename "$f")
@@ -60,7 +69,7 @@ run()
       k_mers=$(grep "num_kmers" prog_out.txt | sed -E 's/.*num_kmers = ([0-9]+).*/\1/')
       found=$(grep "num_positive_kmers" prog_out.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
       
-      echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$space,$querytime,$querymem,$k_mers",$found" >> "$CSV"
+      echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$space,$space_o,$space_m,$bits_key,$num_super_kmers,$querytime,$querymem,$k_mers",$found" >> "$CSV"
     done
 
   done
@@ -69,6 +78,6 @@ run()
 
 for data in $(find $DIR -mindepth 0 -maxdepth 0 -type d); do
   FILENAME=$(basename $data)
-  echo "textfile,queryfile,k,m,buildtime [s],buildmem [MB],indexsize [MB], space [bits\kmer],querytime [s],querymem [MB],kmers,found" > "$CSV"
+  echo "textfile,queryfile,k,m,buildtime[s],buildmem[B],indexsize[B], space[bits/kmer], space offsets[bits/kmer], space minimizers[bits/kmer], bits/key, no super kmers, querytime[s],querymem[B],kmers,found" > "$CSV"
   run $data/
 done

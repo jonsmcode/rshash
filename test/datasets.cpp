@@ -180,53 +180,44 @@ void save_dataset(const std::string file, const std::vector<seqan3::dna4> &text,
 }
 
 
-void build_dataset(const std::string path, const uint8_t k, const uint64_t textlength,
-                   const int querylength, const double hitrate)
+void build_dataset(const uint64_t textlength, const uint64_t querylength, const uint64_t no_queries, const uint8_t k,
+                   const double hitrate, const std::string path)
 {
     std::vector<seqan3::dna4> text;
     std::vector<std::vector<seqan3::dna4>> queries;
 
     random_dna(text, textlength);
 
-    const uint64_t hits = hitrate/100*(textlength-k+1);
-    const uint64_t dist = 100/hitrate;
+    // sample snippets of length sample_size from text that are sample_dist apart
+    const uint64_t sample_size = 500;
+    const uint64_t sample_dist = textlength/5000;
 
-    std::cout << "hits: " << hits << " dist: " << dist << "\n";
-
-    std::vector<uint64_t> textpositions;
-    for(uint64_t i = 0; i < hits; i++) {
-        textpositions.push_back(i*dist);
+    std::vector<std::vector<seqan3::dna4>> samples;
+    for(uint64_t i = 0; i < textlength-sample_size; i += sample_dist+sample_size) {
+        samples.push_back(sample_dna(text, i, sample_size));
     }
+
+    // insert text samples into queries with query_dist characters apart
+    const uint64_t query_dist = (sample_size-k+1)/hitrate - sample_size-k+1;
+
+    uint64_t occs = 0;
+    for(uint64_t q = 0; q < no_queries; q++) {
+        std::vector<seqan3::dna4> query;
+        random_dna(query, querylength);
+
+        uint64_t j = 0;
+        for(uint64_t i = 0; j < querylength-sample_size; i++) {
+            std::vector<seqan3::dna4> sample = samples[i%samples.size()];
+            insert_kmer(query, sample, j);
+            j += query_dist;
+            occs += sample_size-k+1;
+        }
+        queries.push_back(query);
+    }
+
     std::vector<std::tuple<uint64_t, uint64_t, uint64_t, uint64_t>> positions;
 
-    for(uint64_t i = k/dist+1; i < hits-k/dist; i++)
-    {
-        std::vector<seqan3::dna4> query;
-        std::vector<seqan3::dna4> textkmer;
-        std::vector<seqan3::dna4> querykmer;
-        std::vector<seqan3::dna4> kmer;
-
-        random_dna(query, querylength);
-        uint64_t s = textpositions[i]-k;
-        uint64_t l = 3*k;
-        if(s < 0) {
-            l += s;
-            s = 0;
-        }
-        if(s + 3*k >= textlength) {
-            l -= textlength - s + 3*k;
-        }
-        textkmer = sample_dna(text, s, l);
-        different_dna(textkmer, querykmer);
-        kmer = sample_dna(textkmer, k, k);
-        insert_kmer(querykmer, kmer, k);
-        insert_kmer(query, querykmer, (querylength-k)/2);
-
-        queries.push_back(query);
-        positions.push_back({i, (querylength-k)/2, 0, textpositions[i]});
-    }
-
-    std::string dataset = "random_n" + std::to_string(textlength) + "_o" + std::to_string(hits) + "_k" + std::to_string(k);
+    std::string dataset = "random_n" + std::to_string(textlength) + "_o" + std::to_string(occs);
     std::string file = path + dataset;
 
     save_dataset(file, text, queries, positions);
@@ -237,15 +228,15 @@ void build_dataset(const std::string path, const uint8_t k, const uint64_t textl
 int main(int argc, char** argv)
 {
     const uint64_t textlengths[] = {10000000, 100000000, 1000000000};
-    // const uint64_t textlengths[] = {10000000, 100000000};
     const uint8_t k = 31;
-    const double hitrates[] = {0.1, 1, 10}; // percent
+    const double hitrates[] = {0.001, 0.01, 0.1};
 
     for(const uint64_t textlength : textlengths) {
         for(const double hitrate : hitrates) {
             std::cout << "building random dataset with text length " << textlength << " with hitrate " << hitrate << "\n";
-            const int querylength = 3*k+100;
-            build_dataset("../test/datasets/synthetic/", k, textlength, querylength, hitrate);
+            const uint64_t numberqueries = 100;
+            const uint64_t querylength = textlength/numberqueries;
+            build_dataset(textlength, querylength, numberqueries, k, hitrate, "../test/datasets/synthetic/");
         }
     }
 
