@@ -52,7 +52,7 @@ run()
       basename2=$(echo "$f" | sed 's/\_text.fasta$//')
       query=(${basename2}_query.fasta)
 
-      echo $f >> $LOG
+      echo $f >> $LOG 
       echo $query >> $LOG
       echo $query
 
@@ -64,9 +64,9 @@ run()
       found=$(grep "num_positive_kmers" prog_out.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
       querytime=$(grep "User time" time.txt | awk -F': ' '{print $2}')
       querymem=$(grep "Maximum resident set size" time.txt | awk -F': ' '{print $2}')
-      querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
+      # querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
       
-      echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$space,$space_o,$space_m,$bits_key,$num_super_kmers,$querytimekmer,$querymem,$k_mers",$found" >> "$CSV"
+      echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$space,$space_o,$space_m,$bits_key,$num_super_kmers,$querytime,$querymem,$k_mers",$found" >> "$CSV"
     done
 
   done
