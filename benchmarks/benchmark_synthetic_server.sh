@@ -79,8 +79,14 @@ run()
       # echo "$k_mers"
       # echo "scale=10; $querytime / $k_mers * 1e9"
       # echo "$querytimekmer"
+      if [[ -n "$querytime" && -n "$k_mers" ]]; then
+        querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1e9" | bc)
+        echo "$querytimekmer"
+      else
+        echo "Error: querytime or k_mers is empty or invalid"
+      fi
       
-      echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$spaceoffsets,$spacer,$spaces,$spacetotal,$density_r,$density_s,$no_minimiser,$querytimekmer,$querymem,$k_mers",$found" >> "$CSV"
+      echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$spaceoffsets,$spacer,$spaces,$spacetotal,$density_r,$density_s,$no_minimiser,$querytime,$querymem,$k_mers",$found" >> "$CSV"
     done
 
   done
