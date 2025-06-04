@@ -83,7 +83,7 @@ run()
       k_mers=$(echo "$k_mers" | tr ',' '.' | tr -d ' ')
       if [[ -n "$querytime" && -n "$k_mers" ]]; then
         echo "scale=10; $querytime / $k_mers * 1e9"
-        querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1e9" | bc)
+        querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
         echo "$querytimekmer"
       else
         echo "Error: querytime or k_mers is empty or invalid"
