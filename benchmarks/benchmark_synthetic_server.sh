@@ -30,12 +30,13 @@ run()
     done
 
     for m in "${ms[@]}"; do
-      echo $BASENAME
-      echo $m
-      echo $f >> $LOG
-
       k=$((2 * compression + m - 2))
       k=$(( k > 31 ? 31 : k ))
+
+      echo $BASENAME
+      echo $k
+      echo $m
+      echo $f >> $LOG
 
       /usr/bin/time -v -o time.txt $PROGRAM build -i $f -d "${DIR}/${BASENAME}.dict" -k $k -m $m > prog_out.txt 2>&1
 
