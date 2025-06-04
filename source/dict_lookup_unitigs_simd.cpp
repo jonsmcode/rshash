@@ -89,7 +89,7 @@ int UnitigsDictionarySIMD::build(const std::vector<std::vector<seqan3::dna4>> &i
         }
     }
 
-    std::cout << "max minimizer occurences: " << max_minimizer_occs << "\n";
+    // std::cout << "max minimizer occurences: " << max_minimizer_occs << "\n";
 
     uint64_t freq_kmers = 0;
     for(auto & sequence : input) {
