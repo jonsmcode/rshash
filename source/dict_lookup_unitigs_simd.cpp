@@ -17,15 +17,15 @@ const uint8_t m_thres = 5;
 
 
 
-UnitigsDictionary::UnitigsDictionary() {}
+UnitigsDictionarySIMD::UnitigsDictionarySIMD() {}
 
-UnitigsDictionary::UnitigsDictionary(uint8_t const k, uint8_t const m) {
+UnitigsDictionarySIMD::UnitigsDictionarySIMD(uint8_t const k, uint8_t const m) {
     this->k = k;
     this->m = m;
 }
 
 
-int UnitigsDictionary::build(const std::vector<std::vector<seqan3::dna4>> &input)
+int UnitigsDictionarySIMD::build(const std::vector<std::vector<seqan3::dna4>> &input)
 {
     auto view = bsc::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k});
 
@@ -61,7 +61,7 @@ int UnitigsDictionary::build(const std::vector<std::vector<seqan3::dna4>> &input
     uint8_t* count = new uint8_t[c];
     std::memset(count, 0, c*sizeof(uint8_t));
     std::unordered_map<uint64_t, uint32_t> cb;
-    uint32_t max_minimizer_occs = 0;
+    // uint32_t max_minimizer_occs = 0;
 
     uint64_t n = 0;
     uint64_t kmers = 0;
@@ -73,12 +73,12 @@ int UnitigsDictionary::build(const std::vector<std::vector<seqan3::dna4>> &input
             int w = o/k + 1;
             if(count[i] == m_thres) {
                 cb[i] += w;
-                max_minimizer_occs = std::max(cb[i], max_minimizer_occs);
+                // max_minimizer_occs = std::max(cb[i], max_minimizer_occs);
             }
             else if(count[i] + w >= m_thres) {
                 cb[i] = w - (m_thres - count[i]);
                 count[i] = m_thres;
-                max_minimizer_occs = std::max(cb[i], max_minimizer_occs);
+                // max_minimizer_occs = std::max(cb[i], max_minimizer_occs);
             }
             else {
                 count[i] += w;
@@ -201,7 +201,7 @@ static inline constexpr uint64_t compute_mask(uint64_t const kmer_size)
 }
 
 
-inline void UnitigsDictionary::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q) {
+inline void UnitigsDictionarySIMD::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q) {
     for(uint64_t i = 0; i < q-p; i++) {
         uint64_t hash = 0;
         size_t o = offsets[p+i];
@@ -254,7 +254,7 @@ inline bool contains_uint64_avx512(const std::vector<uint64_t>& arr, uint64_t va
 }
 
 
-uint64_t UnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &query)
+uint64_t UnitigsDictionarySIMD::streaming_query(const std::vector<seqan3::dna4> &query)
 {
     auto query_view = bsc::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
 
@@ -291,7 +291,7 @@ uint64_t UnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &que
 
 
 
-inline void UnitigsDictionary::fill_buffer(std::vector<uint64_t> &buffer, std::vector<uint64_t> &positions,
+inline void UnitigsDictionarySIMD::fill_buffer(std::vector<uint64_t> &buffer, std::vector<uint64_t> &positions,
                                            std::vector<uint64_t> &sequences, const uint64_t mask, size_t p, size_t q)
 {
     for(uint64_t i = 0; i < q-p; i++)
@@ -338,7 +338,7 @@ inline void locate_serial(std::vector<uint64_t> &buffer, std::vector<uint64_t> &
 }
 
 
-uint64_t UnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &query,
+uint64_t UnitigsDictionarySIMD::streaming_query(const std::vector<seqan3::dna4> &query,
                                             std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &result)
 {
     auto view = bsc::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
@@ -377,7 +377,7 @@ uint64_t UnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &que
 }
 
 
-int UnitigsDictionary::save(const std::filesystem::path &filepath) {
+int UnitigsDictionarySIMD::save(const std::filesystem::path &filepath) {
     std::ofstream out(filepath, std::ios::binary);
     seqan3::contrib::sdsl::serialize(this->k, out);
     seqan3::contrib::sdsl::serialize(this->m, out);
@@ -395,7 +395,7 @@ int UnitigsDictionary::save(const std::filesystem::path &filepath) {
     return 0;
 }
 
-int UnitigsDictionary::load(const std::filesystem::path &filepath) {
+int UnitigsDictionarySIMD::load(const std::filesystem::path &filepath) {
     std::ifstream in(filepath, std::ios::binary);
     seqan3::contrib::sdsl::load(this->k, in);
     seqan3::contrib::sdsl::load(this->m, in);
