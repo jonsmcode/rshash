@@ -69,12 +69,13 @@ run()
 
       cat prog_out.txt >> $LOG
       
-      querytime=$(grep "User time" time.txt | awk -F': ' '{print $2}')
-      querymem=$(grep "Maximum resident set size" time.txt | awk -F': ' '{print $2}')
       k_mers=$(grep "num_kmers" prog_out.txt | sed -E 's/.*num_kmers = ([0-9]+).*/\1/')
       found=$(grep "num_positive_kmers" prog_out.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
+      querymem=$(grep "Maximum resident set size" time.txt | awk -F': ' '{print $2}')
+      querytime=$(grep "User time" time.txt | awk -F': ' '{print $2}')
+      querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1e9" | bc)
       
-      echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$spaceoffsets,$spacer,$spaces,$spacetotal,$density_r,$density_s,$no_minimiser,$querytime,$querymem,$k_mers",$found" >> "$CSV"
+      echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$spaceoffsets,$spacer,$spaces,$spacetotal,$density_r,$density_s,$no_minimiser,$querytimekmer,$querymem,$k_mers",$found" >> "$CSV"
     done
 
   done
@@ -83,6 +84,6 @@ run()
 
 for data in $(find $DIR -mindepth 0 -maxdepth 0 -type d); do
   FILENAME=$(basename $data)
-  echo "textfile,queryfile,k,m,buildtime [s],buildmem [B],indexsize [B],spaceoffsets [bits/kmer],spaceR [bits/kmer],spaceS [bits/kmer],spacetotal [bits/kmer],density_r [%],density_s [%], no minimizer, querytime [s],querymem [B],kmers,found" > "$CSV"
+  echo "textfile,queryfile,k,m,buildtime [s],buildmem [B],indexsize [B],spaceoffsets [bits/kmer],spaceR [bits/kmer],spaceS [bits/kmer],spacetotal [bits/kmer],density_r [%],density_s [%], no minimizer, querytime [ns/kmer],querymem [B],kmers,found" > "$CSV"
   run $data/
 done
