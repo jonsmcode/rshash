@@ -33,7 +33,7 @@ run()
       k=$((2 * compression + m - 2))
       k=$(( k > 31 ? 31 : k ))
 
-      /usr/bin/time -v -o time.txt $PROGRAM build -i $f -o "${DIR}/${BASENAME}.index" -k $k -m $m > prog_out.txt 2>&1
+      /usr/bin/time -v -o time.txt $PROGRAM build -i $f -o "${DIR}/${BASENAME}.index" -k $k -m $m -d tmp_dir > prog_out.txt 2>&1
 
       cat prog_out.txt >> $LOG
 
