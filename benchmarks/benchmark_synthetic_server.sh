@@ -77,6 +77,8 @@ run()
       querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
       
       echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$spaceoffsets,$spacer,$spaces,$spacetotal,$density_r,$density_s,$no_minimiser,$querytimekmer,$querymem,$k_mers",$found" >> "$CSV"
+
+      rm "${DIR}/${BASENAME}.dict"
     done
 
   done

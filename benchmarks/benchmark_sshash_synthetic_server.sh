@@ -67,6 +67,8 @@ run()
       querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
       
       echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$space,$space_o,$space_m,$bits_key,$num_super_kmers,$querytimekmer,$querymem,$k_mers",$found" >> "$CSV"
+
+      rm "${DIR}/${BASENAME}.index"
     done
 
   done
