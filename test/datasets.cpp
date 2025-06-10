@@ -198,7 +198,9 @@ void build_dataset(const uint64_t textlength, const uint64_t querylength, const 
     }
 
     // insert text samples into queries with query_dist characters apart
-    const uint64_t query_dist = (sample_size-k+1)/hitrate - sample_size-k+1;
+    uint64_t query_dist = (sample_size-k+1)/hitrate;
+    if(query_dist == 0)
+        query_dist = 1;
 
     uint64_t occs = 0;
     for(uint64_t q = 0; q < no_queries; q++) {
@@ -227,13 +229,14 @@ void build_dataset(const uint64_t textlength, const uint64_t querylength, const 
 
 int main(int argc, char** argv)
 {
-    const uint64_t textlengths[] = {10000000, 100000000, 1000000000};
+    // const uint64_t textlengths[] = {10000000, 100000000, 1000000000};
+    const uint64_t textlengths[] = {10000000, 100000000};
     const uint8_t k = 31;
-    const double hitrates[] = {0.001, 0.01, 0.1};
+    const double hitrates[] = {0.001, 0.01, 0.1, 0.5, 0.9};
 
     for(const uint64_t textlength : textlengths) {
         for(const double hitrate : hitrates) {
-            std::cout << "building random dataset with text length " << textlength << " with hitrate " << hitrate << "\n";
+            std::cout << "building random dataset with text length " << textlength << " and hitrate " << hitrate << "\n";
             const uint64_t numberqueries = 100;
             const uint64_t querylength = textlength/numberqueries;
             build_dataset(textlength, querylength, numberqueries, k, hitrate, "../test/datasets/synthetic/");

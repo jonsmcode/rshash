@@ -25,7 +25,7 @@ CompUnitigsDictionary::CompUnitigsDictionary(uint8_t const k, uint8_t const m) {
 
 int CompUnitigsDictionary::build(const std::vector<std::vector<seqan3::dna4>> &input)
 {
-    auto view = bsc::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k});
+    auto view = srindex::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k});
 
     const uint64_t M = 1 << (m+m); // 4^m
 
@@ -255,7 +255,7 @@ inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query) {
 
 uint64_t CompUnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &query)
 {
-    auto query_view = bsc::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
+    auto query_view = srindex::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
 
     uint64_t occurences = 0;
     const uint64_t mask = compute_mask(k);
@@ -340,7 +340,7 @@ inline void locate_serial(std::vector<uint64_t> &buffer, std::vector<uint64_t> &
 uint64_t CompUnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &query,
                                             std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &result)
 {
-    auto view = bsc::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
+    auto view = srindex::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
 
     const uint64_t mask = compute_mask(k);
     uint64_t kmer = 0;

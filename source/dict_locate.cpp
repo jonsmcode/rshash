@@ -30,7 +30,7 @@ LocateDictionary::LocateDictionary(uint8_t const k, uint8_t const m) {
 
 int LocateDictionary::build(const std::vector<seqan3::dna4> &text)
 {
-    auto view = bsc::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k});
+    auto view = srindex::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k});
 
     const uint64_t M = 1 << (m+m); // 4^m
 
@@ -143,7 +143,7 @@ int LocateDictionary::streaming_query(const std::vector<seqan3::dna4> &text,
                                       const std::vector<seqan3::dna4> &query,
                                       std::vector<uint64_t> &positions)
 {
-    auto query_view = bsc::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
+    auto query_view = srindex::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
     auto kmer_view = seqan3::views::kmer_hash(seqan3::ungapped{k});
 
     // todo: test hashtable instead of vector
@@ -193,7 +193,7 @@ int LocateDictionary::streaming_query(const std::vector<seqan3::dna4> &text,
                                       const std::vector<seqan3::dna4> &query,
                                       std::vector<std::pair<uint64_t, uint64_t>> &positions)
 {
-    auto query_view = bsc::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
+    auto query_view = srindex::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
     auto kmer_view = seqan3::views::kmer_hash(seqan3::ungapped{k});
 
     // todo: test hashtable instead of vector

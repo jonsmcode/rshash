@@ -68,8 +68,9 @@ run()
       querymem=$(cat time.txt  | grep "maximum resident set size" | awk '{print $1}')
       k_mers=$(grep "num_kmers" prog_out.txt | sed -E 's/.*num_kmers = ([0-9]+).*/\1/')
       found=$(grep "num_positive_kmers" prog_out.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
+      querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
       
-      echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$space,$space_o,$space_m,$bits_key,$num_super_kmers,$querytime,$querymem,$k_mers",$found" >> "$CSV"
+      echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$space,$space_o,$space_m,$bits_key,$num_super_kmers,$querytimekmer,$querymem,$k_mers",$found" >> "$CSV"
     done
 
   done
@@ -78,6 +79,6 @@ run()
 
 for data in $(find $DIR -mindepth 0 -maxdepth 0 -type d); do
   FILENAME=$(basename $data)
-  echo "textfile,queryfile,k,m,buildtime[s],buildmem[B],indexsize[B], space[bits/kmer], space offsets[bits/kmer], space minimizers[bits/kmer], bits/key, no super kmers, querytime[s],querymem[B],kmers,found" > "$CSV"
+  echo "textfile,queryfile,k,m,buildtime[s],buildmem[B],indexsize[B], space[bits/kmer], space offsets[bits/kmer], space minimizers[bits/kmer], bits/key, no super kmers, querytime[ns/kmer],querymem[B],kmers,found" > "$CSV"
   run $data/
 done

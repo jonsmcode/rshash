@@ -11,8 +11,7 @@
 #include "kmer_minimiser_hash.hpp"
 
 
-const uint8_t m_thres = 5;
-
+const uint8_t m_thres = 255;
 
 
 UnitigsDictionary::UnitigsDictionary() {}
@@ -25,7 +24,7 @@ UnitigsDictionary::UnitigsDictionary(uint8_t const k, uint8_t const m) {
 
 int UnitigsDictionary::build(const std::vector<std::vector<seqan3::dna4>> &input)
 {
-    auto view = bsc::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k});
+    auto view = srindex::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k});
 
     const uint64_t M = 1ULL << (m+m); // 4^m
 
@@ -59,7 +58,7 @@ int UnitigsDictionary::build(const std::vector<std::vector<seqan3::dna4>> &input
     uint8_t* count = new uint8_t[c];
     std::memset(count, 0, c*sizeof(uint8_t));
     std::unordered_map<uint64_t, uint32_t> cb;
-    uint32_t max_minimizer_occs = 0;
+    // uint32_t max_minimizer_occs = 0;
 
     uint64_t n = 0;
     uint64_t kmers = 0;
@@ -71,12 +70,12 @@ int UnitigsDictionary::build(const std::vector<std::vector<seqan3::dna4>> &input
             int w = o/k + 1;
             if(count[i] == m_thres) {
                 cb[i] += w;
-                max_minimizer_occs = std::max(cb[i], max_minimizer_occs);
+                // max_minimizer_occs = std::max(cb[i], max_minimizer_occs);
             }
             else if(count[i] + w >= m_thres) {
                 cb[i] = w - (m_thres - count[i]);
                 count[i] = m_thres;
-                max_minimizer_occs = std::max(cb[i], max_minimizer_occs);
+                // max_minimizer_occs = std::max(cb[i], max_minimizer_occs);
             }
             else {
                 count[i] += w;
@@ -87,17 +86,17 @@ int UnitigsDictionary::build(const std::vector<std::vector<seqan3::dna4>> &input
         }
     }
 
-    std::cout << "max minimizer occurences: " << max_minimizer_occs << "\n";
+    // std::cout << "max minimizer occurences: " << max_minimizer_occs << "\n";
 
-    uint64_t freq_kmers = 0;
-    for(auto & sequence : input) {
-        for(auto && minimiser : sequence | view) {
-            size_t i = r_rank(minimiser.minimiser_value);
-            if(count[i] == m_thres)
-                freq_kmers++;
-        }
-    }
-    std::cout << "freq k-mers: " << freq_kmers << "\n";
+    // uint64_t freq_kmers = 0;
+    // for(auto & sequence : input) {
+    //     for(auto && minimiser : sequence | view) {
+    //         size_t i = r_rank(minimiser.minimiser_value);
+    //         if(count[i] == m_thres)
+    //             freq_kmers++;
+    //     }
+    // }
+    // std::cout << "freq k-mers: " << freq_kmers << "\n";
     
 
     // for (const auto& [m, occ] : cb) {
@@ -212,6 +211,7 @@ inline void UnitigsDictionary::fill_buffer(std::vector<uint64_t> &buffer, const 
         buffer.push_back(hash);
         size_t next_endpoint = endpoints_select(endpoints_rank(o+1)+1);
         size_t e = o+k+k;
+        // size_t e = o+k+k-m;
         if(e > next_endpoint)
             e = next_endpoint;
         for(size_t j=o+k; j < e; j++) {
@@ -254,7 +254,7 @@ inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query) {
 
 uint64_t UnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &query)
 {
-    auto query_view = bsc::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
+    auto query_view = srindex::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
 
     uint64_t occurences = 0;
     const uint64_t mask = compute_mask(k);
@@ -301,6 +301,7 @@ inline void UnitigsDictionary::fill_buffer(std::vector<uint64_t> &buffer, std::v
         size_t next_endpoint = endpoints_select(sequence_id+1);
 
         size_t e = o+k+k;
+        // size_t e = o+k+k-m;
         if(e > next_endpoint)
             e = next_endpoint;
 
@@ -339,7 +340,7 @@ inline void locate_serial(std::vector<uint64_t> &buffer, std::vector<uint64_t> &
 uint64_t UnitigsDictionary::streaming_query(const std::vector<seqan3::dna4> &query,
                                             std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &result)
 {
-    auto view = bsc::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
+    auto view = srindex::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
 
     const uint64_t mask = compute_mask(k);
     uint64_t kmer = 0;

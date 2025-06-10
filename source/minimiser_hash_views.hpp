@@ -14,6 +14,94 @@
 namespace srindex
 {
 
+/*
+    This code is an adaptation from
+    https://github.com/aappleby/smhasher/blob/master/src/MurmurHash2.cpp
+        by Austin Appleby
+*/
+static uint64_t MurmurHash2_64(void const* key, size_t len, uint64_t seed) {
+    const uint64_t m = 0xc6a4a7935bd1e995ULL;
+    const int r = 47;
+
+    uint64_t h = seed ^ (len * m);
+
+#if defined(__arm) || defined(__arm__)
+    const size_t ksize = sizeof(uint64_t);
+    const unsigned char* data = (const unsigned char*)key;
+    const unsigned char* end = data + (std::size_t)(len / 8) * ksize;
+#else
+    const uint64_t* data = (const uint64_t*)key;
+    const uint64_t* end = data + (len / 8);
+#endif
+
+    while (data != end) {
+#if defined(__arm) || defined(__arm__)
+        uint64_t k;
+        memcpy(&k, data, ksize);
+        data += ksize;
+#else
+        uint64_t k = *data++;
+#endif
+
+        k *= m;
+        k ^= k >> r;
+        k *= m;
+
+        h ^= k;
+        h *= m;
+    }
+
+    const unsigned char* data2 = (const unsigned char*)data;
+
+    switch (len & 7) {
+        // fall through
+        case 7:
+            h ^= uint64_t(data2[6]) << 48;
+        // fall through
+        case 6:
+            h ^= uint64_t(data2[5]) << 40;
+        // fall through
+        case 5:
+            h ^= uint64_t(data2[4]) << 32;
+        // fall through
+        case 4:
+            h ^= uint64_t(data2[3]) << 24;
+        // fall through
+        case 3:
+            h ^= uint64_t(data2[2]) << 16;
+        // fall through
+        case 2:
+            h ^= uint64_t(data2[1]) << 8;
+        // fall through
+        case 1:
+            h ^= uint64_t(data2[0]);
+            h *= m;
+    };
+
+    h ^= h >> r;
+    h *= m;
+    h ^= h >> r;
+
+    return h;
+}
+
+struct murmurhash2_64 {
+    // generic range of bytes
+    // static inline uint64_t hash(byte_range range, uint64_t seed) {
+    //     return MurmurHash2_64(range.begin, range.end - range.begin, seed);
+    // }
+
+    // specialization for std::string
+    static inline uint64_t hash(std::string const& val, uint64_t seed) {
+        return MurmurHash2_64(val.data(), val.size(), seed);
+    }
+
+    // specialization for uint64_t
+    static inline uint64_t hash(uint64_t val, uint64_t seed) {
+        return MurmurHash2_64(reinterpret_cast<char const*>(&val), sizeof(val), seed);
+    }
+};
+
 struct minimiser_and_window_hash_parameters
 {
     size_t minimiser_size{};
@@ -26,7 +114,7 @@ struct minimiser_and_window_hash_result
     uint64_t window_value;
 };
 
-} // namespace srindex
+}
 
 namespace srindex::detail
 {
@@ -107,6 +195,9 @@ private:
 
     uint64_t kmer_mask{std::numeric_limits<uint64_t>::max()};
     uint64_t window_mask{std::numeric_limits<uint64_t>::max()};
+    uint64_t seed{1};
+    // uint64_t seed{0x8F'3F'73'B5'CF'1C'9A'DE};
+    uint8_t minimisers_in_window{};
 
     uint64_t kmer_value{};
     size_t minimiser_position{};
@@ -226,7 +317,10 @@ private:
         if constexpr (pop == pop_first::yes)
             kmer_values_in_window.pop_front();
 
-        kmer_values_in_window.push_back(kmer_value);
+        const uint64_t kmerhash = murmurhash2_64::hash(kmer_value, seed) & kmer_mask;
+        // const uint64_t kmerhash = (kmer_value ^ seed) & kmer_mask;
+        kmer_values_in_window.push_back(kmerhash);
+        // kmer_values_in_window.push_back(kmer_value);
     }
 
     void find_minimiser_in_window()
@@ -239,12 +333,25 @@ private:
     void init(minimiser_and_window_hash_parameters const & params)
     {
         // range_it is already at the beginning of the range
-        rolling_hash();
-        kmer_values_in_window.push_back(kmer_value);
+        // rolling_hash();
+        // kmer_values_in_window.push_back(kmer_value);
 
-        // After this loop, `kmer_values_in_window` contains the first kmer value of the window.
+        // // After this loop, `kmer_values_in_window` contains the first kmer value of the window.
+        // for (size_t i = 1u; i < params.minimiser_size; ++i)
+        //     next_window<pop_first::yes>();
+        minimisers_in_window = params.window_size - params.minimiser_size;
+
+        rolling_hash();
         for (size_t i = 1u; i < params.minimiser_size; ++i)
-            next_window<pop_first::yes>();
+        {
+            ++range_position;
+            ++range_it;
+            rolling_hash();
+        }
+        const uint64_t kmerhash = murmurhash2_64::hash(kmer_value, seed) & kmer_mask;
+        // const uint64_t kmerhash = (kmer_value ^ seed) & kmer_mask;
+        kmer_values_in_window.push_back(kmerhash);
+        // kmer_values_in_window.push_back(kmer_value);
 
         // After this loop, `kmer_values_in_window` contains all kmer values of the window.
         for (size_t i = params.minimiser_size; i < params.window_size; ++i)
@@ -272,7 +379,8 @@ private:
         if (uint64_t new_kmer_value = kmer_values_in_window.back(); new_kmer_value < current.minimiser_value)
         {
             current.minimiser_value = new_kmer_value;
-            minimiser_position = kmer_values_in_window.size() - 1u;
+            // minimiser_position = kmer_values_in_window.size() - 1u;
+            minimiser_position = minimisers_in_window;
             return true;
         }
 
@@ -313,7 +421,7 @@ struct minimiser_and_window_hash_fn
     }
 };
 
-} // namespace srindex::detail
+}
 
 namespace srindex::views
 {
@@ -340,7 +448,7 @@ struct minimiser_hash_and_positions_result
     size_t occurrences;
 };
 
-} // namespace srindex
+}
 
 namespace srindex::detail
 {
@@ -421,6 +529,8 @@ private:
 
     uint64_t kmer_mask{std::numeric_limits<uint64_t>::max()};
     uint64_t kmer_value{};
+    uint64_t seed{1};
+    // uint64_t seed{0x8F'3F'73'B5'CF'1C'9A'DE};
 
     size_t range_size{};
     size_t range_position{};
@@ -535,7 +645,10 @@ private:
         if constexpr (pop == pop_first::yes)
             kmer_values_in_window.pop_front();
 
-        kmer_values_in_window.push_back(kmer_value);
+        const uint64_t kmerhash = murmurhash2_64::hash(kmer_value, seed) & kmer_mask;
+        // const uint64_t kmerhash = (kmer_value ^ seed) & kmer_mask;
+        kmer_values_in_window.push_back(kmerhash);
+        // kmer_values_in_window.push_back(kmer_value);
     }
 
     void find_minimiser_in_window()
@@ -548,12 +661,24 @@ private:
     void init()
     {
         // range_it is already at the beginning of the range
-        rolling_hash();
-        kmer_values_in_window.push_back(kmer_value);
+        // rolling_hash();
+        // kmer_values_in_window.push_back(kmer_value);
 
         // After this loop, `kmer_values_in_window` contains the first kmer value of the window.
+        // for (size_t i = 1u; i < params.minimiser_size; ++i)
+        //     next_window<pop_first::yes>();
+        rolling_hash();
+
         for (size_t i = 1u; i < params.minimiser_size; ++i)
-            next_window<pop_first::yes>();
+        {
+            ++range_position;
+            ++range_it;
+            rolling_hash();
+        }
+        const uint64_t kmerhash = murmurhash2_64::hash(kmer_value, seed) & kmer_mask;
+        // const uint64_t kmerhash = (kmer_value ^ seed) & kmer_mask;
+        kmer_values_in_window.push_back(kmerhash);
+        // kmer_values_in_window.push_back(kmer_value);
 
         // After this loop, `kmer_values_in_window` contains all kmer values of the window.
         for (size_t i = params.minimiser_size; i < params.window_size; ++i)
@@ -644,7 +769,7 @@ struct minimiser_fn
     }
 };
 
-} // namespace srindex::detail
+}
 
 namespace srindex::views
 {
@@ -654,262 +779,3 @@ inline constexpr auto minimiser_hash_and_positions = srindex::detail::minimiser_
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-namespace srindex
-{
-
-struct window_hash_parameters
-{
-    size_t window_size{};
-};
-
-struct window_hash_result
-{
-    uint64_t window_value;
-};
-
-} // namespace srindex
-
-namespace srindex::detail
-{
-
-template <std::ranges::view range_t>
-    requires std::ranges::input_range<range_t> && std::ranges::sized_range<range_t>
-class window_hash : public std::ranges::view_interface<window_hash<range_t>>
-{
-private:
-    range_t range{};
-    window_hash_parameters params{};
-
-    template <bool range_is_const>
-    class basic_iterator;
-
-public:
-    window_hash()
-        requires std::default_initializable<range_t>
-    = default;
-    window_hash(window_hash const & rhs) = default;
-    window_hash(window_hash && rhs) = default;
-    window_hash & operator=(window_hash const & rhs) = default;
-    window_hash & operator=(window_hash && rhs) = default;
-    ~window_hash() = default;
-
-    explicit window_hash(range_t range, window_hash_parameters params) :
-        range{std::move(range)},
-        params{std::move(params)}
-    {}
-
-    basic_iterator<false> begin()
-    {
-        return {std::ranges::begin(range), std::ranges::size(range), params};
-    }
-
-    basic_iterator<true> begin() const
-        requires std::ranges::view<range_t const> && std::ranges::input_range<range_t const>
-    {
-        return {std::ranges::begin(range), std::ranges::size(range), params};
-    }
-
-    auto end() noexcept
-    {
-        return std::default_sentinel;
-    }
-
-    auto end() const noexcept
-        requires std::ranges::view<range_t const> && std::ranges::input_range<range_t const>
-    {
-        return std::default_sentinel;
-    }
-};
-
-template <std::ranges::view range_t>
-    requires std::ranges::input_range<range_t> && std::ranges::sized_range<range_t>
-template <bool range_is_const>
-class window_hash<range_t>::basic_iterator
-{
-private:
-    template <bool>
-    friend class basic_iterator;
-
-    using maybe_const_range_t = std::conditional_t<range_is_const, range_t const, range_t>;
-    using range_iterator_t = std::ranges::iterator_t<maybe_const_range_t>;
-
-public:
-    using difference_type = std::ranges::range_difference_t<maybe_const_range_t>;
-    using value_type = window_hash_result;
-    using pointer = void;
-    using reference = value_type;
-    using iterator_category = std::conditional_t<std::ranges::forward_range<maybe_const_range_t>,
-                                                 std::forward_iterator_tag,
-                                                 std::input_iterator_tag>;
-    using iterator_concept = iterator_category;
-
-private:
-    range_iterator_t range_it{};
-
-    uint64_t window_mask{std::numeric_limits<uint64_t>::max()};
-
-    size_t range_size{};
-    size_t range_position{};
-
-    value_type current{};
-
-    static inline constexpr uint64_t compute_mask(uint64_t const kmer_size)
-    {
-        assert(kmer_size > 0u);
-        assert(kmer_size <= 32u);
-
-        if (kmer_size == 32u)
-            return std::numeric_limits<uint64_t>::max();
-        else
-            return (uint64_t{1u} << (2u * kmer_size)) - 1u;
-    }
-
-public:
-    basic_iterator() = default;
-    basic_iterator(basic_iterator const &) = default;
-    basic_iterator(basic_iterator &&) = default;
-    basic_iterator & operator=(basic_iterator const &) = default;
-    basic_iterator & operator=(basic_iterator &&) = default;
-    ~basic_iterator() = default;
-
-    basic_iterator(basic_iterator<!range_is_const> const & it)
-        requires range_is_const
-        :
-        range_it{it.range_it},
-        window_mask{it.window_mask},
-        range_size{it.range_size},
-        range_position{it.range_position},
-        current{it.current}
-    {}
-
-    basic_iterator(range_iterator_t range_iterator,
-                   size_t const range_size,
-                   window_hash_parameters const & params) :
-        range_it{std::move(range_iterator)},
-        window_mask{compute_mask(params.window_size)},
-        range_size{range_size}
-    {
-        if (range_size < params.window_size)
-            range_position = range_size;
-        else
-            init(params);
-    }
-
-    friend bool operator==(basic_iterator const & lhs, basic_iterator const & rhs)
-    {
-        return lhs.range_it == rhs.range_it;
-    }
-
-    friend bool operator==(basic_iterator const & lhs, std::default_sentinel_t const &)
-    {
-        return lhs.range_position == lhs.range_size;
-    }
-
-    basic_iterator & operator++() noexcept
-    {
-        while (!next_minimiser_is_new())
-        {}
-        return *this;
-    }
-
-    basic_iterator operator++(int) noexcept
-    {
-        basic_iterator tmp{*this};
-        while (!next_minimiser_is_new())
-        {}
-        return tmp;
-    }
-
-    value_type operator*() const noexcept
-    {
-        return current;
-    }
-
-private:
-    enum class pop_first : bool
-    {
-        no,
-        yes
-    };
-
-    void rolling_hash()
-    {
-        uint64_t const new_rank = seqan3::to_rank(*range_it);
-
-        current.window_value <<= 2;
-        current.window_value |= new_rank;
-        current.window_value &= window_mask;
-    }
-
-    template <pop_first pop>
-    void next_window()
-    {
-        ++range_position;
-        ++range_it;
-
-        rolling_hash();
-    }
-
-    void init(window_hash_parameters const & params)
-    {
-        // range_it is already at the beginning of the range
-        rolling_hash();
-    }
-
-    bool next_minimiser_is_new()
-    {
-        // If we reached the end of the range, we are done.
-        if (range_position + 1 == range_size)
-            return ++range_position; // Return true, but also increment range_position
-
-        next_window<pop_first::yes>();
-
-        return true;
-    }
-};
-
-template <std::ranges::viewable_range rng_t>
-window_hash(rng_t &&, window_hash_parameters &&)
-    -> window_hash<std::views::all_t<rng_t>>;
-
-struct window_hash_fn
-{
-    constexpr auto operator()(window_hash_parameters params) const
-    {
-        return seqan3::detail::adaptor_from_functor{*this, std::move(params)};
-    }
-
-    template <std::ranges::range range_t>
-    constexpr auto operator()(range_t && range, window_hash_parameters params) const
-    {
-        static_assert(std::same_as<std::ranges::range_value_t<range_t>, seqan3::dna4>, "Only dna4 supported.");
-        static_assert(std::ranges::sized_range<range_t>, "Input range must be a std::ranges::sized_range.");
-
-        if (params.window_size == 0u)
-            throw std::invalid_argument{"window_size must be > 0."};
-        if (params.window_size > 32u)
-            throw std::invalid_argument{"window_size must be <= 32."};
-
-        return window_hash{std::forward<range_t>(range), std::move(params)};
-    }
-};
-
-} // namespace srindex::detail
-
-namespace srindex::views
-{
-
-inline constexpr auto window_hash = srindex::detail::window_hash_fn{};
-
-}

@@ -83,13 +83,13 @@ int main(int argc, char** argv)
         std::vector<std::vector<seqan3::dna4>> text;
         load_file(args.i, text);
         std::cout << "building dict...\n";
-        UnitigsDictionary dict(args.k, args.m);
+        UnitigsDictionaryHash dict(args.k, args.m);
         dict.build(text);
         std::cout << "done.\n";
         dict.save(args.d);
     }
     else if(args.cmd == "query") {
-        UnitigsDictionary dict;
+        UnitigsDictionaryHash dict;
         dict.load(args.d);
 
         std::vector<std::vector<seqan3::dna4>> queries;

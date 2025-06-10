@@ -1,6 +1,6 @@
 #!/bin/bash
 
-PROGRAM="../build/source/lookup_unitigs"
+PROGRAM="../build/source/lookup_unitigsr"
 # PROGRAM="../build/source/comp_lookup"
 
 today=$(date +%Y-%m-%d-%H-%M-%S)
@@ -78,7 +78,7 @@ run()
       k_mers=$(grep "num_kmers" prog_out.txt | sed -E 's/.*num_kmers = ([0-9]+).*/\1/')
       found=$(grep "num_positive_kmers" prog_out.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
 
-      querytimekmer=$(echo "scale=10; $querytime * 1e9 / $k_mers" | bc)
+      querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
       
       # echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$querytime,$querymem,$k_mers",$found" >> "$CSV"
       echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$spaceoffsets,$spacer,$spaces,$spacetotal,$density_r,$density_s,$no_minimiser,$querytimekmer,$querymem,$k_mers",$found" >> "$CSV"
@@ -90,7 +90,7 @@ run()
 
 for data in $(find $DIR -mindepth 0 -maxdepth 0 -type d); do
   FILENAME=$(basename $data)
-  echo "textfile,queryfile,k,m,buildtime [s],buildmem [B],indexsize [B],spaceoffsets [bits/kmer],spaceR [bits/kmer],spaceS [bits/kmer],spacetotal [bits/kmer],density_r [%],density_s [%], no minimizer, querytime [s],querymem [B],kmers,found" > "$CSV"
+  echo "textfile,queryfile,k,m,buildtime [s],buildmem [B],indexsize [B],spaceoffsets [bits/kmer],spaceR [bits/kmer],spaceS [bits/kmer],spacetotal [bits/kmer],density_r [%],density_s [%], no minimizer, querytime [ns/kmer],querymem [B],kmers,found" > "$CSV"
   # echo "textfile,queryfile,k,m,buildtime,buildmem,filesize,querytime,querymem,kmers,found" > "$CSV"
   run $data/
 done
