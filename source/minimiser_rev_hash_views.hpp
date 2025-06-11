@@ -245,8 +245,9 @@ private:
 
         kmer_value <<= 2;
         kmer_value |= new_rank;
-        kmer_value ^= seed;
         kmer_value &= kmer_mask;
+        // kmer_value ^= seed;
+        // kmer_value &= kmer_mask;
 
         kmer_value_rev = srindex::util::crc(kmer_value, minimiser_size);
 
@@ -267,7 +268,8 @@ private:
             kmer_values_in_window.pop_front();
 
         // const uint64_t kmerhash = (kmer_value ^ seed) & kmer_mask;
-        const uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev);
+        // uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev);
+        const uint64_t kmerhash = std::min<uint64_t>((kmer_value ^ seed) & kmer_mask, (kmer_value_rev ^ seed) & kmer_mask);
         // kmerhash ^= seed;
         // kmerhash &= kmer_mask;
         kmer_values_in_window.push_back(kmerhash);
@@ -311,12 +313,13 @@ private:
             current.window_value |= new_rank;
             current.window_value &= window_mask; // necessary here?
         }
-        kmer_value ^= seed;
-        kmer_value &= kmer_mask;
+        // kmer_value ^= seed;
+        // kmer_value &= kmer_mask;
         kmer_value_rev = srindex::util::crc(kmer_value, minimiser_size);
 
         // const uint64_t kmerhash = (kmer_value ^ seed) & kmer_mask;
-        const uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev);
+        // uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev);
+        const uint64_t kmerhash = std::min<uint64_t>((kmer_value ^ seed) & kmer_mask, (kmer_value_rev ^ seed) & kmer_mask);
         // kmerhash ^= seed;
         // kmerhash &= kmer_mask;
         kmer_values_in_window.push_back(kmerhash);
@@ -602,8 +605,9 @@ private:
 
         kmer_value <<= 2;
         kmer_value |= new_rank;
-        kmer_value ^= seed;
         kmer_value &= kmer_mask;
+        // kmer_value ^= seed;
+        // kmer_value &= kmer_mask;
 
         kmer_value_rev = srindex::util::crc(kmer_value, minimiser_size);
     }
@@ -620,7 +624,8 @@ private:
             kmer_values_in_window.pop_front();
 
         // const uint64_t kmerhash = (kmer_value ^ seed) & kmer_mask;
-        const uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev);
+        // uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev);
+        const uint64_t kmerhash = std::min<uint64_t>((kmer_value ^ seed) & kmer_mask, (kmer_value_rev ^ seed) & kmer_mask);
         // kmerhash ^= seed;
         // kmerhash &= kmer_mask;
         kmer_values_in_window.push_back(kmerhash);
@@ -658,11 +663,12 @@ private:
             kmer_value |= new_rank;
             kmer_value &= kmer_mask; // remove?
         }
-        kmer_value ^= seed;
+        // kmer_value ^= seed;
+        // kmer_value &= kmer_mask;
         kmer_value_rev = srindex::util::crc(kmer_value, minimiser_size);
 
         // const uint64_t kmerhash = (kmer_value ^ seed) & kmer_mask;
-        const uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev);
+        const uint64_t kmerhash = std::min<uint64_t>((kmer_value ^ seed) & kmer_mask, (kmer_value_rev ^ seed) & kmer_mask);
         // kmerhash ^= seed;
         // kmerhash &= kmer_mask;
         kmer_values_in_window.push_back(kmerhash);

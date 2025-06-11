@@ -28,8 +28,10 @@ int UnitigsDictionaryHash::build(const std::vector<std::vector<seqan3::dna4>> &i
 {
     auto view = srindex::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k});
 
-    // const uint64_t M = 1ULL << (m+m); // forward: 4^m
-    const uint64_t M = 1ULL << (m+m-1); // rev compl: 4^m/2
+    const uint64_t M = 1ULL << (m+m-1);
+    // const uint64_t M = 1ULL << (m+m);
+    std::cout << "m: " << +m << "\n";
+    std::cout << "M: " << M << "\n";
 
     std::cout << "extracting minimizers...\n";
     r = bit_vector(M, 0);
