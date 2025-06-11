@@ -245,6 +245,7 @@ private:
 
         kmer_value <<= 2;
         kmer_value |= new_rank;
+        kmer_value ^= seed;
         kmer_value &= kmer_mask;
 
         kmer_value_rev = srindex::util::crc(kmer_value, minimiser_size);
@@ -266,9 +267,9 @@ private:
             kmer_values_in_window.pop_front();
 
         // const uint64_t kmerhash = (kmer_value ^ seed) & kmer_mask;
-        uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev);
-        kmerhash ^= seed;
-        kmerhash &= kmer_mask;
+        const uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev);
+        // kmerhash ^= seed;
+        // kmerhash &= kmer_mask;
         kmer_values_in_window.push_back(kmerhash);
     }
 
@@ -294,10 +295,10 @@ private:
         uint64_t new_rank = seqan3::to_rank(*range_it);
         kmer_value <<= 2;
         kmer_value |= new_rank;
-        kmer_value &= kmer_mask;
+        kmer_value &= kmer_mask; // necessary here?
         current.window_value <<= 2;
         current.window_value |= new_rank;
-        current.window_value &= window_mask;
+        current.window_value &= window_mask; // necessary here?
         for (size_t i = 1u; i < params.minimiser_size; ++i)
         {
             ++range_position;
@@ -305,17 +306,19 @@ private:
             new_rank = seqan3::to_rank(*range_it);
             kmer_value <<= 2;
             kmer_value |= new_rank;
-            kmer_value &= kmer_mask;
+            kmer_value &= kmer_mask; // necessary here?
             current.window_value <<= 2;
             current.window_value |= new_rank;
-            current.window_value &= window_mask;
+            current.window_value &= window_mask; // necessary here?
         }
+        kmer_value ^= seed;
+        kmer_value &= kmer_mask;
         kmer_value_rev = srindex::util::crc(kmer_value, minimiser_size);
 
         // const uint64_t kmerhash = (kmer_value ^ seed) & kmer_mask;
-        uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev);
-        kmerhash ^= seed;
-        kmerhash &= kmer_mask;
+        const uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev);
+        // kmerhash ^= seed;
+        // kmerhash &= kmer_mask;
         kmer_values_in_window.push_back(kmerhash);
 
         // After this loop, `kmer_values_in_window` contains all kmer values of the window.
@@ -599,6 +602,7 @@ private:
 
         kmer_value <<= 2;
         kmer_value |= new_rank;
+        kmer_value ^= seed;
         kmer_value &= kmer_mask;
 
         kmer_value_rev = srindex::util::crc(kmer_value, minimiser_size);
@@ -616,9 +620,9 @@ private:
             kmer_values_in_window.pop_front();
 
         // const uint64_t kmerhash = (kmer_value ^ seed) & kmer_mask;
-        uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev);
-        kmerhash ^= seed;
-        kmerhash &= kmer_mask;
+        const uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev);
+        // kmerhash ^= seed;
+        // kmerhash &= kmer_mask;
         kmer_values_in_window.push_back(kmerhash);
     }
 
@@ -643,7 +647,7 @@ private:
         uint64_t new_rank = seqan3::to_rank(*range_it);
         kmer_value <<= 2;
         kmer_value |= new_rank;
-        kmer_value &= kmer_mask;
+        kmer_value &= kmer_mask; // remove?
         for (size_t i = 1u; i < params.minimiser_size; ++i)
         {
             ++range_position;
@@ -652,14 +656,15 @@ private:
             new_rank = seqan3::to_rank(*range_it);
             kmer_value <<= 2;
             kmer_value |= new_rank;
-            kmer_value &= kmer_mask;
+            kmer_value &= kmer_mask; // remove?
         }
+        kmer_value ^= seed;
         kmer_value_rev = srindex::util::crc(kmer_value, minimiser_size);
 
         // const uint64_t kmerhash = (kmer_value ^ seed) & kmer_mask;
-        uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev);
-        kmerhash ^= seed;
-        kmerhash &= kmer_mask;
+        const uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev);
+        // kmerhash ^= seed;
+        // kmerhash &= kmer_mask;
         kmer_values_in_window.push_back(kmerhash);
 
         // After this loop, `kmer_values_in_window` contains all kmer values of the window.

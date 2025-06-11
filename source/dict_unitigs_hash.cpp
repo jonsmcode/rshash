@@ -28,7 +28,8 @@ int UnitigsDictionaryHash::build(const std::vector<std::vector<seqan3::dna4>> &i
 {
     auto view = srindex::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k});
 
-    const uint64_t M = 1ULL << (m+m); // 4^m
+    // const uint64_t M = 1ULL << (m+m); // forward: 4^m
+    const uint64_t M = 1ULL << (m+m-1); // rev compl: 4^m/2
 
     std::cout << "extracting minimizers...\n";
     r = bit_vector(M, 0);
@@ -180,23 +181,6 @@ static inline constexpr uint64_t compute_mask(uint64_t const kmer_size)
 
 inline void UnitigsDictionaryHash::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q)
 {
-    // uint64_t const seed = 0x8F'3F'73'B5'CF'1C'9A'DE;
-    // auto forward_strand = seqan3::views::kmer_hash(seqan3::ungapped{k});
-    // auto reverse_strand = seqan3::views::complement | std::views::reverse | seqan3::views::kmer_hash(seqan3::ungapped{k}) | std::views::reverse;
-    // for(uint64_t i = 0; i < q-p; i++) {
-    //     uint64_t hash = 0;
-    //     size_t o = offsets[p+i];
-    //     size_t next_endpoint = endpoints_select(endpoints_rank(o+1)+1);
-    //     size_t e = o+k+k;
-    //     if(e > next_endpoint)
-    //         e = next_endpoint;
-    //     for(auto && kmer : text | forward_strand | std::views::drop(o) | std::views::take(e-o)) {
-    //         buffer.push_back(kmer);
-    //     }
-    //     for(auto && kmer : text | reverse_strand | std::views::drop(o) | std::views::take(e-o)) {
-    //         buffer.push_back(kmer);
-    //     }
-    // }
     for(uint64_t i = 0; i < q-p; i++) {
         uint64_t hash = 0;
         size_t o = offsets[p+i];

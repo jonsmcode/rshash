@@ -19,12 +19,16 @@ add_executable (lookup_unitigs lookup_unitigs.cpp dict_lookup_unitigs.cpp)
 target_include_directories(lookup_unitigs PRIVATE ${CMAKE_SOURCE_DIR}/sux)
 target_link_libraries (lookup_unitigs PRIVATE seqan3::seqan3)
 
-add_executable (lookup_unitigs_simd lookup_unitigs_simd.cpp dict_lookup_unitigs_simd.cpp)
-target_compile_options(lookup_unitigs_simd PRIVATE -mavx512f -mavx512bw -march=native)
-target_include_directories(lookup_unitigs_simd PRIVATE ${CMAKE_SOURCE_DIR}/sux)
-target_link_libraries (lookup_unitigs_simd PRIVATE seqan3::seqan3)
+#add_executable (lookup_unitigs lookup_unitigs.cpp dict_unitigs_hash.cpp)
+#target_include_directories(lookup_unitigs PRIVATE ${CMAKE_SOURCE_DIR}/sux)
+#target_link_libraries (lookup_unitigs PRIVATE seqan3::seqan3)
 
-add_executable (lookup_unitigsr lookup_unitigsr.cpp dict_unitigs.cpp)
+#add_executable (lookup_unitigs_simd lookup_unitigs_simd.cpp dict_lookup_unitigs_simd.cpp)
+#target_compile_options(lookup_unitigs_simd PRIVATE -mavx512f -mavx512bw -march=native)
+#target_include_directories(lookup_unitigs_simd PRIVATE ${CMAKE_SOURCE_DIR}/sux)
+#target_link_libraries (lookup_unitigs_simd PRIVATE seqan3::seqan3)
+
+add_executable (lookup_unitigsr lookup_unitigsr.cpp dict_unitigs_hash.cpp)
 target_include_directories(lookup_unitigsr PRIVATE ${CMAKE_SOURCE_DIR}/sux)
 target_link_libraries (lookup_unitigsr PRIVATE seqan3::seqan3)
 
