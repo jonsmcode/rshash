@@ -271,7 +271,7 @@ uint64_t UnitigsDictionarySIMD::streaming_query(const std::vector<seqan3::dna4> 
     for(auto && minimiser : query | query_view)
     {
         if(minimiser.minimiser_value == current_minimiser) {
-            occurences += lookup_avx512(buffer, minimiser.window_value);
+            occurences += lookup_avx512(buffer, minimiser.window_value, k);
         }
         else {
             if(r[minimiser.minimiser_value]) {
@@ -281,7 +281,7 @@ uint64_t UnitigsDictionarySIMD::streaming_query(const std::vector<seqan3::dna4> 
 
                 buffer.clear();
                 fill_buffer(buffer, mask, p, q);
-                occurences += lookup_avx512(buffer, minimiser.window_value);
+                occurences += lookup_avx512(buffer, minimiser.window_value, k);
                 current_minimiser = minimiser.minimiser_value;
             }
             // else {
