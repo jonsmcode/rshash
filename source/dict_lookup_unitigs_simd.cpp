@@ -10,7 +10,7 @@
 #include <cereal/archives/binary.hpp>
 
 #include "dict.hpp"
-#include "kmer_minimiser_hash.hpp"
+#include "minimiser_rev_hash_views.hpp"
 
 
 const uint8_t m_thres = 5;
@@ -29,7 +29,8 @@ int UnitigsDictionarySIMD::build(const std::vector<std::vector<seqan3::dna4>> &i
 {
     auto view = bsc::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k});
 
-    const uint64_t M = 1ULL << (m+m); // 4^m
+    // const uint64_t M = 1ULL << (m+m); // 4^m
+    const uint64_t M = 1ULL << (m+m-1);
 
     std::cout << "extracting minimizers...\n";
     r = bit_vector(M, 0);
@@ -235,19 +236,23 @@ inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query) {
     return false;
 }
 
-inline bool contains_uint64_avx512(const std::vector<uint64_t>& arr, uint64_t value) {
-    const uint64_t* data = arr.data();
-    size_t len = arr.size();
-    __m512i target = _mm512_set1_epi64(value);
+
+inline bool lookup_avx512(std::vector<uint64_t> &array, uint64_t query, uint64_t k) {
+    const uint64_t query_rev = srindex::util::crc(query, k);
+    const size_t n = array.size();
+
+    __m512i qv = _mm512_set1_epi64(query);
+    __m512i qrv = _mm512_set1_epi64(query_rev);
+
     size_t i = 0;
-    for (; i + 8 <= len; i += 8) {
-        __m512i chunk = _mm512_loadu_si512((__m512i const*)(data + i));
-        __mmask8 mask = _mm512_cmpeq_epi64_mask(chunk, target);
-        if (mask != 0)
-            return true;
+    for (; i + 7 < n; i += 8) {
+        __m512i v = _mm512_loadu_si512((const void*)&array[i]);
+        __mmask8 mask1 = _mm512_cmpeq_epi64_mask(v, qv);
+        __mmask8 mask2 = _mm512_cmpeq_epi64_mask(v, qrv);
+        if (mask1 || mask2) return true;
     }
-    for (; i < len; ++i) {
-        if (data[i] == value)
+    for (; i < n; ++i) {
+        if (array[i] == query || array[i] == query_rev)
             return true;
     }
     return false;
@@ -266,7 +271,7 @@ uint64_t UnitigsDictionarySIMD::streaming_query(const std::vector<seqan3::dna4> 
     for(auto && minimiser : query | query_view)
     {
         if(minimiser.minimiser_value == current_minimiser) {
-            occurences += contains_uint64_avx512(buffer, minimiser.window_value);
+            occurences += lookup_avx512(buffer, minimiser.window_value);
         }
         else {
             if(r[minimiser.minimiser_value]) {
@@ -276,7 +281,7 @@ uint64_t UnitigsDictionarySIMD::streaming_query(const std::vector<seqan3::dna4> 
 
                 buffer.clear();
                 fill_buffer(buffer, mask, p, q);
-                occurences += contains_uint64_avx512(buffer, minimiser.window_value);
+                occurences += lookup_avx512(buffer, minimiser.window_value);
                 current_minimiser = minimiser.minimiser_value;
             }
             // else {

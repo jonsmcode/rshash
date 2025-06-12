@@ -28,10 +28,11 @@ int UnitigsDictionaryHash::build(const std::vector<std::vector<seqan3::dna4>> &i
 {
     auto view = srindex::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k});
 
+    // assert(m <= 16); todo 16 < m <= 32
     const uint64_t M = 1ULL << (m+m-1);
-    // const uint64_t M = 1ULL << (m+m);
-    std::cout << "m: " << +m << "\n";
-    std::cout << "M: " << M << "\n";
+    // const uint64_t M = 1ULL << (m+m); // forward only
+    // std::cout << "m: " << +m << "\n";
+    // std::cout << "M: " << M << "\n";
 
     std::cout << "extracting minimizers...\n";
     r = bit_vector(M, 0);
@@ -87,6 +88,7 @@ int UnitigsDictionaryHash::build(const std::vector<std::vector<seqan3::dna4>> &i
             kmers += o;
         }
     }
+    // todo: here
 
     std::cout << "filling bitvector S...\n";
     s = bit_vector(n+1, 0);
@@ -208,9 +210,13 @@ inline void UnitigsDictionaryHash::fill_buffer(std::vector<uint64_t> &buffer, co
 }
 
 
-inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query, uint64_t k) {
+inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query, uint64_t k, uint64_t j) {
     const uint64_t query_rev = srindex::util::crc(query, k);
-    for(uint64_t i=0; i < array.size(); i++) {
+    for(uint64_t i=j+1; i < array.size(); i++) {
+        if(array[i] == query || array[i] == query_rev)
+            return true;
+    }
+    for(uint64_t i=0; i < j+1; i++) {
         if(array[i] == query || array[i] == query_rev)
             return true;
     }
@@ -225,12 +231,16 @@ uint64_t UnitigsDictionaryHash::streaming_query(const std::vector<seqan3::dna4> 
     uint64_t occurences = 0;
     const uint64_t mask = compute_mask(k);
     uint64_t current_minimiser = 0; // lets hope the first minimiser is not 0
+    uint64_t last_found = 0;
     std::vector<uint64_t> buffer;
 
     for(auto && minimiser : query | query_view)
     {
         if(minimiser.minimiser_value == current_minimiser) {
-            occurences += lookup_serial(buffer, minimiser.window_value, k);
+            // bool found = lookup_serial(buffer, minimiser.window_value, k, last_found);
+            // occurences += found;
+            // last_found += found;
+            occurences += lookup_serial(buffer, minimiser.window_value, k, last_found);
         }
         else {
             if(r[minimiser.minimiser_value]) {
@@ -240,7 +250,10 @@ uint64_t UnitigsDictionaryHash::streaming_query(const std::vector<seqan3::dna4> 
 
                 buffer.clear();
                 fill_buffer(buffer, mask, p, q);
-                occurences += lookup_serial(buffer, minimiser.window_value, k);
+                // bool found = lookup_serial(buffer, minimiser.window_value, k, last_found);
+                // occurences += found;
+                // last_found = found;
+                occurences += lookup_serial(buffer, minimiser.window_value, k, last_found);
                 current_minimiser = minimiser.minimiser_value;
             }
             // else {
@@ -249,7 +262,6 @@ uint64_t UnitigsDictionaryHash::streaming_query(const std::vector<seqan3::dna4> 
         }
         
     }
-
     return occurences;
 }
 
