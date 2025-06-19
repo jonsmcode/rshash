@@ -11,6 +11,91 @@
 #include <seqan3/core/range/detail/adaptor_from_functor.hpp>
 
 
+
+static uint64_t MurmurHash2_64(void const* key, size_t len, uint64_t seed) {
+    const uint64_t m = 0xc6a4a7935bd1e995ULL;
+    const int r = 47;
+
+    uint64_t h = seed ^ (len * m);
+
+#if defined(__arm) || defined(__arm__)
+    const size_t ksize = sizeof(uint64_t);
+    const unsigned char* data = (const unsigned char*)key;
+    const unsigned char* end = data + (std::size_t)(len / 8) * ksize;
+#else
+    const uint64_t* data = (const uint64_t*)key;
+    const uint64_t* end = data + (len / 8);
+#endif
+
+    while (data != end) {
+#if defined(__arm) || defined(__arm__)
+        uint64_t k;
+        memcpy(&k, data, ksize);
+        data += ksize;
+#else
+        uint64_t k = *data++;
+#endif
+
+        k *= m;
+        k ^= k >> r;
+        k *= m;
+
+        h ^= k;
+        h *= m;
+    }
+
+    const unsigned char* data2 = (const unsigned char*)data;
+
+    switch (len & 7) {
+        // fall through
+        case 7:
+            h ^= uint64_t(data2[6]) << 48;
+        // fall through
+        case 6:
+            h ^= uint64_t(data2[5]) << 40;
+        // fall through
+        case 5:
+            h ^= uint64_t(data2[4]) << 32;
+        // fall through
+        case 4:
+            h ^= uint64_t(data2[3]) << 24;
+        // fall through
+        case 3:
+            h ^= uint64_t(data2[2]) << 16;
+        // fall through
+        case 2:
+            h ^= uint64_t(data2[1]) << 8;
+        // fall through
+        case 1:
+            h ^= uint64_t(data2[0]);
+            h *= m;
+    };
+
+    h ^= h >> r;
+    h *= m;
+    h ^= h >> r;
+
+    return h;
+}
+
+struct murmurhash2_64 {
+    // generic range of bytes
+    // static inline uint64_t hash(byte_range range, uint64_t seed) {
+    //     return MurmurHash2_64(range.begin, range.end - range.begin, seed);
+    // }
+
+    // specialization for std::string
+    static inline uint64_t hash(std::string const& val, uint64_t seed) {
+        return MurmurHash2_64(val.data(), val.size(), seed);
+    }
+
+    // specialization for uint64_t
+    static inline uint64_t hash(uint64_t val, uint64_t seed) {
+        return MurmurHash2_64(reinterpret_cast<char const*>(&val), sizeof(val), seed);
+    }
+};
+
+
 namespace srindex::util
 {
     // template <bool align>
@@ -50,6 +135,7 @@ struct minimiser_and_window_hash_parameters
 {
     size_t minimiser_size{};
     size_t window_size{};
+    uint64_t seed{};
 };
 
 struct minimiser_and_window_hash_result
@@ -138,8 +224,10 @@ private:
     range_iterator_t range_it{};
 
     uint64_t kmer_mask{std::numeric_limits<uint64_t>::max()};
+    uint64_t minimiser_mask{std::numeric_limits<uint64_t>::max()};
     uint64_t window_mask{std::numeric_limits<uint64_t>::max()};
-    uint64_t seed{0x8F'3F'73'B5'CF'1C'9A'DE};
+    // uint64_t seed{0x8F'3F'73'B5'CF'1C'9A'DE};
+    uint64_t seed{};
     uint8_t minimisers_in_window{};
     uint64_t minimiser_size{};
 
@@ -179,6 +267,7 @@ public:
         range_it{it.range_it},
         kmer_mask{it.kmer_mask},
         window_mask{it.window_mask},
+        minimiser_mask{it.minimiser_mask},
         kmer_value{it.kmer_value},
         kmer_value_rev{it.kmer_value_rev},
         minimiser_position{it.minimiser_position},
@@ -193,6 +282,7 @@ public:
                    minimiser_and_window_hash_parameters const & params) :
         range_it{std::move(range_iterator)},
         kmer_mask{compute_mask(params.minimiser_size)},
+        minimiser_mask{compute_mask(params.minimiser_size-1)},
         window_mask{compute_mask(params.window_size)},
         range_size{range_size}
     {
@@ -246,8 +336,6 @@ private:
         kmer_value <<= 2;
         kmer_value |= new_rank;
         kmer_value &= kmer_mask;
-        // kmer_value ^= seed;
-        // kmer_value &= kmer_mask;
 
         kmer_value_rev = srindex::util::crc(kmer_value, minimiser_size);
 
@@ -267,11 +355,7 @@ private:
         if constexpr (pop == pop_first::yes)
             kmer_values_in_window.pop_front();
 
-        // const uint64_t kmerhash = (kmer_value ^ seed) & kmer_mask;
-        // uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev);
-        const uint64_t kmerhash = std::min<uint64_t>((kmer_value ^ seed) & kmer_mask, (kmer_value_rev ^ seed) & kmer_mask);
-        // kmerhash ^= seed;
-        // kmerhash &= kmer_mask;
+        const uint64_t kmerhash = std::min<uint64_t>((kmer_value ^ seed) & minimiser_mask, (kmer_value_rev ^ seed) & minimiser_mask);
         kmer_values_in_window.push_back(kmerhash);
     }
 
@@ -284,13 +368,7 @@ private:
 
     void init(minimiser_and_window_hash_parameters const & params)
     {
-        // range_it is already at the beginning of the range
-        // rolling_hash();
-        // kmer_values_in_window.push_back(kmer_value);
-
-        // // After this loop, `kmer_values_in_window` contains the first kmer value of the window.
-        // for (size_t i = 1u; i < params.minimiser_size; ++i)
-        //     next_window<pop_first::yes>();
+        seed = params.seed;
         minimiser_size = params.minimiser_size;
         minimisers_in_window = params.window_size - params.minimiser_size;
 
@@ -313,18 +391,11 @@ private:
             current.window_value |= new_rank;
             current.window_value &= window_mask; // necessary here?
         }
-        // kmer_value ^= seed;
-        // kmer_value &= kmer_mask;
         kmer_value_rev = srindex::util::crc(kmer_value, minimiser_size);
 
-        // const uint64_t kmerhash = (kmer_value ^ seed) & kmer_mask;
-        // uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev);
-        const uint64_t kmerhash = std::min<uint64_t>((kmer_value ^ seed) & kmer_mask, (kmer_value_rev ^ seed) & kmer_mask);
-        // kmerhash ^= seed;
-        // kmerhash &= kmer_mask;
+        const uint64_t kmerhash = std::min<uint64_t>((kmer_value ^ seed) & minimiser_mask, (kmer_value_rev ^ seed) & minimiser_mask);
         kmer_values_in_window.push_back(kmerhash);
 
-        // After this loop, `kmer_values_in_window` contains all kmer values of the window.
         for (size_t i = params.minimiser_size; i < params.window_size; ++i)
             next_window<pop_first::no>();
 
@@ -335,7 +406,7 @@ private:
     {
         // If we reached the end of the range, we are done.
         if (range_position + 1 == range_size)
-            return ++range_position; // Return true, but also increment range_position
+            return ++range_position;
 
         next_window<pop_first::yes>();
 
@@ -411,6 +482,7 @@ struct minimiser_hash_and_positions_parameters
 {
     size_t minimiser_size{};
     size_t window_size{};
+    uint64_t seed{};
 };
 
 struct minimiser_hash_and_positions_result
@@ -500,9 +572,11 @@ private:
     range_iterator_t range_it{};
 
     uint64_t kmer_mask{std::numeric_limits<uint64_t>::max()};
+    uint64_t minimiser_mask{std::numeric_limits<uint64_t>::max()};
     uint64_t kmer_value{};
     uint64_t kmer_value_rev{};
-    uint64_t seed{0x8F'3F'73'B5'CF'1C'9A'DE};
+    // uint64_t seed{0x8F'3F'73'B5'CF'1C'9A'DE};
+    uint64_t seed{};
 
     uint64_t minimiser_size{};
 
@@ -539,6 +613,7 @@ public:
         :
         range_it{it.range_it},
         kmer_mask{it.kmer_mask},
+        minimiser_mask{it.minimiser_mask},
         kmer_value{it.kmer_value},
         range_size{it.range_size},
         range_position{it.range_position},
@@ -553,6 +628,9 @@ public:
                    minimiser_hash_and_positions_parameters params) :
         range_it{std::move(range_iterator)},
         kmer_mask{compute_mask(params.minimiser_size)},
+        minimiser_mask{compute_mask(params.minimiser_size-1)},
+        minimiser_size{params.minimiser_size},
+        seed{params.seed},
         range_size{range_size},
         params{std::move(params)}
     {
@@ -606,8 +684,6 @@ private:
         kmer_value <<= 2;
         kmer_value |= new_rank;
         kmer_value &= kmer_mask;
-        // kmer_value ^= seed;
-        // kmer_value &= kmer_mask;
 
         kmer_value_rev = srindex::util::crc(kmer_value, minimiser_size);
     }
@@ -623,11 +699,9 @@ private:
         if constexpr (pop == pop_first::yes)
             kmer_values_in_window.pop_front();
 
-        // const uint64_t kmerhash = (kmer_value ^ seed) & kmer_mask;
-        // uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev);
-        const uint64_t kmerhash = std::min<uint64_t>((kmer_value ^ seed) & kmer_mask, (kmer_value_rev ^ seed) & kmer_mask);
-        // kmerhash ^= seed;
-        // kmerhash &= kmer_mask;
+        const uint64_t kmerhash = std::min<uint64_t>((kmer_value ^ seed) & minimiser_mask, (kmer_value_rev ^ seed) & minimiser_mask);
+        // const uint64_t kmerhash = std::min<uint64_t>(murmurhash2_64::hash(kmer_value, seed) & minimiser_mask, murmurhash2_64::hash(kmer_value_rev, seed) & minimiser_mask);
+        
         kmer_values_in_window.push_back(kmerhash);
     }
 
@@ -640,14 +714,7 @@ private:
 
     void init()
     {
-        // range_it is already at the beginning of the range
-        // rolling_hash();
-        // kmer_values_in_window.push_back(kmer_value);
-
-        // After this loop, `kmer_values_in_window` contains the first kmer value of the window.
-        // for (size_t i = 1u; i < params.minimiser_size; ++i)
-        //     next_window<pop_first::yes>();
-        minimiser_size = params.minimiser_size;
+        seed = params.seed;
 
         uint64_t new_rank = seqan3::to_rank(*range_it);
         kmer_value <<= 2;
@@ -663,24 +730,19 @@ private:
             kmer_value |= new_rank;
             kmer_value &= kmer_mask; // remove?
         }
-        // kmer_value ^= seed;
-        // kmer_value &= kmer_mask;
+        
         kmer_value_rev = srindex::util::crc(kmer_value, minimiser_size);
 
-        // const uint64_t kmerhash = (kmer_value ^ seed) & kmer_mask;
-        const uint64_t kmerhash = std::min<uint64_t>((kmer_value ^ seed) & kmer_mask, (kmer_value_rev ^ seed) & kmer_mask);
-        // kmerhash ^= seed;
-        // kmerhash &= kmer_mask;
+        const uint64_t kmerhash = std::min<uint64_t>((kmer_value ^ seed) & minimiser_mask, (kmer_value_rev ^ seed) & minimiser_mask);
+        // const uint64_t kmerhash = std::min<uint64_t>(murmurhash2_64::hash(kmer_value, seed) & minimiser_mask, murmurhash2_64::hash(kmer_value_rev, seed) & minimiser_mask);
+        
         kmer_values_in_window.push_back(kmerhash);
 
-        // After this loop, `kmer_values_in_window` contains all kmer values of the window.
         for (size_t i = params.minimiser_size; i < params.window_size; ++i)
             next_window<pop_first::no>();
 
         find_minimiser_in_window();
 
-        // Find next minimiser.
-        // To determine the minimiser_count, we need to do a lookahead.
         while (!next_minimiser_is_new())
         {}
     }

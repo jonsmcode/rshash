@@ -10,4 +10,10 @@ target_link_libraries (verify seqan3::seqan3)
 add_executable(shrink shrink_queries.cpp)
 target_link_libraries (shrink seqan3::seqan3)
 
+add_executable(minimizer_stats minimizer_stats.cpp)
+target_link_libraries (minimizer_stats seqan3::seqan3)
+
+add_executable(minimizer_stats2 minimizer_stats2.cpp)
+target_link_libraries (minimizer_stats2 seqan3::seqan3)
+
 add_executable(convert convert.cpp)
