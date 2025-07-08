@@ -45,6 +45,8 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
 
     // const size_t span = k-m;
     const size_t span = 100;
+    std::cout << "m1: " << +m1 << '\n';
+    std::cout << "m2: " << +m2 << '\n';
 
     auto view1 = srindex::views::minimiser_hash_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
     auto view2 = srindex::views::minimiser_hash_and_positions({.minimiser_size = m2, .window_size = k, .seed=seed2});
