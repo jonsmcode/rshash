@@ -16,7 +16,8 @@ namespace srindex
 
 struct two_minimisers_and_window_hash_parameters
 {
-    size_t minimiser_size{};
+    size_t minimiser_size1{};
+    size_t minimiser_size2{};
     size_t window_size{};
     uint64_t seed1{};
     uint64_t seed2{};
@@ -109,20 +110,23 @@ public:
 private:
     range_iterator_t range_it{};
 
-    uint64_t kmer_mask{std::numeric_limits<uint64_t>::max()};
-    // uint64_t minimiser_mask{std::numeric_limits<uint64_t>::max()};
+    uint64_t kmer_mask1{std::numeric_limits<uint64_t>::max()};
+    uint64_t kmer_mask2{std::numeric_limits<uint64_t>::max()};
     uint64_t window_mask{std::numeric_limits<uint64_t>::max()};
     uint64_t seed1{};
     uint64_t seed2{};
     uint8_t minimisers_in_window{};
-    uint64_t minimiser_size{};
+    uint64_t minimiser_size1{};
+    uint64_t minimiser_size2{};
     uint64_t window_size{};
 
     size_t minimiser1_position{};
     size_t minimiser2_position{};
 
-    uint64_t kmer_value{};
-    uint64_t kmer_value_rev{};
+    uint64_t kmer_value1{};
+    uint64_t kmer_value_rev1{};
+    uint64_t kmer_value2{};
+    uint64_t kmer_value_rev2{};
 
     size_t range_size{};
     size_t range_position{};
@@ -155,10 +159,13 @@ public:
         requires range_is_const
         :
         range_it{it.range_it},
-        kmer_mask{it.kmer_mask},
+        kmer_mask1{it.kmer_mask1},
+        kmer_mask2{it.kmer_mask2},
         window_mask{it.window_mask},
-        kmer_value{it.kmer_value},
-        kmer_value_rev{it.kmer_value_rev},
+        kmer_value1{it.kmer_value1},
+        kmer_value_rev1{it.kmer_value_rev1},
+        kmer_value2{it.kmer_value2},
+        kmer_value_rev2{it.kmer_value_rev2},
         range_size{it.range_size},
         range_position{it.range_position},
         current{it.current},
@@ -172,10 +179,9 @@ public:
                    size_t const range_size,
                    two_minimisers_and_window_hash_parameters const & params) :
         range_it{std::move(range_iterator)},
-        kmer_mask{compute_mask(2u * params.minimiser_size)},
+        kmer_mask1{compute_mask(2u * params.minimiser_size1)},
+        kmer_mask2{compute_mask(2u * params.minimiser_size2)},
         window_mask{compute_mask(2u * params.window_size)},
-        // seed1{params.seed1},
-        // seed2{params.seed2},
         range_size{range_size}
     {
         if (range_size < params.window_size)
@@ -226,9 +232,11 @@ private:
         uint64_t const new_rank = seqan3::to_rank(*range_it);
 
         current.window_value = ((current.window_value << 2) | new_rank) & window_mask;
-        kmer_value = current.window_value & kmer_mask;
+        kmer_value1 = current.window_value & kmer_mask1;
+        kmer_value2 = current.window_value & kmer_mask2;
         current.window_value_rev = (current.window_value_rev >> 2) | ((new_rank^0b11) << 2*(window_size-1));
-        kmer_value_rev = current.window_value_rev >> 2*(window_size - minimiser_size);
+        kmer_value_rev1 = current.window_value_rev >> 2*(window_size - minimiser_size1);
+        kmer_value_rev2 = current.window_value_rev >> 2*(window_size - minimiser_size2);
     }
 
     template <pop_first pop>
@@ -244,11 +252,10 @@ private:
             kmer_values2_in_window.pop_front();
         }
 
-        const uint64_t canonical_kmer = std::min<uint64_t>(kmer_value, kmer_value_rev);
-        const uint64_t kmerhash1 = canonical_kmer ^ seed1;
-        const uint64_t kmerhash2 = canonical_kmer ^ seed2;
-        // const uint64_t kmerhash1 = murmurhash2_64::hash(canonical_kmer, seed1) & kmer_mask;
-        // const uint64_t kmerhash2 = murmurhash2_64::hash(canonical_kmer, seed2) & kmer_mask;
+        const uint64_t canonical_kmer1 = std::min<uint64_t>(kmer_value1, kmer_value_rev1);
+        const uint64_t kmerhash1 = canonical_kmer1 ^ seed1;
+        const uint64_t canonical_kmer2 = std::min<uint64_t>(kmer_value2, kmer_value_rev2);
+        const uint64_t kmerhash2 = canonical_kmer2 ^ seed2;
         
         kmer_values1_in_window.push_back(kmerhash1);
         kmer_values2_in_window.push_back(kmerhash2);
@@ -270,18 +277,18 @@ private:
 
     void init(two_minimisers_and_window_hash_parameters const & params)
     {
-        minimiser_size = params.minimiser_size;
+        minimiser_size1 = params.minimiser_size1;
+        minimiser_size2 = params.minimiser_size2;
         window_size = params.window_size;
-        minimisers_in_window = window_size - minimiser_size;
-        seed1 = params.seed1 & kmer_mask;
-        seed2 = params.seed2 & kmer_mask;
+        seed1 = params.seed1 & kmer_mask1;
+        seed2 = params.seed2 & kmer_mask2;
 
         uint64_t new_rank = seqan3::to_rank(*range_it);
         current.window_value <<= 2;
         current.window_value |= new_rank;
         current.window_value_rev >>= 2;
         current.window_value_rev |= ((new_rank^0b11) << 2*(window_size-1));
-        for (size_t i = 1u; i < params.minimiser_size; ++i) {
+        for (size_t i = 1u; i < minimiser_size1; ++i) {
             ++range_position;
             ++range_it;
             new_rank = seqan3::to_rank(*range_it);
@@ -290,19 +297,32 @@ private:
             current.window_value_rev >>= 2;
             current.window_value_rev |= ((new_rank^0b11) << 2*(window_size-1));
         }
-        kmer_value = current.window_value & kmer_mask;
-        kmer_value_rev = current.window_value_rev >> 2*(window_size - minimiser_size);
-
-        const uint64_t canonical_kmer = std::min<uint64_t>(kmer_value, kmer_value_rev);
-        const uint64_t kmerhash1 = canonical_kmer ^ seed1;
-        const uint64_t kmerhash2 = canonical_kmer ^ seed2;
-        // const uint64_t kmerhash1 = murmurhash2_64::hash(canonical_kmer, seed1) & minimiser_mask;
-        // const uint64_t kmerhash2 = murmurhash2_64::hash(canonical_kmer, seed2) & minimiser_mask;
-
+        const uint64_t canonical_kmer1 = std::min<uint64_t>(current.window_value, current.window_value_rev);
+        const uint64_t kmerhash1 = canonical_kmer1 ^ seed1;
         kmer_values1_in_window.push_back(kmerhash1);
+
+        for (size_t i = minimiser_size1; i < minimiser_size2; ++i) {
+            ++range_position;
+            ++range_it;
+            new_rank = seqan3::to_rank(*range_it);
+            current.window_value <<= 2;
+            current.window_value |= new_rank;
+            current.window_value_rev >>= 2;
+            current.window_value_rev |= ((new_rank^0b11) << 2*(window_size-1));
+            kmer_value1 = current.window_value & kmer_mask1;
+            kmer_value_rev1 = current.window_value_rev >> 2*(window_size - minimiser_size1);
+            const uint64_t canonical_kmer1 = std::min<uint64_t>(kmer_value1, kmer_value_rev1);
+            const uint64_t kmerhash1 = canonical_kmer1 ^ seed1;
+            kmer_values1_in_window.push_back(kmerhash1);
+        }
+
+        kmer_value2 = current.window_value & kmer_mask2;
+        kmer_value_rev2 = current.window_value_rev >> 2*(window_size - minimiser_size2);
+        const uint64_t canonical_kmer2 = std::min<uint64_t>(kmer_value2, kmer_value_rev2);
+        const uint64_t kmerhash2 = canonical_kmer2 ^ seed2;
         kmer_values2_in_window.push_back(kmerhash2);
 
-        for (size_t i = params.minimiser_size; i < params.window_size; ++i)
+        for (size_t i = minimiser_size2; i < window_size; ++i)
             next_window<pop_first::no>();
 
         find_minimiser1_in_window();
@@ -376,15 +396,21 @@ struct two_minimisers_and_window_hash_fn
         static_assert(std::same_as<std::ranges::range_value_t<range_t>, seqan3::dna4>, "Only dna4 supported.");
         static_assert(std::ranges::sized_range<range_t>, "Input range must be a std::ranges::sized_range.");
 
-        if (params.minimiser_size == 0u)
+        if (params.minimiser_size1 == 0u)
             throw std::invalid_argument{"minimiser_size must be > 0."};
-        if (params.minimiser_size > 32u)
+        if (params.minimiser_size1 > 32u)
+            throw std::invalid_argument{"minimiser_size must be <= 32."};
+        if (params.minimiser_size2 == 0u)
+            throw std::invalid_argument{"minimiser_size must be > 0."};
+        if (params.minimiser_size2 > 32u)
             throw std::invalid_argument{"minimiser_size must be <= 32."};
         if (params.window_size == 0u)
             throw std::invalid_argument{"window_size must be > 0."};
         if (params.window_size > 32u)
             throw std::invalid_argument{"window_size must be <= 32."};
-        if (params.window_size < params.minimiser_size)
+        if (params.window_size < params.minimiser_size1)
+            throw std::invalid_argument{"window_size must be >= minimiser_size."};
+        if (params.window_size < params.minimiser_size2)
             throw std::invalid_argument{"window_size must be >= minimiser_size."};
 
         return two_minimisers_and_window_hash{range, std::move(params)};

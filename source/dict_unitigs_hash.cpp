@@ -13,6 +13,7 @@
 #include "minimiser_rev_hash_views.hpp"
 
 
+const uint64_t seed = 0x8F'3F'73'B5'CF'1C'9A'DE;
 const uint8_t m_thres = 255;
 
 
@@ -26,15 +27,13 @@ UnitigsDictionaryHash::UnitigsDictionaryHash(uint8_t const k, uint8_t const m) {
 
 int UnitigsDictionaryHash::build(const std::vector<std::vector<seqan3::dna4>> &input)
 {
-    auto view = srindex::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k});
+    auto view = srindex::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k, .seed=seed});
 
-    // assert(m <= 16); todo 16 < m <= 32
-    const uint64_t M = 1ULL << (m+m-1);
-    // const uint64_t M = 1ULL << (m+m); // forward only
+    const uint64_t M = 1ULL << (m+m);
     // std::cout << "m: " << +m << "\n";
     // std::cout << "M: " << M << "\n";
 
-    std::cout << "extracting minimizers...\n";
+    std::cout << "computing minimizers...\n";
     r = bit_vector(M, 0);
 
     size_t N = 0;
@@ -183,7 +182,7 @@ static inline constexpr uint64_t compute_mask(uint64_t const kmer_size)
 }
 
 
-inline void UnitigsDictionaryHash::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q)
+inline void UnitigsDictionaryHash::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, const size_t p, const size_t q)
 {
     for(uint64_t i = 0; i < q-p; i++) {
         uint64_t hash = 0;
@@ -210,15 +209,18 @@ inline void UnitigsDictionaryHash::fill_buffer(std::vector<uint64_t> &buffer, co
 }
 
 
-inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query, uint64_t k, uint64_t j) {
-    const uint64_t query_rev = srindex::util::crc(query, k);
-    for(uint64_t i=j+1; i < array.size(); i++) {
-        if(array[i] == query || array[i] == query_rev)
+inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, uint64_t &last_found) {
+    for(uint64_t i=last_found+1; i < array.size(); i++) {
+        if(array[i] == query || array[i] == queryrc) {
+            last_found = i;
             return true;
+        }
     }
-    for(uint64_t i=0; i < j+1; i++) {
-        if(array[i] == query || array[i] == query_rev)
+    for(uint64_t i=0; i < last_found+1; i++) {
+        if(array[i] == query || array[i] == queryrc) {
+            last_found = i;
             return true;
+        }
     }
     return false;
 }
@@ -226,7 +228,7 @@ inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query, uint64_t
 
 uint64_t UnitigsDictionaryHash::streaming_query(const std::vector<seqan3::dna4> &query)
 {
-    auto query_view = srindex::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
+    auto view = srindex::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k, .seed=seed});
 
     uint64_t occurences = 0;
     const uint64_t mask = compute_mask(k);
@@ -234,13 +236,10 @@ uint64_t UnitigsDictionaryHash::streaming_query(const std::vector<seqan3::dna4> 
     uint64_t last_found = 0;
     std::vector<uint64_t> buffer;
 
-    for(auto && minimiser : query | query_view)
+    for(auto && minimiser : query | view)
     {
         if(minimiser.minimiser_value == current_minimiser) {
-            // bool found = lookup_serial(buffer, minimiser.window_value, k, last_found);
-            // occurences += found;
-            // last_found += found;
-            occurences += lookup_serial(buffer, minimiser.window_value, k, last_found);
+            occurences += lookup_serial(buffer, minimiser.window_value, minimiser.window_value_rev, last_found);
         }
         else {
             if(r[minimiser.minimiser_value]) {
@@ -250,15 +249,11 @@ uint64_t UnitigsDictionaryHash::streaming_query(const std::vector<seqan3::dna4> 
 
                 buffer.clear();
                 fill_buffer(buffer, mask, p, q);
-                // bool found = lookup_serial(buffer, minimiser.window_value, k, last_found);
-                // occurences += found;
-                // last_found = found;
-                occurences += lookup_serial(buffer, minimiser.window_value, k, last_found);
+
+                last_found = 0;
+                occurences += lookup_serial(buffer, minimiser.window_value, minimiser.window_value_rev, last_found);
                 current_minimiser = minimiser.minimiser_value;
             }
-            // else {
-            //    todo: check r_2
-            // }
         }
         
     }
@@ -284,7 +279,7 @@ inline void UnitigsDictionaryHash::fill_buffer(std::vector<uint64_t> &buffer, st
 
         // todo: simd?!
         for (uint64_t j=o; j < o+k; j++) {
-            uint64_t const new_rank = seqan3::to_rank(text[j]); // todo: to_rank vectorizable?
+            uint64_t const new_rank = seqan3::to_rank(text[j]);
             hash <<= 2;
             hash |= new_rank;
             hash &= mask;
@@ -318,7 +313,7 @@ inline void locate_serial(std::vector<uint64_t> &buffer, std::vector<uint64_t> &
 uint64_t UnitigsDictionaryHash::streaming_query(const std::vector<seqan3::dna4> &query,
                                             std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &result)
 {
-    auto view = srindex::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k});
+    auto view = srindex::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k, .seed=seed});
 
     const uint64_t mask = compute_mask(k);
     uint64_t kmer = 0;

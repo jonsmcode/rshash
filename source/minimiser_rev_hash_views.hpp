@@ -9,7 +9,7 @@
 
 #include <seqan3/alphabet/nucleotide/dna4.hpp>
 #include <seqan3/core/range/detail/adaptor_from_functor.hpp>
-
+#include <seqan3/core/debug_stream.hpp>
 
 
 static uint64_t MurmurHash2_64(void const* key, size_t len, uint64_t seed) {
@@ -95,36 +95,27 @@ struct murmurhash2_64 {
     }
 };
 
+namespace srindex::util {
 
-namespace srindex::util
-{
-    // template <bool align>
-    static inline uint64_t crc(uint64_t x, uint64_t k) {
-        // assert(k <= 32);
+static inline uint64_t crc(uint64_t x, uint64_t k) {
+    // assert(k <= 32);
+    uint64_t c = ~x;
 
-        /* complement */
-    // #ifdef USE_TRADITIONAL_NUCLEOTIDE_ENCODING
-    //     uint64_t c = ~x;
-    // #else
-    //     uint64_t c = x ^ 0xaaaaaaaaaaaaaaaa;  // ...1010.1010.1010.1010
-    // #endif
-        uint64_t c = ~x;
+    /* swap byte order */
+    uint64_t res = __builtin_bswap64(c);
 
-        /* swap byte order */
-        uint64_t res = __builtin_bswap64(c);
+    /* Swap nuc order in bytes */
+    const uint64_t c1 = 0x0f0f0f0f0f0f0f0f;              // ...0000.1111.0000.1111
+    const uint64_t c2 = 0x3333333333333333;              // ...0011.0011.0011.0011
+    res = ((res & c1) << 4) | ((res & (c1 << 4)) >> 4);  // swap 2-nuc order in bytes
+    res = ((res & c2) << 2) | ((res & (c2 << 2)) >> 2);  // swap nuc order in 2-nuc
 
-        /* Swap nuc order in bytes */
-        const uint64_t c1 = 0x0f0f0f0f0f0f0f0f;              // ...0000.1111.0000.1111
-        const uint64_t c2 = 0x3333333333333333;              // ...0011.0011.0011.0011
-        res = ((res & c1) << 4) | ((res & (c1 << 4)) >> 4);  // swap 2-nuc order in bytes
-        res = ((res & c2) << 2) | ((res & (c2 << 2)) >> 2);  // swap nuc order in 2-nuc
+    /* Realign to the right */
+    res >>= 64 - 2 * k;
 
-        /* Realign to the right */
-        // if constexpr (align) res >>= 64 - 2 * k;
-        res >>= 64 - 2 * k;
+    return res;
+}
 
-        return res;
-    }
 }
 
 
@@ -142,6 +133,7 @@ struct minimiser_and_window_hash_result
 {
     uint64_t minimiser_value;
     uint64_t window_value;
+    uint64_t window_value_rev;
 };
 
 }
@@ -224,12 +216,11 @@ private:
     range_iterator_t range_it{};
 
     uint64_t kmer_mask{std::numeric_limits<uint64_t>::max()};
-    uint64_t minimiser_mask{std::numeric_limits<uint64_t>::max()};
     uint64_t window_mask{std::numeric_limits<uint64_t>::max()};
-    // uint64_t seed{0x8F'3F'73'B5'CF'1C'9A'DE};
-    uint64_t seed{};
+    uint64_t seed{0x8F'3F'73'B5'CF'1C'9A'DE};
     uint8_t minimisers_in_window{};
     uint64_t minimiser_size{};
+    uint64_t window_size{};
 
     uint64_t kmer_value{};
     uint64_t kmer_value_rev{};
@@ -242,15 +233,15 @@ private:
 
     std::deque<uint64_t> kmer_values_in_window{};
 
-    static inline constexpr uint64_t compute_mask(uint64_t const kmer_size)
+    static inline constexpr uint64_t compute_mask(uint64_t const size)
     {
-        assert(kmer_size > 0u);
-        assert(kmer_size <= 32u);
+        assert(size > 0u);
+        assert(size <= 64u);
 
-        if (kmer_size == 32u)
+        if(size == 64u)
             return std::numeric_limits<uint64_t>::max();
         else
-            return (uint64_t{1u} << (2u * kmer_size)) - 1u;
+            return (uint64_t{1u} << (size)) - 1u;
     }
 
 public:
@@ -267,7 +258,6 @@ public:
         range_it{it.range_it},
         kmer_mask{it.kmer_mask},
         window_mask{it.window_mask},
-        minimiser_mask{it.minimiser_mask},
         kmer_value{it.kmer_value},
         kmer_value_rev{it.kmer_value_rev},
         minimiser_position{it.minimiser_position},
@@ -281,9 +271,8 @@ public:
                    size_t const range_size,
                    minimiser_and_window_hash_parameters const & params) :
         range_it{std::move(range_iterator)},
-        kmer_mask{compute_mask(params.minimiser_size)},
-        minimiser_mask{compute_mask(params.minimiser_size-1)},
-        window_mask{compute_mask(params.window_size)},
+        kmer_mask{compute_mask(2u * params.minimiser_size)},
+        window_mask{compute_mask(2u * params.window_size)},
         range_size{range_size}
     {
         if (range_size < params.window_size)
@@ -332,16 +321,10 @@ private:
     void rolling_hash()
     {
         uint64_t const new_rank = seqan3::to_rank(*range_it);
-
-        kmer_value <<= 2;
-        kmer_value |= new_rank;
-        kmer_value &= kmer_mask;
-
-        kmer_value_rev = srindex::util::crc(kmer_value, minimiser_size);
-
-        current.window_value <<= 2;
-        current.window_value |= new_rank;
-        current.window_value &= window_mask;
+        current.window_value = ((current.window_value << 2) | new_rank) & window_mask;
+        kmer_value = current.window_value & kmer_mask;
+        current.window_value_rev = (current.window_value_rev >> 2) | ((new_rank^0b11) << 2*(window_size-1));
+        kmer_value_rev = current.window_value_rev >> 2*(window_size - minimiser_size);
     }
 
     template <pop_first pop>
@@ -355,7 +338,7 @@ private:
         if constexpr (pop == pop_first::yes)
             kmer_values_in_window.pop_front();
 
-        const uint64_t kmerhash = std::min<uint64_t>((kmer_value ^ seed) & minimiser_mask, (kmer_value_rev ^ seed) & minimiser_mask);
+        const uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev) ^ seed;
         kmer_values_in_window.push_back(kmerhash);
     }
 
@@ -368,35 +351,32 @@ private:
 
     void init(minimiser_and_window_hash_parameters const & params)
     {
-        seed = params.seed;
+        seed = params.seed & kmer_mask;
         minimiser_size = params.minimiser_size;
-        minimisers_in_window = params.window_size - params.minimiser_size;
+        window_size = params.window_size;
+        minimisers_in_window = window_size - minimiser_size;
 
         uint64_t new_rank = seqan3::to_rank(*range_it);
-        kmer_value <<= 2;
-        kmer_value |= new_rank;
-        kmer_value &= kmer_mask; // necessary here?
         current.window_value <<= 2;
         current.window_value |= new_rank;
-        current.window_value &= window_mask; // necessary here?
-        for (size_t i = 1u; i < params.minimiser_size; ++i)
-        {
+        current.window_value_rev >>= 2;
+        current.window_value_rev |= ((new_rank^0b11) << 2*(window_size-1));
+        for (size_t i = 1u; i < params.minimiser_size; ++i) {
             ++range_position;
             ++range_it;
             new_rank = seqan3::to_rank(*range_it);
-            kmer_value <<= 2;
-            kmer_value |= new_rank;
-            kmer_value &= kmer_mask; // necessary here?
             current.window_value <<= 2;
             current.window_value |= new_rank;
-            current.window_value &= window_mask; // necessary here?
+            current.window_value_rev >>= 2;
+            current.window_value_rev |= ((new_rank^0b11) << 2*(window_size-1));
         }
-        kmer_value_rev = srindex::util::crc(kmer_value, minimiser_size);
+        kmer_value = current.window_value & kmer_mask;
+        kmer_value_rev = current.window_value_rev >> 2*(window_size - minimiser_size);
 
-        const uint64_t kmerhash = std::min<uint64_t>((kmer_value ^ seed) & minimiser_mask, (kmer_value_rev ^ seed) & minimiser_mask);
+        const uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev) ^ seed;
         kmer_values_in_window.push_back(kmerhash);
 
-        for (size_t i = params.minimiser_size; i < params.window_size; ++i)
+        for (size_t i = minimiser_size; i < window_size; ++i)
             next_window<pop_first::no>();
 
         find_minimiser_in_window();
@@ -421,7 +401,6 @@ private:
         if (uint64_t new_kmer_value = kmer_values_in_window.back(); new_kmer_value < current.minimiser_value)
         {
             current.minimiser_value = new_kmer_value;
-            // minimiser_position = kmer_values_in_window.size() - 1u;
             minimiser_position = minimisers_in_window;
             return true;
         }
@@ -572,11 +551,9 @@ private:
     range_iterator_t range_it{};
 
     uint64_t kmer_mask{std::numeric_limits<uint64_t>::max()};
-    uint64_t minimiser_mask{std::numeric_limits<uint64_t>::max()};
     uint64_t kmer_value{};
     uint64_t kmer_value_rev{};
-    // uint64_t seed{0x8F'3F'73'B5'CF'1C'9A'DE};
-    uint64_t seed{};
+    uint64_t seed{0x8F'3F'73'B5'CF'1C'9A'DE};
 
     uint64_t minimiser_size{};
 
@@ -589,15 +566,14 @@ private:
 
     std::deque<uint64_t> kmer_values_in_window{};
 
-    static inline constexpr uint64_t compute_mask(uint64_t const kmer_size)
-    {
-        assert(kmer_size > 0u);
-        assert(kmer_size <= 32u);
+    static inline constexpr uint64_t compute_mask(uint64_t const size) {
+        assert(size > 0u);
+        assert(size <= 64u);
 
-        if (kmer_size == 32u)
+        if (size == 64u)
             return std::numeric_limits<uint64_t>::max();
         else
-            return (uint64_t{1u} << (2u * kmer_size)) - 1u;
+            return (uint64_t{1u} << (size)) - 1u;
     }
 
 public:
@@ -613,7 +589,6 @@ public:
         :
         range_it{it.range_it},
         kmer_mask{it.kmer_mask},
-        minimiser_mask{it.minimiser_mask},
         kmer_value{it.kmer_value},
         range_size{it.range_size},
         range_position{it.range_position},
@@ -627,10 +602,8 @@ public:
                    size_t const range_size,
                    minimiser_hash_and_positions_parameters params) :
         range_it{std::move(range_iterator)},
-        kmer_mask{compute_mask(params.minimiser_size)},
-        minimiser_mask{compute_mask(params.minimiser_size-1)},
+        kmer_mask{compute_mask(2u * params.minimiser_size)},
         minimiser_size{params.minimiser_size},
-        seed{params.seed},
         range_size{range_size},
         params{std::move(params)}
     {
@@ -679,13 +652,9 @@ private:
 
     void rolling_hash()
     {
-        uint64_t const new_rank = seqan3::to_rank(*range_it);
-
-        kmer_value <<= 2;
-        kmer_value |= new_rank;
-        kmer_value &= kmer_mask;
-
-        kmer_value_rev = srindex::util::crc(kmer_value, minimiser_size);
+        uint64_t const base = seqan3::to_rank(*range_it);
+        kmer_value = ((kmer_value << 2) | base) & kmer_mask;
+        kmer_value_rev = (kmer_value_rev >> 2) | ((base^0b11) << 2*(minimiser_size-1));
     }
 
     template <pop_first pop>
@@ -699,8 +668,7 @@ private:
         if constexpr (pop == pop_first::yes)
             kmer_values_in_window.pop_front();
 
-        const uint64_t kmerhash = std::min<uint64_t>((kmer_value ^ seed) & minimiser_mask, (kmer_value_rev ^ seed) & minimiser_mask);
-        // const uint64_t kmerhash = std::min<uint64_t>(murmurhash2_64::hash(kmer_value, seed) & minimiser_mask, murmurhash2_64::hash(kmer_value_rev, seed) & minimiser_mask);
+        const uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev) ^ seed;
         
         kmer_values_in_window.push_back(kmerhash);
     }
@@ -714,31 +682,26 @@ private:
 
     void init()
     {
-        seed = params.seed;
+        seed = params.seed & kmer_mask;
+        minimiser_size = params.minimiser_size;
 
-        uint64_t new_rank = seqan3::to_rank(*range_it);
-        kmer_value <<= 2;
-        kmer_value |= new_rank;
-        kmer_value &= kmer_mask; // remove?
-        for (size_t i = 1u; i < params.minimiser_size; ++i)
-        {
+        uint64_t base = seqan3::to_rank(*range_it);
+        kmer_value = ((kmer_value << 2) | base);
+        kmer_value_rev = (kmer_value_rev >> 2) | ((base^0b11) << 2*(minimiser_size-1));
+        for (size_t i = 1u; i < minimiser_size; ++i) {
             ++range_position;
             ++range_it;
 
-            new_rank = seqan3::to_rank(*range_it);
-            kmer_value <<= 2;
-            kmer_value |= new_rank;
-            kmer_value &= kmer_mask; // remove?
+            base = seqan3::to_rank(*range_it);
+            kmer_value = ((kmer_value << 2) | base);
+            kmer_value_rev = (kmer_value_rev >> 2) | ((base^0b11) << 2*(minimiser_size-1));
         }
-        
-        kmer_value_rev = srindex::util::crc(kmer_value, minimiser_size);
 
-        const uint64_t kmerhash = std::min<uint64_t>((kmer_value ^ seed) & minimiser_mask, (kmer_value_rev ^ seed) & minimiser_mask);
-        // const uint64_t kmerhash = std::min<uint64_t>(murmurhash2_64::hash(kmer_value, seed) & minimiser_mask, murmurhash2_64::hash(kmer_value_rev, seed) & minimiser_mask);
+        const uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev) ^ seed;
         
         kmer_values_in_window.push_back(kmerhash);
 
-        for (size_t i = params.minimiser_size; i < params.window_size; ++i)
+        for (size_t i = minimiser_size; i < params.window_size; ++i)
             next_window<pop_first::no>();
 
         find_minimiser_in_window();
@@ -771,9 +734,6 @@ private:
         {
             update_cache();
             find_minimiser_in_window();
-            // If the minimiser value stays the same, we combine the results.
-            // I.e., we do not report a new minimiser.
-            // https://godbolt.org/z/9djWfnEGv
             bool const same_value = current.minimiser_value == cached.minimiser_value;
             current.occurrences *= same_value;
             current.occurrences += same_value;

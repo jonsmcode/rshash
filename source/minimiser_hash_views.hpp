@@ -195,7 +195,7 @@ private:
 
     uint64_t kmer_mask{std::numeric_limits<uint64_t>::max()};
     uint64_t window_mask{std::numeric_limits<uint64_t>::max()};
-    uint64_t seed{1};
+    uint64_t seed{};
     // uint64_t seed{0x8F'3F'73'B5'CF'1C'9A'DE};
     uint8_t minimisers_in_window{};
 
@@ -317,7 +317,7 @@ private:
         if constexpr (pop == pop_first::yes)
             kmer_values_in_window.pop_front();
 
-        const uint64_t kmerhash = murmurhash2_64::hash(kmer_value, seed) & kmer_mask;
+        const uint64_t kmerhash = murmurhash2_64::hash(kmer_value, 1) & kmer_mask;
         // const uint64_t kmerhash = (kmer_value ^ seed) & kmer_mask;
         kmer_values_in_window.push_back(kmerhash);
         // kmer_values_in_window.push_back(kmer_value);
@@ -348,7 +348,7 @@ private:
             ++range_it;
             rolling_hash();
         }
-        const uint64_t kmerhash = murmurhash2_64::hash(kmer_value, seed) & kmer_mask;
+        const uint64_t kmerhash = murmurhash2_64::hash(kmer_value, 1) & kmer_mask;
         // const uint64_t kmerhash = (kmer_value ^ seed) & kmer_mask;
         kmer_values_in_window.push_back(kmerhash);
         // kmer_values_in_window.push_back(kmer_value);
@@ -529,7 +529,7 @@ private:
 
     uint64_t kmer_mask{std::numeric_limits<uint64_t>::max()};
     uint64_t kmer_value{};
-    uint64_t seed{1};
+    uint64_t seed{};
     // uint64_t seed{0x8F'3F'73'B5'CF'1C'9A'DE};
 
     size_t range_size{};

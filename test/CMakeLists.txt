@@ -16,4 +16,7 @@ target_link_libraries (minimizer_stats seqan3::seqan3)
 add_executable(minimizer_stats2 minimizer_stats2.cpp)
 target_link_libraries (minimizer_stats2 seqan3::seqan3)
 
+add_executable(minimizer_stats3 minimizer_stats3.cpp)
+target_link_libraries (minimizer_stats3 seqan3::seqan3)
+
 add_executable(convert convert.cpp)

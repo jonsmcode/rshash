@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# PROGRAM="../build/source/lookup2"
 PROGRAM="../build/source/lookup_unitigsr"
 # PROGRAM="../build/source/comp_lookup"
 
@@ -58,6 +59,26 @@ run()
       spacer=$(grep '^R:' prog_out.txt | cut -d':' -f2 | xargs)
       spaces=$(grep '^S:' prog_out.txt | cut -d':' -f2 | xargs)
       spacetotal=$(grep '^total:' prog_out.txt | cut -d':' -f2 | xargs)
+      # file_size=$(stat -f%z "${DIR}/${BASENAME}.dict")
+      # buildtime=$(cat time.txt | grep "real" | awk '{print $1}')
+      # buildmem=$(cat time.txt  | grep "maximum resident set size" | awk '{print $1}')
+      # textlength=$(grep "text length: " prog_out.txt | sed -E 's/.*text length: ([0-9]+).*/\1/')
+      # density_r1=$(awk '/density r1/ {print $3}' prog_out.txt | tr -d '%')
+      # density_r2=$(awk '/density r2/ {print $3}' prog_out.txt | tr -d '%')
+      # density_s1=$(awk '/density s1/ {print $3}' prog_out.txt | tr -d '%')
+      # density_s2=$(awk '/density s2/ {print $3}' prog_out.txt | tr -d '%')
+      # no_kmers=$(awk '/no kmers/ {print $3}' prog_out.txt)
+      # no_minimiser1=$(awk '/no minimiser1/ {print $3}' prog_out.txt)
+      # no_minimiser2=$(awk '/no minimiser2/ {print $3}' prog_out.txt)
+      # no_distinct_minimiser1=$(awk '/no distinct minimiser1/ {print $4}' prog_out.txt)
+      # no_distinct_minimiser2=$(awk '/no distinct minimiser2/ {print $4}' prog_out.txt)
+      # spaceoffsets1=$(grep '^offsets1:' prog_out.txt | cut -d':' -f2 | xargs)
+      # spaceoffsets2=$(grep '^offsets2:' prog_out.txt | cut -d':' -f2 | xargs)
+      # spacer1=$(grep '^R_1:' prog_out.txt | cut -d':' -f2 | xargs)
+      # spacer2=$(grep '^R_2:' prog_out.txt | cut -d':' -f2 | xargs)
+      # spaces1=$(grep '^S_1:' prog_out.txt | cut -d':' -f2 | xargs)
+      # spaces2=$(grep '^S_2:' prog_out.txt | cut -d':' -f2 | xargs)
+      # spacetotal=$(grep '^total:' prog_out.txt | cut -d':' -f2 | xargs)
 
       parent_dir=$(dirname "$f")
       file_name=$(basename "$f")
@@ -80,8 +101,8 @@ run()
 
       querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
       
-      # echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$querytime,$querymem,$k_mers",$found" >> "$CSV"
-      echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$spaceoffsets,$spacer,$spaces,$spacetotal,$density_r,$density_s,$no_minimiser,$querytimekmer,$querymem,$k_mers",$found" >> "$CSV"
+      # echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$spaceoffsets1,$spaceoffsets2,$spacer1,$spacer2,$spaces1,$spaces2,$density_r1,$density_r2,$density_s1,$density_s2,$no_minimiser1,$no_minimiser2,$no_distinct_minimiser1,$no_distinct_minimiser2,$spacetotal,$querytimekmer,$querymem,$k_mers",$found" >> "$CSV"
+      echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$spaceoffsets,$spacer,$spaces,$density_r,$density_s,$no_minimiser,$spacetotal,$querytimekmer,$querymem,$k_mers",$found" >> "$CSV"
     done
 
   done
@@ -90,7 +111,8 @@ run()
 
 for data in $(find $DIR -mindepth 0 -maxdepth 0 -type d); do
   FILENAME=$(basename $data)
-  echo "textfile,queryfile,k,m,buildtime [s],buildmem [B],indexsize [B],spaceoffsets [bits/kmer],spaceR [bits/kmer],spaceS [bits/kmer],spacetotal [bits/kmer],density_r [%],density_s [%], no minimizer, querytime [ns/kmer],querymem [B],kmers,found" > "$CSV"
+  # echo "textfile,queryfile,k,m,buildtime [s],buildmem [B],indexsize [B],spaceoffsets1 [bits/kmer],spaceoffsets2 [bits/kmer],spaceR1 [bits/kmer],spaceR2 [bits/kmer],spaceS1 [bits/kmer],spaceS2 [bits/kmer],density_r1 [%],density_r2 [%],density_s1 [%],density_s2 [%],no minimizer1,no minimizer2, no distinct minimizer1,no distinct minimizer2,spacetotal [bits/kmer],querytime [ns/kmer],querymem [B],kmers,found" > "$CSV"
+  echo "textfile,queryfile,k,m,buildtime [s],buildmem [B],indexsize [B],spaceoffsets [bits/kmer],spaceR [bits/kmer],spaceS [bits/kmer],density_r [%],density_s [%], no minimizer, spacetotal [bits/kmer], querytime [ns/kmer],querymem [B],kmers,found" > "$CSV"
   # echo "textfile,queryfile,k,m,buildtime,buildmem,filesize,querytime,querymem,kmers,found" > "$CSV"
   run $data/
 done
