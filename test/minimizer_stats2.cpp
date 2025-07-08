@@ -114,7 +114,7 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
                 r2_[minimiser.minimiser2_value] = 1;
         }
     }
-    seqan3::contrib::sdsl::util::clear(r);
+
     delete[] count;
 
     seqan3::contrib::sdsl::rank_support_v<1> r1_rank = seqan3::contrib::sdsl::rank_support_v<1>(&r1);
@@ -171,7 +171,6 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "no freq minimiser: " << freq_minimzer.size() << '\n';
     std::cout << "no freq kmers: " << freq_kmers.size() << '\n';
 
-    seqan3::contrib::sdsl::util::clear(r2_);
     delete[] count2_;
 
     seqan3::contrib::sdsl::rank_support_v<1> r2_rank = seqan3::contrib::sdsl::rank_support_v<1>(&r2);
@@ -297,8 +296,8 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
 
 int main(int argc, char** argv)
 {
-    std::filesystem::path path = "/bigdata/ag_abi/jonas/datasets/human.k31.unitigs.fa.ust.fa.gz";
-    // std::filesystem::path path = "/Users/adm_js4718fu/datasets/unitigs/human.k31.unitigs.fa.ust.fa.gz";
+    // std::filesystem::path path = "/bigdata/ag_abi/jonas/datasets/human.k31.unitigs.fa.ust.fa.gz";
+    std::filesystem::path path = "/Users/adm_js4718fu/datasets/unitigs/human.k31.unitigs.fa.ust.fa.gz";
     std::vector<std::vector<seqan3::dna4>> text;
     load_file(path, text);
     stats(text);
