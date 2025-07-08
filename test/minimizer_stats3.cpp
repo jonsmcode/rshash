@@ -41,7 +41,7 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
         N += record.size();
     }
     uint8_t m1 = 16;
-    uint8_t m2 = 16;
+    uint8_t m2 = 18;
 
     // const size_t span = k-m;
     const size_t span = 100;
@@ -275,7 +275,8 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
 
 int main(int argc, char** argv)
 {
-    std::filesystem::path path = "/Users/adm_js4718fu/datasets/unitigs/human.k31.unitigs.fa.ust.fa.gz";
+    std::filesystem::path path = "/bigdata/ag_abi/jonas/datasets/human.k31.unitigs.fa.ust.fa.gz";
+    // std::filesystem::path path = "/Users/adm_js4718fu/datasets/unitigs/human.k31.unitigs.fa.ust.fa.gz";
     std::vector<std::vector<seqan3::dna4>> text;
     load_file(path, text);
     stats(text);
