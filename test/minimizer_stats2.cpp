@@ -123,7 +123,7 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "count minimisers2...\n";
     size_t c2_ = r2__rank(M);
     uint8_t* count2_ = new uint8_t[c2_];
-    std::memset(count2_, 0, c*sizeof(uint8_t));
+    std::memset(count2_, 0, c2_*sizeof(uint8_t));
 
     for(auto & sequence : input) {
         for(auto && minimiser : sequence | view2) {
