@@ -3,13 +3,14 @@
 #include <seqan3/io/sequence_file/all.hpp>
 #include <seqan3/contrib/sdsl-lite.hpp>
 #include <seqan3/core/debug_stream.hpp>
+#include <seqan3/alphabet/container/bitpacked_sequence.hpp>
 
 #include "../source/minimiser_rev_hash_views.hpp"
 #include "../source/minimiser_rev_hash_views3.hpp"
 
 
-const uint8_t m_thres = 10;
-const uint8_t m_thres2 = 10;
+const uint8_t m_thres = 20;
+const uint8_t m_thres2 = 20;
 const uint64_t seed1 = 0x8F'3F'73'B5'CF'1C'9A'DE;
 const uint64_t seed2 = 0x29'6D'BD'33'32'56'8C'64;
 
@@ -141,34 +142,49 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
 
     // std::cout << "filling R2 and HT...\n";
 
-    seqan3::contrib::sdsl::bit_vector r2 = seqan3::contrib::sdsl::bit_vector(M2, 0);
-    std::unordered_set<uint64_t> freq_kmers;
-    std::unordered_set<uint64_t> freq_minimzer;
+    // seqan3::contrib::sdsl::bit_vector r2 = seqan3::contrib::sdsl::bit_vector(M2, 0);
+    // std::unordered_set<uint64_t> freq_kmers;
+    // std::unordered_set<uint64_t> freq_minimzer;
 
-    auto view3 = srindex::views::minimiser_and_window_hash({.minimiser_size = m2, .window_size = k, .seed=seed2});
+    // auto view3 = srindex::views::minimiser_and_window_hash({.minimiser_size = m2, .window_size = k, .seed=seed2});
 
-    for(auto & sequence : input) {
-        for(auto && minimiser : sequence | view3) {
-            if(r2_[minimiser.minimiser_value]) {
-                size_t i = r2__rank(minimiser.minimiser_value);
-                if(count2_[i] < m_thres2)
-                    r2[minimiser.minimiser_value] = 1;
-                else {
-                    freq_kmers.insert(minimiser.window_value);
-                    freq_minimzer.insert(minimiser.minimiser_value);
-                }
-            }
-        }
-    }
+    // for(auto & sequence : input) {
+    //     for(auto && minimiser : sequence | view3) {
+    //         if(r2_[minimiser.minimiser_value]) {
+    //             size_t i = r2__rank(minimiser.minimiser_value);
+    //             if(count2_[i] < m_thres2)
+    //                 r2[minimiser.minimiser_value] = 1;
+    //             else {
+    //                 freq_kmers.insert(minimiser.window_value);
+    //                 freq_minimzer.insert(minimiser.minimiser_value);
+    //             }
+    //         }
+    //     }
+    // }
 
-    for (const auto& kmer: freq_kmers) {
-        seqan3::debug_stream << kmer_to_string(kmer, k);
-    }
-    std::cout << '\n';
+    // for (const auto& kmer: freq_kmers) {
+    //     seqan3::debug_stream << kmer_to_string(kmer, k);
+    // }
+    // std::cout << '\n';
     // std::cout << "no freq kmers: " << freq_kmers.size() << '\n';
 
     // std::cout << "no freq minimiser: " << freq_minimzer.size() << '\n';
     // std::cout << "no freq kmers: " << freq_kmers.size() << '\n';
+
+    for(auto & sequence : input) {
+        for(auto && minimiser : sequence | view2) {
+            if(r2_[minimiser.minimiser_value]) {
+                size_t i = r2__rank(minimiser.minimiser_value);
+                if(count2_[i] >= m_thres2) {
+                    for(uint64_t j = minimiser.range_position; j < minimiser.range_position + k + minimiser.occurrences; j++) {
+                        seqan3::debug_stream << sequence[j];
+                    }
+                    seqan3::debug_stream << ' ';
+                }
+            }
+        }
+    }
+    seqan3::debug_stream << '\n';
 
     delete[] count2_;
 
@@ -295,8 +311,8 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
 
 int main(int argc, char** argv)
 {
-    std::filesystem::path path = "/bigdata/ag_abi/jonas/datasets/human.k31.unitigs.fa.ust.fa.gz";
-    // std::filesystem::path path = "/Users/adm_js4718fu/datasets/unitigs/human.k31.unitigs.fa.ust.fa.gz";
+    // std::filesystem::path path = "/bigdata/ag_abi/jonas/datasets/human.k31.unitigs.fa.ust.fa.gz";
+    std::filesystem::path path = "/Users/adm_js4718fu/datasets/unitigs/human.k31.unitigs.fa.ust.fa.gz";
     std::vector<std::vector<seqan3::dna4>> text;
     load_file(path, text);
     stats(text);
