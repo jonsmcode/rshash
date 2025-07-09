@@ -162,13 +162,13 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
         }
     }
 
-    // for (const auto& kmer: freq_kmers) {
+    for (const auto& kmer: freq_kmers) {
     // for (const auto& kmer: freq_minimzer) {
-    //     // seqan3::debug_stream << kmer_to_string(kmer, k);
-    //     seqan3::debug_stream << kmer_to_string(kmer, m) << ' ';
-    // }
-    // std::cout << '\n';
-    std::cout << "no freq minimiser: " << freq_minimzer.size() << '\n';
+        seqan3::debug_stream << kmer_to_string(kmer, k);
+        // seqan3::debug_stream << kmer_to_string(kmer, m) << ' ';
+    }
+    std::cout << '\n';
+    // std::cout << "no freq minimiser: " << freq_minimzer.size() << '\n';
     std::cout << "no freq kmers: " << freq_kmers.size() << '\n';
 
     delete[] count2_;

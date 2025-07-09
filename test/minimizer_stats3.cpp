@@ -14,6 +14,18 @@ const uint64_t seed1 = 0x8F'3F'73'B5'CF'1C'9A'DE;
 const uint64_t seed2 = 0x29'6D'BD'33'32'56'8C'64;
 
 
+seqan3::dna4_vector kmer_to_string(uint64_t kmer, size_t const kmer_size)
+{
+    seqan3::dna4_vector result(kmer_size);
+    for (size_t i = 0; i < kmer_size; ++i)
+    {
+        result[kmer_size - 1 - i].assign_rank(kmer & 0b11);
+        kmer >>= 2;
+    }
+    return result;
+}
+
+
 struct my_traits:seqan3::sequence_file_input_default_traits_dna {
     using sequence_alphabet = seqan3::dna4;
 };
@@ -45,8 +57,8 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
 
     // const size_t span = k-m;
     const size_t span = 100;
-    std::cout << "m1: " << +m1 << '\n';
-    std::cout << "m2: " << +m2 << '\n';
+    // std::cout << "m1: " << +m1 << '\n';
+    // std::cout << "m2: " << +m2 << '\n';
 
     auto view1 = srindex::views::minimiser_hash_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
     auto view2 = srindex::views::minimiser_hash_and_positions({.minimiser_size = m2, .window_size = k, .seed=seed2});
@@ -55,7 +67,7 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     const uint64_t M1 = 1ULL << (m1+m1);
     const uint64_t M2 = 1ULL << (m2+m2);
 
-    std::cout << "scanning minimizers...\n";
+    // std::cout << "scanning minimizers...\n";
     seqan3::contrib::sdsl::bit_vector r = seqan3::contrib::sdsl::bit_vector(M1, 0);
     
     for(auto & record : input) {
@@ -65,8 +77,8 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     seqan3::contrib::sdsl::rank_support_v<1> r_rank = seqan3::contrib::sdsl::rank_support_v<1>(&r);
 
     size_t c = r_rank(M1);
-    std::cout << "found " << c << " distinct minimisers \n";
-    std::cout << "counting minimisers...\n";
+    // std::cout << "found " << c << " distinct minimisers \n";
+    // std::cout << "counting minimisers...\n";
     
     uint8_t* count = new uint8_t[c];
     std::memset(count, 0, c*sizeof(uint8_t));
@@ -88,7 +100,7 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
         }
     }
 
-    std::cout << "filling R1...\n";
+    // std::cout << "filling R1...\n";
     seqan3::contrib::sdsl::bit_vector r1 = seqan3::contrib::sdsl::bit_vector(M1, 0);
     seqan3::contrib::sdsl::bit_vector r2_ = seqan3::contrib::sdsl::bit_vector(M2, 0);
 
@@ -107,7 +119,7 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     seqan3::contrib::sdsl::rank_support_v<1> r1_rank = seqan3::contrib::sdsl::rank_support_v<1>(&r1);
     seqan3::contrib::sdsl::rank_support_v<1> r2__rank = seqan3::contrib::sdsl::rank_support_v<1>(&r2_);
 
-    std::cout << "count minimisers2...\n";
+    // std::cout << "count minimisers2...\n";
     size_t c2_ = r2__rank(M2);
     uint8_t* count2_ = new uint8_t[c2_];
     std::memset(count2_, 0, c2_*sizeof(uint8_t));
@@ -127,7 +139,7 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
         }
     }
 
-    std::cout << "filling R2 and HT...\n";
+    // std::cout << "filling R2 and HT...\n";
 
     seqan3::contrib::sdsl::bit_vector r2 = seqan3::contrib::sdsl::bit_vector(M2, 0);
     std::unordered_set<uint64_t> freq_kmers;
@@ -149,127 +161,133 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
         }
     }
 
-    std::cout << "no freq minimiser: " << freq_minimzer.size() << '\n';
-    std::cout << "no freq kmers: " << freq_kmers.size() << '\n';
+    for (const auto& kmer: freq_kmers) {
+        seqan3::debug_stream << kmer_to_string(kmer, k);
+    }
+    std::cout << '\n';
+    // std::cout << "no freq kmers: " << freq_kmers.size() << '\n';
+
+    // std::cout << "no freq minimiser: " << freq_minimzer.size() << '\n';
+    // std::cout << "no freq kmers: " << freq_kmers.size() << '\n';
 
     delete[] count2_;
 
-    seqan3::contrib::sdsl::rank_support_v<1> r2_rank = seqan3::contrib::sdsl::rank_support_v<1>(&r2);
+    // seqan3::contrib::sdsl::rank_support_v<1> r2_rank = seqan3::contrib::sdsl::rank_support_v<1>(&r2);
 
 
-    std::cout << "count found minimisers1...\n";
-    size_t c1 = r1_rank(M1);
-    uint8_t* count1 = new uint8_t[c1];
-    std::memset(count1, 0, c1*sizeof(uint8_t));
-    for(auto & sequence : input) {
-        for(auto && minimiser : sequence | view1) {
-            if(r1[minimiser.minimiser_value]) {
-                size_t i = r1_rank(minimiser.minimiser_value);
-                count1[i] += minimiser.occurrences/span+1;
-            }
-        }
-    }
-    uint64_t n1 = 0;
-    for(uint64_t i=0; i < c1; i++)
-        n1 += count1[i];
-    std::cout << "distinct minimiser1: " << c1 << " total number: " << n1 << '\n';
+    // std::cout << "count found minimisers1...\n";
+    // size_t c1 = r1_rank(M1);
+    // uint8_t* count1 = new uint8_t[c1];
+    // std::memset(count1, 0, c1*sizeof(uint8_t));
+    // for(auto & sequence : input) {
+    //     for(auto && minimiser : sequence | view1) {
+    //         if(r1[minimiser.minimiser_value]) {
+    //             size_t i = r1_rank(minimiser.minimiser_value);
+    //             count1[i] += minimiser.occurrences/span+1;
+    //         }
+    //     }
+    // }
+    // uint64_t n1 = 0;
+    // for(uint64_t i=0; i < c1; i++)
+    //     n1 += count1[i];
+    // std::cout << "distinct minimiser1: " << c1 << " total number: " << n1 << '\n';
 
-    std::cout << "count found minimisers2...\n";
-    size_t c2 = r2_rank(M2);
-    uint8_t* count2 = new uint8_t[c2];
-    std::memset(count2, 0, c2*sizeof(uint8_t));
+    // std::cout << "count found minimisers2...\n";
+    // size_t c2 = r2_rank(M2);
+    // uint8_t* count2 = new uint8_t[c2];
+    // std::memset(count2, 0, c2*sizeof(uint8_t));
 
-    for(auto & sequence : input) {
-        for(auto && minimiser : sequence | view2) {
-            if(r2[minimiser.minimiser_value]) {
-                size_t i = r2_rank(minimiser.minimiser_value);
-                count2[i] += minimiser.occurrences/span+1;
-            }
-        }
-    }
-    uint64_t n2 = 0;
-    for(uint64_t i=0; i < c2; i++)
-        n2 += count2[i];
+    // for(auto & sequence : input) {
+    //     for(auto && minimiser : sequence | view2) {
+    //         if(r2[minimiser.minimiser_value]) {
+    //             size_t i = r2_rank(minimiser.minimiser_value);
+    //             count2[i] += minimiser.occurrences/span+1;
+    //         }
+    //     }
+    // }
+    // uint64_t n2 = 0;
+    // for(uint64_t i=0; i < c2; i++)
+    //     n2 += count2[i];
 
-    std::cout << "distinct minimiser2: " << c2 << " total number: " << n2 << '\n';
-    std::cout << "freq kmers: " << freq_kmers.size() << " " << (double) freq_kmers.size()/kmers*100 << "%\n";
+    // std::cout << "distinct minimiser2: " << c2 << " total number: " << n2 << '\n';
+    // std::cout << "freq kmers: " << freq_kmers.size() << " " << (double) freq_kmers.size()/kmers*100 << "%\n";
 
-    uint64_t thresholds1[9] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
-    uint64_t* counter1 = new uint64_t[9];
-    std::memset(counter1, 0, 9*sizeof(uint64_t));
+    // uint64_t thresholds1[9] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
+    // uint64_t* counter1 = new uint64_t[9];
+    // std::memset(counter1, 0, 9*sizeof(uint64_t));
 
-    for(uint64_t i=0; i < c1; i++) {
-        for(int j=8; j >= 0; j--) {
-            if(count1[i] >= thresholds1[j]) {
-                counter1[j]++;
-                break;
-            }
-        }
-    }
+    // for(uint64_t i=0; i < c1; i++) {
+    //     for(int j=8; j >= 0; j--) {
+    //         if(count1[i] >= thresholds1[j]) {
+    //             counter1[j]++;
+    //             break;
+    //         }
+    //     }
+    // }
 
-    uint64_t thresholds2[18] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 30, 40, 50, 100, 1000, 10000, 100000};
-    uint64_t* counter2 = new uint64_t[18];
-    std::memset(counter2, 0, 18*sizeof(uint64_t));
-    for(uint64_t i=0; i < c2; i++) {
-        for(int j=17; j >= 0; j--) {
-            if(count2[i] >= thresholds2[j]) {
-                counter2[j]++;
-                break;
-            }
-        }
-    }
+    // uint64_t thresholds2[18] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 30, 40, 50, 100, 1000, 10000, 100000};
+    // uint64_t* counter2 = new uint64_t[18];
+    // std::memset(counter2, 0, 18*sizeof(uint64_t));
+    // for(uint64_t i=0; i < c2; i++) {
+    //     for(int j=17; j >= 0; j--) {
+    //         if(count2[i] >= thresholds2[j]) {
+    //             counter2[j]++;
+    //             break;
+    //         }
+    //     }
+    // }
 
-    uint64_t cum = 0;
-    uint64_t cum_skmers = 0;
-    std::cout << "\nminimiser 1 distribution:\n";
-    for(int j=0; j < 9; j++) {
-        cum += counter1[j];
-        cum_skmers += (j+1)*counter1[j];
-        std::cout << "occurrences " << thresholds1[j] << ": " << counter1[j] << " " << (double) counter1[j]/c1*100 << "%  cum: " << cum << " " << (double) cum/c1*100 << "% covering " << (double) cum_skmers/n*100 << "% superkmers\n";
-    }
+    // uint64_t cum = 0;
+    // uint64_t cum_skmers = 0;
+    // std::cout << "\nminimiser 1 distribution:\n";
+    // for(int j=0; j < 9; j++) {
+    //     cum += counter1[j];
+    //     cum_skmers += (j+1)*counter1[j];
+    //     std::cout << "occurrences " << thresholds1[j] << ": " << counter1[j] << " " << (double) counter1[j]/c1*100 << "%  cum: " << cum << " " << (double) cum/c1*100 << "% covering " << (double) cum_skmers/n*100 << "% superkmers\n";
+    // }
 
-    std::cout << "superkmers covered by minimisers 1: " << (double) n1/n*100 << "%\n";
-    std::cout << "avg superkmers1: " << (double) n1/c1 <<  '\n';
+    // std::cout << "superkmers covered by minimisers 1: " << (double) n1/n*100 << "%\n";
+    // std::cout << "avg superkmers1: " << (double) n1/c1 <<  '\n';
 
-    std::cout << "minimiser going to level 2: " << c-c1 << "  " << (double) (c-c1)/c*100 << "% to cover " << (double) (n-n1)/n*100 << "% superkmers\n";
+    // std::cout << "minimiser going to level 2: " << c-c1 << "  " << (double) (c-c1)/c*100 << "% to cover " << (double) (n-n1)/n*100 << "% superkmers\n";
     
-    cum = 0;
-    uint64_t cum_skmers2 = 0;
-    std::cout << "\nminimiser 2 distribution:\n";
-    for(int j=0; j < 9; j++) {
-        cum += counter2[j];
-        cum_skmers2 += (j+1)*counter2[j];
-        std::cout << "occurrences " << thresholds2[j] << ": " << counter2[j] << " " << (double) counter2[j]/c2*100 << "%  cum: " << cum << " " << (double) cum/c2*100 << "% covering " << (double) cum_skmers2/n*(n-n1)/n*100 << "% (" << (double) cum_skmers2/n*(n-n1)/n*100 + (double) cum_skmers/n*100 << "%) superkmers\n";
-    }
-    for(int j=9; j < 17; j++) {
-        cum += counter2[j];
-        cum_skmers2 += (j+1)*counter2[j];
-        std::cout << thresholds2[j] << "<= occurrences < " << thresholds2[j+1] << ": " << counter2[j] << " " << (double) counter2[j]/c2*100 << "%  cum: " << cum << " " << (double) cum/c2*100 << "% covering " << (double) cum_skmers2/n*(n-n1)/n*100 << "% (" << (double) cum_skmers2/n*(n-n1)/n*100 + (double) cum_skmers/n*100 << "%) superkmers\n";
-    }
-    cum += counter2[17];
-    std::cout << "occurrences <= " << thresholds2[17] << ": " << counter2[17] << " " << (double) counter2[17]/c2*100 << "%  cum: " << cum << " " << (double) cum/c2*100 << "%\n";
+    // cum = 0;
+    // uint64_t cum_skmers2 = 0;
+    // std::cout << "\nminimiser 2 distribution:\n";
+    // for(int j=0; j < 9; j++) {
+    //     cum += counter2[j];
+    //     cum_skmers2 += (j+1)*counter2[j];
+    //     std::cout << "occurrences " << thresholds2[j] << ": " << counter2[j] << " " << (double) counter2[j]/c2*100 << "%  cum: " << cum << " " << (double) cum/c2*100 << "% covering " << (double) cum_skmers2/n*(n-n1)/n*100 << "% (" << (double) cum_skmers2/n*(n-n1)/n*100 + (double) cum_skmers/n*100 << "%) superkmers\n";
+    // }
+    // for(int j=9; j < 17; j++) {
+    //     cum += counter2[j];
+    //     cum_skmers2 += (j+1)*counter2[j];
+    //     std::cout << thresholds2[j] << "<= occurrences < " << thresholds2[j+1] << ": " << counter2[j] << " " << (double) counter2[j]/c2*100 << "%  cum: " << cum << " " << (double) cum/c2*100 << "% covering " << (double) cum_skmers2/n*(n-n1)/n*100 << "% (" << (double) cum_skmers2/n*(n-n1)/n*100 + (double) cum_skmers/n*100 << "%) superkmers\n";
+    // }
+    // cum += counter2[17];
+    // std::cout << "occurrences <= " << thresholds2[17] << ": " << counter2[17] << " " << (double) counter2[17]/c2*100 << "%  cum: " << cum << " " << (double) cum/c2*100 << "%\n";
 
-    std::cout << "avg superkmers2: " << (double) n2/c2 <<  '\n';
-    std::cout << "superkmers to cover by HT: " << 100.0 - (double) cum_skmers/n*100 - (double) cum_skmers2/n*(n-n1)/n*100 << "%\n";
-    std::cout << "kmers in HT: " << freq_kmers.size() << " " << (double) freq_kmers.size()/kmers*100 << "%\n";
+    // std::cout << "avg superkmers2: " << (double) n2/c2 <<  '\n';
+    // std::cout << "superkmers to cover by HT: " << 100.0 - (double) cum_skmers/n*100 - (double) cum_skmers2/n*(n-n1)/n*100 << "%\n";
+    // std::cout << "kmers in HT: " << freq_kmers.size() << " " << (double) freq_kmers.size()/kmers*100 << "%\n";
 
-    std::cout << "\n====== report ======\n";
-    std::cout << "text length: " << N << "\n";
-    std::cout << "no kmers: " << kmers <<  '\n';
-    std::cout << "no minimiser: " << n << "\n";
-    std::cout << "no distinct minimiser: " << c << "\n";
-    std::cout << "no minimiser1: " << n1 << "\n";
-    std::cout << "no distinct minimiser1: " << c1 << "\n";
-    std::cout << "no minimiser2: " << n2 << "\n";
-    std::cout << "no distinct minimiser2: " << c2 << "\n";
-    std::cout << "freq kmers: " << freq_kmers.size() << " " << (double) freq_kmers.size()/kmers*100 << "%\n";
-    std::cout << "density r1: " << (double) c1/M1*100 << "%\n";
-    std::cout << "density r2: " << (double) c2/M2*100 << "%\n";
+    // std::cout << "\n====== report ======\n";
+    // std::cout << "text length: " << N << "\n";
+    // std::cout << "no kmers: " << kmers <<  '\n';
+    // std::cout << "no minimiser: " << n << "\n";
+    // std::cout << "no distinct minimiser: " << c << "\n";
+    // std::cout << "no minimiser1: " << n1 << "\n";
+    // std::cout << "no distinct minimiser1: " << c1 << "\n";
+    // std::cout << "no minimiser2: " << n2 << "\n";
+    // std::cout << "no distinct minimiser2: " << c2 << "\n";
+    // std::cout << "freq kmers: " << freq_kmers.size() << " " << (double) freq_kmers.size()/kmers*100 << "%\n";
+    // std::cout << "density r1: " << (double) c1/M1*100 << "%\n";
+    // std::cout << "density r2: " << (double) c2/M2*100 << "%\n";
 
-    delete[] count1;
-    delete[] counter1;
-    delete[] count2;
-    delete[] counter2;
+    // delete[] count1;
+    // delete[] counter1;
+    // delete[] count2;
+    // delete[] counter2;
 
 }
 
