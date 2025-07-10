@@ -246,10 +246,9 @@ private:
             kmer_values2_in_window.pop_front();
         }
 
-        const uint64_t kmerhash1 = std::min<uint64_t>(kmer_value ^ seed1, kmer_value_rev ^ seed1);
-        // const uint64_t kmerhash1 = canonical_kmer ^ seed1;
-        // const uint64_t kmerhash2 = murmurhash2_64::hash(canonical_kmer, seed2) & kmer_mask;
-        const uint64_t kmerhash2 = std::min<uint64_t>(murmurhash2_64::hash(kmer_value, 1), murmurhash2_64::hash(kmer_value_rev, 1)) & kmer_mask;
+        const uint64_t canonical_kmer = std::min<uint64_t>(kmer_value, kmer_value_rev);
+        const uint64_t kmerhash1 = canonical_kmer ^ seed1;
+        const uint64_t kmerhash2 = murmurhash2_64::hash(canonical_kmer, seed2) & kmer_mask;
         
         kmer_values1_in_window.push_back(kmerhash1);
         kmer_values2_in_window.push_back(kmerhash2);
@@ -299,11 +298,9 @@ private:
         kmer_value = current.window_value & kmer_mask;
         kmer_value_rev = current.window_value_rev >> 2*(window_size - minimiser_size);
 
-        // const uint64_t canonical_kmer = std::min<uint64_t>(kmer_value, kmer_value_rev);
-        // const uint64_t kmerhash1 = canonical_kmer ^ seed1;
-        // const uint64_t kmerhash2 = murmurhash2_64::hash(canonical_kmer, seed2) & kmer_mask;
-        const uint64_t kmerhash1 = std::min<uint64_t>(kmer_value ^ seed1, kmer_value_rev ^ seed1);
-        const uint64_t kmerhash2 = std::min<uint64_t>(murmurhash2_64::hash(kmer_value, 1), murmurhash2_64::hash(kmer_value_rev, 1)) & kmer_mask;
+        const uint64_t canonical_kmer = std::min<uint64_t>(kmer_value, kmer_value_rev);
+        const uint64_t kmerhash1 = canonical_kmer ^ seed1;
+        const uint64_t kmerhash2 = murmurhash2_64::hash(canonical_kmer, seed2) & kmer_mask;
 
         kmer_values1_in_window.push_back(kmerhash1);
         kmer_values2_in_window.push_back(kmerhash2);

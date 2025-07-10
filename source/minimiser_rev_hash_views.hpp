@@ -95,8 +95,6 @@ struct murmurhash2_64 {
     }
 };
 
-
-
 namespace srindex::util {
 
 static inline uint64_t crc(uint64_t x, uint64_t k) {
@@ -343,8 +341,7 @@ private:
         if constexpr (pop == pop_first::yes)
             kmer_values_in_window.pop_front();
 
-        // const uint64_t kmerhash = murmurhash2_64::hash(std::min<uint64_t>(kmer_value, kmer_value_rev), seed) & kmer_mask;
-        const uint64_t kmerhash = std::min<uint64_t>(murmurhash2_64::hash(kmer_value, 1), murmurhash2_64::hash(kmer_value_rev, 1)) & kmer_mask;
+        const uint64_t kmerhash = murmurhash2_64::hash(std::min<uint64_t>(kmer_value, kmer_value_rev), seed) & kmer_mask;
         kmer_values_in_window.push_back(kmerhash);
     }
 
@@ -383,8 +380,7 @@ private:
         kmer_value = current.window_value & kmer_mask;
         kmer_value_rev = current.window_value_rev >> 2*(window_size - minimiser_size);
 
-        // const uint64_t kmerhash = murmurhash2_64::hash(std::min<uint64_t>(kmer_value, kmer_value_rev), seed) & kmer_mask;
-        const uint64_t kmerhash = std::min<uint64_t>(murmurhash2_64::hash(kmer_value, 1), murmurhash2_64::hash(kmer_value_rev, 1)) & kmer_mask;
+        const uint64_t kmerhash = murmurhash2_64::hash(std::min<uint64_t>(kmer_value, kmer_value_rev), seed) & kmer_mask;
         kmer_values_in_window.push_back(kmerhash);
 
         for (size_t i = minimiser_size; i < window_size; ++i)
@@ -680,8 +676,7 @@ private:
         if constexpr (pop == pop_first::yes)
             kmer_values_in_window.pop_front();
 
-        // const uint64_t kmerhash = murmurhash2_64::hash(std::min<uint64_t>(kmer_value, kmer_value_rev), seed) & kmer_mask;
-        const uint64_t kmerhash = std::min<uint64_t>(murmurhash2_64::hash(kmer_value, 1), murmurhash2_64::hash(kmer_value_rev, 1)) & kmer_mask;
+        const uint64_t kmerhash = murmurhash2_64::hash(std::min<uint64_t>(kmer_value, kmer_value_rev), seed) & kmer_mask;
         
         kmer_values_in_window.push_back(kmerhash);
     }
@@ -710,8 +705,7 @@ private:
             kmer_value_rev = (kmer_value_rev >> 2) | ((new_rank^0b11) << 2*(minimiser_size-1));
         }
 
-        // const uint64_t kmerhash = murmurhash2_64::hash(std::min<uint64_t>(kmer_value, kmer_value_rev), seed) & kmer_mask;
-        const uint64_t kmerhash = std::min<uint64_t>(murmurhash2_64::hash(kmer_value, 1), murmurhash2_64::hash(kmer_value_rev, 1)) & kmer_mask;
+        const uint64_t kmerhash = murmurhash2_64::hash(std::min<uint64_t>(kmer_value, kmer_value_rev), seed) & kmer_mask;
         
         kmer_values_in_window.push_back(kmerhash);
 
