@@ -5,13 +5,15 @@
 #include <seqan3/core/debug_stream.hpp>
 
 #include "../source/minimiser_rev_hash_views.hpp"
+#include "../source/minimiser_rev_xor_views.hpp"
 #include "../source/minimiser_rev_hash_views2.hpp"
 
 
 const uint8_t m_thres = 10;
 const uint8_t m_thres2 = 10;
 const uint64_t seed1 = 0x8F'3F'73'B5'CF'1C'9A'DE;
-const uint64_t seed2 = 0x29'6D'BD'33'32'56'8C'64;
+// const uint64_t seed2 = 0x29'6D'BD'33'32'56'8C'64;
+const uint64_t seed2 = 1;
 
 
 seqan3::dna4_vector kmer_to_string(uint64_t kmer, size_t const kmer_size)
@@ -37,8 +39,8 @@ void load_file(const std::filesystem::path &filepath, std::vector<std::vector<se
     for (auto & record : stream) {
         N += record.sequence().size();
         output.push_back(std::move(record.sequence()));
-        if(N >= 1000000000)
-            break;
+        // if(N >= 1000000000)
+        //     break;
         // if(N >= 100000000)
         //     break;
     }
@@ -62,7 +64,8 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     // const size_t span = k-m;
     const size_t span = 100;
 
-    auto view1 = srindex::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k, .seed=seed1});
+    // auto view1 = srindex::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k, .seed=seed1});
+    auto view1 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m, .window_size = k, .seed=seed1});
     auto view2 = srindex::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k, .seed=seed2});
     auto view12 = srindex::views::two_minimisers_and_window_hash({.minimiser_size = m, .window_size = k, .seed1=seed1, .seed2=seed2});
 
@@ -162,12 +165,12 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
         }
     }
 
-    for (const auto& kmer: freq_kmers) {
-    // for (const auto& kmer: freq_minimzer) {
-        seqan3::debug_stream << kmer_to_string(kmer, k);
-        // seqan3::debug_stream << kmer_to_string(kmer, m) << ' ';
-    }
-    std::cout << '\n';
+    // for (const auto& kmer: freq_kmers) {
+    // // for (const auto& kmer: freq_minimzer) {
+    //     seqan3::debug_stream << kmer_to_string(kmer, k);
+    //     // seqan3::debug_stream << kmer_to_string(kmer, m) << ' ';
+    // }
+    // std::cout << '\n';
     // std::cout << "no freq minimiser: " << freq_minimzer.size() << '\n';
     std::cout << "no freq kmers: " << freq_kmers.size() << '\n';
 
