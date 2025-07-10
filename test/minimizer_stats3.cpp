@@ -5,7 +5,7 @@
 #include <seqan3/core/debug_stream.hpp>
 #include <seqan3/alphabet/container/bitpacked_sequence.hpp>
 
-// #include "../source/minimiser_rev_hash_views.hpp"
+#include "../source/minimiser_rev_hash_views.hpp"
 #include "../source/minimiser_rev_xor_views.hpp"
 #include "../source/minimiser_rev_hash_views3.hpp"
 
@@ -63,9 +63,9 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     // std::cout << "m2: " << +m2 << '\n';
 
     // auto view1 = srindex::views::minimiser_hash_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
-    // auto view2 = srindex::views::minimiser_hash_and_positions({.minimiser_size = m2, .window_size = k, .seed=seed2});
     auto view1 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
-    auto view2 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m2, .window_size = k, .seed=seed2});
+    auto view2 = srindex::views::minimiser_hash_and_positions({.minimiser_size = m2, .window_size = k, .seed=seed2});
+    // auto view2 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m2, .window_size = k, .seed=seed2});
     auto view12 = srindex::views::two_minimisers_and_window_hash({.minimiser_size1 = m1, .minimiser_size2 = m2, .window_size = k, .seed1=seed1, .seed2=seed2});
 
     const uint64_t M1 = 1ULL << (m1+m1);
