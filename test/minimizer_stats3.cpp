@@ -5,7 +5,8 @@
 #include <seqan3/core/debug_stream.hpp>
 #include <seqan3/alphabet/container/bitpacked_sequence.hpp>
 
-#include "../source/minimiser_rev_hash_views.hpp"
+// #include "../source/minimiser_rev_hash_views.hpp"
+#include "../source/minimiser_rev_xor_views.hpp"
 #include "../source/minimiser_rev_hash_views3.hpp"
 
 
@@ -61,8 +62,10 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     // std::cout << "m1: " << +m1 << '\n';
     // std::cout << "m2: " << +m2 << '\n';
 
-    auto view1 = srindex::views::minimiser_hash_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
-    auto view2 = srindex::views::minimiser_hash_and_positions({.minimiser_size = m2, .window_size = k, .seed=seed2});
+    // auto view1 = srindex::views::minimiser_hash_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
+    // auto view2 = srindex::views::minimiser_hash_and_positions({.minimiser_size = m2, .window_size = k, .seed=seed2});
+    auto view1 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
+    auto view2 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m2, .window_size = k, .seed=seed2});
     auto view12 = srindex::views::two_minimisers_and_window_hash({.minimiser_size1 = m1, .minimiser_size2 = m2, .window_size = k, .seed1=seed1, .seed2=seed2});
 
     const uint64_t M1 = 1ULL << (m1+m1);
@@ -176,10 +179,13 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
             if(r2_[minimiser.minimiser_value]) {
                 size_t i = r2__rank(minimiser.minimiser_value);
                 if(count2_[i] >= m_thres2) {
-                    for(uint64_t j = minimiser.range_position; j < minimiser.range_position + k + minimiser.occurrences; j++) {
+                    size_t end = minimiser.range_position + k + minimiser.occurrences;
+                    if(end > sequence.size())
+                        end = sequence.size();
+                    for(uint64_t j = minimiser.range_position; j < end; j++) {
                         seqan3::debug_stream << sequence[j];
                     }
-                    seqan3::debug_stream << ' ';
+                    seqan3::debug_stream << '\n';
                 }
             }
         }
@@ -311,8 +317,8 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
 
 int main(int argc, char** argv)
 {
-    // std::filesystem::path path = "/bigdata/ag_abi/jonas/datasets/human.k31.unitigs.fa.ust.fa.gz";
-    std::filesystem::path path = "/Users/adm_js4718fu/datasets/unitigs/human.k31.unitigs.fa.ust.fa.gz";
+    std::filesystem::path path = "/bigdata/ag_abi/jonas/datasets/human.k31.unitigs.fa.ust.fa.gz";
+    // std::filesystem::path path = "/Users/adm_js4718fu/datasets/unitigs/human.k31.unitigs.fa.ust.fa.gz";
     std::vector<std::vector<seqan3::dna4>> text;
     load_file(path, text);
     stats(text);
