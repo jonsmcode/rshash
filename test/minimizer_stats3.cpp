@@ -233,25 +233,48 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "distinct minimiser2: " << c2 << " total number: " << n2 << '\n';
     std::cout << "freq kmers: " << freq_kmers.size() << " " << (double) freq_kmers.size()/kmers*100 << "%\n";
 
-    uint64_t thresholds1[9] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
-    uint64_t* counter1 = new uint64_t[9];
-    std::memset(counter1, 0, 9*sizeof(uint64_t));
+    // uint64_t thresholds1[9] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
+    // uint64_t* counter1 = new uint64_t[9];
+    // std::memset(counter1, 0, 9*sizeof(uint64_t));
+
+    // for(uint64_t i=0; i < c1; i++) {
+    //     for(int j=8; j >= 0; j--) {
+    //         if(count1[i] >= thresholds1[j]) {
+    //             counter1[j]++;
+    //             break;
+    //         }
+    //     }
+    // }
+
+    // uint64_t thresholds2[18] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 30, 40, 50, 100, 1000, 10000, 100000};
+    // uint64_t* counter2 = new uint64_t[18];
+    // std::memset(counter2, 0, 18*sizeof(uint64_t));
+    // for(uint64_t i=0; i < c2; i++) {
+    //     for(int j=17; j >= 0; j--) {
+    //         if(count2[i] >= thresholds2[j]) {
+    //             counter2[j]++;
+    //             break;
+    //         }
+    //     }
+    // }
+
+    uint64_t* counter1 = new uint64_t[m_thres];
+    std::memset(counter1, 0, m_thres*sizeof(uint64_t));
 
     for(uint64_t i=0; i < c1; i++) {
-        for(int j=8; j >= 0; j--) {
-            if(count1[i] >= thresholds1[j]) {
+        for(int j=m_thres-1; j >= 0; j--) {
+            if(count1[i] >= j+1) {
                 counter1[j]++;
                 break;
             }
         }
     }
 
-    uint64_t thresholds2[18] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 30, 40, 50, 100, 1000, 10000, 100000};
-    uint64_t* counter2 = new uint64_t[18];
-    std::memset(counter2, 0, 18*sizeof(uint64_t));
+    uint64_t* counter2 = new uint64_t[m_thres2];
+    std::memset(counter2, 0, m_thres2*sizeof(uint64_t));
     for(uint64_t i=0; i < c2; i++) {
-        for(int j=17; j >= 0; j--) {
-            if(count2[i] >= thresholds2[j]) {
+        for(int j=m_thres2-1; j >= 0; j--) {
+            if(count2[i] >= j+1) {
                 counter2[j]++;
                 break;
             }
@@ -261,10 +284,10 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     uint64_t cum = 0;
     uint64_t cum_skmers = 0;
     std::cout << "\nminimiser 1 distribution:\n";
-    for(int j=0; j < 9; j++) {
+    for(int j=0; j < m_thres; j++) {
         cum += counter1[j];
         cum_skmers += (j+1)*counter1[j];
-        std::cout << "occurrences " << thresholds1[j] << ": " << counter1[j] << " " << (double) counter1[j]/c1*100 << "%  cum: " << cum << " " << (double) cum/c1*100 << "% covering " << (double) cum_skmers/n*100 << "% superkmers\n";
+        std::cout << "occurrences " << (j+1) << ": " << counter1[j] << " " << (double) counter1[j]/c1*100 << "%  cum: " << cum << " " << (double) cum/c1*100 << "% covering " << (double) cum_skmers/n*100 << "% superkmers\n";
     }
 
     std::cout << "superkmers covered by minimisers 1: " << (double) n1/n*100 << "%\n";
@@ -275,18 +298,18 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     cum = 0;
     uint64_t cum_skmers2 = 0;
     std::cout << "\nminimiser 2 distribution:\n";
-    for(int j=0; j < 9; j++) {
+    for(int j=0; j < m_thres2; j++) {
         cum += counter2[j];
         cum_skmers2 += (j+1)*counter2[j];
-        std::cout << "occurrences " << thresholds2[j] << ": " << counter2[j] << " " << (double) counter2[j]/c2*100 << "%  cum: " << cum << " " << (double) cum/c2*100 << "% covering " << (double) cum_skmers2/n*(n-n1)/n*100 << "% (" << (double) cum_skmers2/n*(n-n1)/n*100 + (double) cum_skmers/n*100 << "%) superkmers\n";
+        std::cout << "occurrences " << (j+1) << ": " << counter2[j] << " " << (double) counter2[j]/c2*100 << "%  cum: " << cum << " " << (double) cum/c2*100 << "% covering " << (double) cum_skmers2/n*(n-n1)/n*100 << "% (" << (double) cum_skmers2/n*(n-n1)/n*100 + (double) cum_skmers/n*100 << "%) superkmers\n";
     }
-    for(int j=9; j < 17; j++) {
-        cum += counter2[j];
-        cum_skmers2 += (j+1)*counter2[j];
-        std::cout << thresholds2[j] << "<= occurrences < " << thresholds2[j+1] << ": " << counter2[j] << " " << (double) counter2[j]/c2*100 << "%  cum: " << cum << " " << (double) cum/c2*100 << "% covering " << (double) cum_skmers2/n*(n-n1)/n*100 << "% (" << (double) cum_skmers2/n*(n-n1)/n*100 + (double) cum_skmers/n*100 << "%) superkmers\n";
-    }
-    cum += counter2[17];
-    std::cout << "occurrences <= " << thresholds2[17] << ": " << counter2[17] << " " << (double) counter2[17]/c2*100 << "%  cum: " << cum << " " << (double) cum/c2*100 << "%\n";
+    // for(int j=9; j < 17; j++) {
+    //     cum += counter2[j];
+    //     cum_skmers2 += thresholds2[j]*counter2[j];
+    //     std::cout << thresholds2[j] << "<= occurrences < " << thresholds2[j+1] << ": " << counter2[j] << " " << (double) counter2[j]/c2*100 << "%  cum: " << cum << " " << (double) cum/c2*100 << "% covering " << (double) cum_skmers2/n*(n-n1)/n*100 << "% (" << (double) cum_skmers2/n*(n-n1)/n*100 + (double) cum_skmers/n*100 << "%) superkmers\n";
+    // }
+    // cum += counter2[17];
+    // std::cout << "occurrences <= " << thresholds2[17] << ": " << counter2[17] << " " << (double) counter2[17]/c2*100 << "%  cum: " << cum << " " << (double) cum/c2*100 << "%\n";
 
     std::cout << "avg superkmers2: " << (double) n2/c2 <<  '\n';
     std::cout << "superkmers to cover by HT: " << 100.0 - (double) cum_skmers/n*100 - (double) cum_skmers2/n*(n-n1)/n*100 << "%\n";
