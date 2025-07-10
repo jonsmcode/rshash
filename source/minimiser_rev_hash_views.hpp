@@ -354,7 +354,8 @@ private:
 
     void init(minimiser_and_window_hash_parameters const & params)
     {
-        seed = params.seed & kmer_mask;
+        // seed = params.seed & kmer_mask;
+        seed = params.seed;
         minimiser_size = params.minimiser_size;
         window_size = params.window_size;
         minimisers_in_window = window_size - minimiser_size;
@@ -690,7 +691,8 @@ private:
 
     void init()
     {
-        seed = params.seed & kmer_mask;
+        // seed = params.seed & kmer_mask;
+        seed = params.seed;
         minimiser_size = params.minimiser_size;
 
         uint64_t new_rank = seqan3::to_rank(*range_it);
