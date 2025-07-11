@@ -177,7 +177,7 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     //     for(auto && minimiser : sequence | view2) {
     //         if(r2_[minimiser.minimiser_value]) {
     //             size_t i = r2__rank(minimiser.minimiser_value);
-    //             if(count2_[i] >= m_thres2) {
+    //             if(count2_[i] == m_thres2) {
     //                 size_t end = minimiser.range_position + k + minimiser.occurrences;
     //                 if(end > sequence.size())
     //                     end = sequence.size();
