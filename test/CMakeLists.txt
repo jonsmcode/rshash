@@ -20,3 +20,5 @@ add_executable(minimizer_stats3 minimizer_stats3.cpp)
 target_link_libraries (minimizer_stats3 seqan3::seqan3)
 
 add_executable(convert convert.cpp)
+
+add_executable(dna_to_fasta dna_to_fasta.cpp)
