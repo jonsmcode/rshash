@@ -22,3 +22,6 @@ target_link_libraries (minimizer_stats3 seqan3::seqan3)
 add_executable(convert convert.cpp)
 
 add_executable(dna_to_fasta dna_to_fasta.cpp)
+
+add_executable(freqmin freqmin.cpp)
+target_link_libraries (freqmin seqan3::seqan3)
