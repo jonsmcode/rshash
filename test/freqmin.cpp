@@ -65,26 +65,34 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
 
     auto view = srindex::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k, .seed=seed2});
 
-    // const uint64_t M = 1ULL << (m+m);
-
-    // seqan3::contrib::sdsl::bit_vector r = seqan3::contrib::sdsl::bit_vector(M, 0);
+    const uint64_t M = 1ULL << (m+m);
+    seqan3::contrib::sdsl::bit_vector r = seqan3::contrib::sdsl::bit_vector(M, 0);
     
-    // for(auto & record : input) {
-    //     for(auto && minimiser : record | view)
-    //         r[minimiser.minimiser_value] = 1;
-    // }
-    // seqan3::contrib::sdsl::rank_support_v<1> r_rank = seqan3::contrib::sdsl::rank_support_v<1>(&r);
+    for(auto & record : input) {
+        for(auto && minimiser : record | view)
+            r[minimiser.minimiser_value] = 1;
+    }
+    seqan3::contrib::sdsl::rank_support_v<1> r_rank = seqan3::contrib::sdsl::rank_support_v<1>(&r);
     
-    // size_t c = r_rank(M);
-    // uint32_t* count_ = new uint32_t[c];
-    // std::memset(count, 0, c*sizeof(uint32_t));
+    size_t c = r_rank(M);
+    uint32_t* count_ = new uint32_t[c];
+    std::memset(count, 0, c*sizeof(uint32_t));
 
-    // for(auto & sequence : input) {
-    //     for(auto && minimiser : sequence | view) {
-    //         size_t i = r_rank(minimiser.minimiser_value);
-    //         count[i] += minimiser.occurrences/span + 1;
-    //     }
-    // }
+    uint32_t max_occs = 0;
+    uint64_t max_minimizer;
+    for(auto & sequence : input) {
+        for(auto && minimiser : sequence | view) {
+            size_t i = r_rank(minimiser.minimiser_value);
+            count[i] += minimiser.occurrences/span + 1;
+            if(count[i] > max_occs) {
+                max_occs = count[i];
+                max_minimizer = minimiser.minimiser_value;
+            }
+        }
+    }
+
+    seqan3::debug_stream << "hashed minimizer: " << kmer_to_string(max_minimizer, m) << " appearing in " << max_occs << " super-kmers\n";
+
     std::unordered_map<uint64_t, uint32_t> freq_minimizers;
     for(auto & sequence : input) {
         for(auto && minimiser : sequence | view) {
@@ -115,9 +123,10 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
         n--;
     }
 
+
+
     // for(auto & sequence : input) {
     //     for(auto && minimiser : sequence | view2) {
-    //         freq_kmers[minimiser.minimiser_value].insert(minimiser.window_value);
     //             size_t end = minimiser.range_position + k + minimiser.occurrences;
     //             if(end > sequence.size())
     //                 end = sequence.size();
