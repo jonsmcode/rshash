@@ -88,6 +88,8 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     std::unordered_map<uint64_t, uint32_t> freq_minimizers;
     for(auto & sequence : input) {
         for(auto && minimiser : sequence | view) {
+            if(!freq_minimizers.contains(minimiser.minimiser_value))
+                freq_minimizers[minimiser.minimiser_value] = 0;
             freq_minimizers[minimiser.minimiser_value] += minimiser.occurrences/span + 1;
         }
     }
