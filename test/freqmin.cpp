@@ -75,7 +75,7 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     seqan3::contrib::sdsl::rank_support_v<1> r_rank = seqan3::contrib::sdsl::rank_support_v<1>(&r);
     
     size_t c = r_rank(M);
-    uint32_t* count_ = new uint32_t[c];
+    uint32_t* count = new uint32_t[c];
     std::memset(count, 0, c*sizeof(uint32_t));
 
     uint32_t max_occs = 0;
