@@ -24,6 +24,16 @@ seqan3::dna4_vector kmer_to_string(uint64_t kmer, size_t const kmer_size)
     return result;
 }
 
+static inline constexpr uint64_t compute_mask(uint64_t const size) {
+        assert(size > 0u);
+        assert(size <= 64u);
+
+        if (size == 64u)
+            return std::numeric_limits<uint64_t>::max();
+        else
+            return (uint64_t{1u} << (size)) - 1u;
+    }
+
 
 struct my_traits:seqan3::sequence_file_input_default_traits_dna {
     using sequence_alphabet = seqan3::dna4;
@@ -50,7 +60,6 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     }
     
     uint8_t m = 16;
-    std::cout << "m: " << +m << '\n';
 
     const size_t span = 100;
 
@@ -98,7 +107,8 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
         }
     }
 
-    seqan3::debug_stream << kmer_to_string(max_minimiser, m) << " occs: " << max_occs << "\n\n";
+    std::unordered_set<uint64_t> freq_kmers;
+    const uint64_t kmer_mask = compute_mask(2u * k);
     for(auto & sequence : input) {
         for(auto && minimiser : sequence | view) {
             if(minimiser.minimiser_value == max_minimiser) {
@@ -108,11 +118,23 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
                 for(size_t j = minimiser.range_position; j < end; j++) {
                     seqan3::debug_stream << sequence[j];
                 }
+                uint64_t kmer;
+                for(size_t j = minimiser.range_position; j < minimiser.range_position + k; j++) {
+                    uint64_t const base = seqan3::to_rank(sequence[j]);
+                    kmer = ((kmer << 2) | base);
+                }
+                freq_kmers.insert(kmer);
+                for(size_t j = minimiser.range_position + k; j < end; j++) {
+                    uint64_t const base = seqan3::to_rank(sequence[j]);
+                    kmer = ((kmer << 2) | base) & kmer_mask;
+                    freq_kmers.insert(kmer);
+                }
                 seqan3::debug_stream << '\n';
             }
         }
     }
     seqan3::debug_stream << '\n';
+    seqan3::debug_stream << kmer_to_string(max_minimiser, m) << " appearing in " << max_occs << " super-kmers, coverd by " << freq_kmers.size() << " kmers\n\n";
 
     // for(auto & sequence : input) {
     //     for(auto && minimiser : sequence | view) {
