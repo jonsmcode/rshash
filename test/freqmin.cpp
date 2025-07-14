@@ -108,7 +108,7 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
                     uint64_t const base = seqan3::to_rank(sequence[j]);
                     kmer = ((kmer << 2) | base);
                 }
-                freq_kmers.insert(kmer);
+                freq_kmers.insert(kmer & kmer_mask);
                 for(size_t j = minimiser.range_position + k; j < end; j++) {
                     uint64_t const base = seqan3::to_rank(sequence[j]);
                     kmer = ((kmer << 2) | base) & kmer_mask;
