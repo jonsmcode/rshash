@@ -71,6 +71,8 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     uint8_t* count = new uint8_t[c];
     std::memset(count, 0, c*sizeof(uint8_t));
     std::unordered_map<uint64_t, uint32_t> cb;
+    uint64_t max_occs = 0;
+    uint64_t max_minimiser = 0;
 
     uint64_t kmers = 0;
     uint64_t n = 0;
@@ -80,8 +82,11 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
             size_t o = minimiser.occurrences;
 
             const uint64_t w = o/span + 1;
-            if(count[i] == m_thres)
+            if(count[i] == m_thres) {
                 cb[i] += w;
+                max_occs = std::max<uint64_t>(cb[i], max_occs);
+                max_minimiser = minimiser.minimiser_value;
+            }
             else if(count[i] + w >= m_thres) {
                 cb[i] = w - (m_thres - count[i]);
                 count[i] = m_thres;
@@ -93,22 +98,38 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
         }
     }
 
+    seqan3::debug_stream << kmer_to_string(max_minimiser, m) << " occs: " << max_occs << "\n\n";
     for(auto & sequence : input) {
         for(auto && minimiser : sequence | view) {
-            size_t i = r_rank(minimiser.minimiser_value);
-            if(count[i] == m_thres) {
+            if(minimiser.minimiser_value == max_minimiser) {
                 size_t end = minimiser.range_position + k + minimiser.occurrences;
                 if(end > sequence.size())
                     end = sequence.size();
-                for(uint64_t j = minimiser.range_position; j < end; j++) {
+                for(size_t j = minimiser.range_position; j < end; j++) {
                     seqan3::debug_stream << sequence[j];
                 }
                 seqan3::debug_stream << '\n';
-                seqan3::debug_stream << kmer_to_string(minimiser.minimiser_value, m) << ' ' << m_thres + cb[i] << '\n';
             }
         }
     }
     seqan3::debug_stream << '\n';
+
+    // for(auto & sequence : input) {
+    //     for(auto && minimiser : sequence | view) {
+    //         size_t i = r_rank(minimiser.minimiser_value);
+    //         if(count[i] == m_thres) {
+    //             size_t end = minimiser.range_position + k + minimiser.occurrences;
+    //             if(end > sequence.size())
+    //                 end = sequence.size();
+    //             for(uint64_t j = minimiser.range_position; j < end; j++) {
+    //                 seqan3::debug_stream << sequence[j];
+    //             }
+    //             seqan3::debug_stream << '\n';
+    //             seqan3::debug_stream << kmer_to_string(minimiser.minimiser_value, m) << ' ' << m_thres + cb[i] << '\n';
+    //         }
+    //     }
+    // }
+    // seqan3::debug_stream << '\n';
 
     delete[] count;
 
