@@ -96,24 +96,26 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     const uint64_t kmer_mask = compute_mask(2u * m);
     for(auto & sequence : input) {
         for(auto && minimiser : sequence | view) {
-            size_t end = minimiser.range_position + k + minimiser.occurrences;
-            if(end > sequence.size())
-                end = sequence.size();
-            // for(size_t j = minimiser.range_position; j < end; j++) {
-            //     seqan3::debug_stream << sequence[j];
-            // }
-            uint64_t kmer;
-            for(size_t j = minimiser.range_position; j < minimiser.range_position + k; j++) {
-                uint64_t const base = seqan3::to_rank(sequence[j]);
-                kmer = ((kmer << 2) | base);
-            }
-            freq_kmers.insert(kmer);
-            for(size_t j = minimiser.range_position + k; j < end; j++) {
-                uint64_t const base = seqan3::to_rank(sequence[j]);
-                kmer = ((kmer << 2) | base) & kmer_mask;
+            if(minimiser.minimiser_value == max_minimizer) {
+                size_t end = minimiser.range_position + k + minimiser.occurrences;
+                if(end > sequence.size())
+                    end = sequence.size();
+                // for(size_t j = minimiser.range_position; j < end; j++) {
+                //     seqan3::debug_stream << sequence[j];
+                // }
+                uint64_t kmer;
+                for(size_t j = minimiser.range_position; j < minimiser.range_position + k; j++) {
+                    uint64_t const base = seqan3::to_rank(sequence[j]);
+                    kmer = ((kmer << 2) | base);
+                }
                 freq_kmers.insert(kmer);
+                for(size_t j = minimiser.range_position + k; j < end; j++) {
+                    uint64_t const base = seqan3::to_rank(sequence[j]);
+                    kmer = ((kmer << 2) | base) & kmer_mask;
+                    freq_kmers.insert(kmer);
+                }
+                // seqan3::debug_stream << '\n';
             }
-            // seqan3::debug_stream << '\n';
         }
     }
     seqan3::debug_stream << freq_kmers.size() << " kmers\n";
