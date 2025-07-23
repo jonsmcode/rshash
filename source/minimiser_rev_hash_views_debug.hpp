@@ -132,6 +132,7 @@ struct minimiser_and_window_hash_parameters
 struct minimiser_and_window_hash_result
 {
     uint64_t minimiser_value;
+    uint64_t minimiser_hash;
     uint64_t window_value;
     uint64_t window_value_rev;
 };
@@ -217,7 +218,6 @@ private:
 
     uint64_t kmer_mask{std::numeric_limits<uint64_t>::max()};
     uint64_t window_mask{std::numeric_limits<uint64_t>::max()};
-    // uint64_t seed{0x8F'3F'73'B5'CF'1C'9A'DE};
     uint64_t seed{1};
     uint8_t minimisers_in_window{};
     uint64_t minimiser_size{};
@@ -233,6 +233,7 @@ private:
     value_type current{};
 
     std::deque<uint64_t> kmer_values_in_window{};
+    std::deque<uint64_t> kmer_hashes_in_window{};
 
     static inline constexpr uint64_t compute_mask(uint64_t const size)
     {
@@ -265,7 +266,8 @@ public:
         range_size{it.range_size},
         range_position{it.range_position},
         current{it.current},
-        kmer_values_in_window{it.kmer_values_in_window}
+        kmer_values_in_window{it.kmer_values_in_window},
+        kmer_hashes_in_window{it.kmer_hashes_in_window}
     {}
 
     basic_iterator(range_iterator_t range_iterator,
@@ -338,18 +340,23 @@ private:
 
         rolling_hash();
 
-        if constexpr (pop == pop_first::yes)
+        if constexpr (pop == pop_first::yes) {
+            kmer_hashes_in_window.pop_front();
             kmer_values_in_window.pop_front();
+        }
 
-        const uint64_t kmerhash = murmurhash2_64::hash(std::min<uint64_t>(kmer_value, kmer_value_rev), seed) & kmer_mask;
-        kmer_values_in_window.push_back(kmerhash);
+        const uint64_t canonical_kmer = std::min<uint64_t>(kmer_value, kmer_value_rev);
+        const uint64_t kmerhash = murmurhash2_64::hash(canonical_kmer, seed) & kmer_mask;
+        kmer_hashes_in_window.push_back(kmerhash);
+        kmer_values_in_window.push_back(canonical_kmer);
     }
 
     void find_minimiser_in_window()
     {
-        auto minimiser_it = std::ranges::min_element(kmer_values_in_window, std::less_equal<uint64_t>{});
-        current.minimiser_value = *minimiser_it;
-        minimiser_position = std::distance(std::begin(kmer_values_in_window), minimiser_it);
+        auto minimiser_it = std::ranges::min_element(kmer_hashes_in_window, std::less_equal<uint64_t>{});
+        current.minimiser_hash = *minimiser_it;
+        minimiser_position = std::distance(std::begin(kmer_hashes_in_window), minimiser_it);
+        current.minimiser_value = kmer_values_in_window[minimiser_position];
     }
 
     void init(minimiser_and_window_hash_parameters const & params)
@@ -381,8 +388,10 @@ private:
         // kmer_value = current.window_value & kmer_mask;
         // kmer_value_rev = current.window_value_rev >> 2*(window_size - minimiser_size);
 
-        const uint64_t kmerhash = murmurhash2_64::hash(std::min<uint64_t>(kmer_value, kmer_value_rev), seed) & kmer_mask;
-        kmer_values_in_window.push_back(kmerhash);
+        const uint64_t canonical_kmer = std::min<uint64_t>(kmer_value, kmer_value_rev);
+        const uint64_t kmerhash = murmurhash2_64::hash(canonical_kmer, seed) & kmer_mask;
+        kmer_hashes_in_window.push_back(kmerhash);
+        kmer_values_in_window.push_back(canonical_kmer);
 
         for (size_t i = minimiser_size; i < window_size; ++i)
             next_window<pop_first::no>();
@@ -406,9 +415,10 @@ private:
         }
 
         // Update minimiser if the new kmer value is smaller than the current minimiser.
-        if (uint64_t new_kmer_value = kmer_values_in_window.back(); new_kmer_value < current.minimiser_value)
+        if (uint64_t new_kmer_value = kmer_hashes_in_window.back(); new_kmer_value < current.minimiser_value)
         {
-            current.minimiser_value = new_kmer_value;
+            current.minimiser_hash = new_kmer_value;
+            current.minimiser_value = kmer_values_in_window.back();
             minimiser_position = minimisers_in_window;
             return true;
         }

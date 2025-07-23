@@ -25,3 +25,6 @@ add_executable(dna_to_fasta dna_to_fasta.cpp)
 
 add_executable(freqmin freqmin.cpp)
 target_link_libraries (freqmin seqan3::seqan3)
+
+add_executable(freqmins freqmins1.cpp)
+target_link_libraries (freqmins seqan3::seqan3)
