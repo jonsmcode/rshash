@@ -28,3 +28,6 @@ target_link_libraries (freqmin seqan3::seqan3)
 
 add_executable(freqmins freqmins1.cpp)
 target_link_libraries (freqmins seqan3::seqan3)
+
+add_executable(checkviews check_views.cpp)
+target_link_libraries (checkviews seqan3::seqan3)

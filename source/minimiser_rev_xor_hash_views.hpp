@@ -195,8 +195,8 @@ private:
 
     uint64_t kmer_mask{std::numeric_limits<uint64_t>::max()};
     uint64_t window_mask{std::numeric_limits<uint64_t>::max()};
-    uint64_t seed1{};
-    uint64_t seed2{};
+    uint64_t seed1{0x8F'3F'73'B5'CF'1C'9A'DE};
+    uint64_t seed2{1};
     uint8_t minimisers_in_window{};
     uint64_t minimiser_size{};
     uint64_t window_size{};
@@ -362,7 +362,8 @@ private:
         current.window_value |= new_rank;
         current.window_value_rev >>= 2;
         current.window_value_rev |= ((new_rank^0b11) << 2*(window_size-1));
-        kmer_value = ((kmer_value << 2) | new_rank) & kmer_mask;
+        // kmer_value = ((kmer_value << 2) | new_rank) & kmer_mask;
+        kmer_value = ((kmer_value << 2) | new_rank);
         kmer_value_rev = (kmer_value_rev >> 2) | ((new_rank^0b11) << 2*(minimiser_size-1));
         for (size_t i = 1u; i < params.minimiser_size; ++i) {
             ++range_position;
@@ -372,7 +373,8 @@ private:
             current.window_value |= new_rank;
             current.window_value_rev >>= 2;
             current.window_value_rev |= ((new_rank^0b11) << 2*(window_size-1));
-            kmer_value = ((kmer_value << 2) | new_rank) & kmer_mask;
+            // kmer_value = ((kmer_value << 2) | new_rank) & kmer_mask;
+            kmer_value = ((kmer_value << 2) | new_rank);
             kmer_value_rev = (kmer_value_rev >> 2) | ((new_rank^0b11) << 2*(minimiser_size-1));
         }
         // kmer_value = current.window_value & kmer_mask;
@@ -394,11 +396,8 @@ private:
 
     bool next_minimiser_is_new()
     {
-        // assert(minimiser1_position != minimiser2_position);
-
-        // If we reached the end of the range, we are done.
         if (range_position + 1 == range_size)
-            return ++range_position; // Return true, but also increment range_position
+            return ++range_position;
 
         next_window<pop_first::yes>();
 
@@ -409,27 +408,23 @@ private:
         if (minimiser1_position == 0) {
             find_minimiser1_in_window();
             new_min1 = true;
-            // return true;
         }
 
         if (minimiser2_position == 0) {
             find_minimiser2_in_window();
             new_min2 = true;
-            // return true;
         }
 
         if (uint64_t new_kmer_value = kmer_values1_in_window.back(); new_kmer_value < current.minimiser1_value) {
             current.minimiser1_value = new_kmer_value;
             minimiser1_position = minimisers_in_window;
             new_min1 = true;
-            // return true;
         }
 
         if (uint64_t new_kmer_value = kmer_values2_in_window.back(); new_kmer_value < current.minimiser2_value) {
             current.minimiser2_value = new_kmer_value;
             minimiser2_position = minimisers_in_window;
             new_min2 = true;
-            // return true;
         }
 
         if(!new_min1)
@@ -437,7 +432,8 @@ private:
         if(!new_min2)
             --minimiser2_position;
 
-        return true;
+        // return true;
+        return new_min1 || new_min2;
     }
 };
 
@@ -929,8 +925,8 @@ private:
 
     uint64_t kmer_mask{std::numeric_limits<uint64_t>::max()};
     uint64_t window_mask{std::numeric_limits<uint64_t>::max()};
-    uint64_t seed1{};
-    uint64_t seed2{};
+    uint64_t seed1{0x8F'3F'73'B5'CF'1C'9A'DE};
+    uint64_t seed2{1};
     uint8_t minimisers_in_window{};
     uint64_t minimiser_size{};
     uint64_t window_size{};
@@ -1068,6 +1064,7 @@ private:
     {
         auto minimiser_it = std::ranges::min_element(kmer_values1_in_window, std::less_equal<uint64_t>{});
         current.new_minimiser1_value = *minimiser_it;
+        // current.minimiser1_value = *minimiser_it;
         minimiser1_position = std::distance(std::begin(kmer_values1_in_window), minimiser_it);
     }
 
@@ -1075,6 +1072,7 @@ private:
     {
         auto minimiser_it = std::ranges::min_element(kmer_values2_in_window, std::less_equal<uint64_t>{});
         current.new_minimiser2_value = *minimiser_it;
+        // current.minimiser2_value = *minimiser_it;
         minimiser2_position = std::distance(std::begin(kmer_values2_in_window), minimiser_it);
     }
 
@@ -1110,6 +1108,8 @@ private:
 
         find_minimiser1_in_window();
         find_minimiser2_in_window();
+        current.minimiser1_value = current.new_minimiser1_value;
+        current.minimiser2_value = current.new_minimiser2_value;
 
         while (!next_minimiser_is_new()) {}
     }
@@ -1120,7 +1120,7 @@ private:
         if(range_position + 1 == range_size) {
             current.minimiser1_value = current.new_minimiser1_value;
             current.minimiser2_value = current.new_minimiser2_value;
-            current.occurrences2 = current.new_occurrences2 + 1;
+            // current.occurrences2 = current.new_occurrences2 + 1;
             return ++range_position;
         }
 
@@ -1132,31 +1132,37 @@ private:
         if(minimiser1_position == 0) {
             current.minimiser1_value = current.new_minimiser1_value;
             find_minimiser1_in_window();
-            new_min1 = current.minimiser1_value != current.new_minimiser1_value;
+            // new_min1 = current.minimiser1_value != current.new_minimiser1_value;
+            new_min1 = true;
         }
 
         if(minimiser2_position == 0) {
             current.minimiser2_value = current.new_minimiser2_value;
-            current.occurrences2 = current.new_occurrences2 + 1;
+            // current.occurrences2 = current.new_occurrences2 + 1;
             find_minimiser2_in_window();
-            bool const same_value = current.minimiser2_value == current.new_minimiser2_value;
-            current.new_occurrences2 *= same_value;
-            current.new_occurrences2 += same_value;
-            new_min2 = !same_value;
+            // bool const same_value = current.minimiser2_value == current.new_minimiser2_value;
+            // current.new_occurrences2 *= same_value;
+            // current.new_occurrences2 += same_value;
+            // new_min2 = !same_value;
+            new_min2 = true;
         }
 
-        if(uint64_t new_kmer_value = kmer_values1_in_window.back(); new_kmer_value < current.minimiser1_value) {
+        if(uint64_t new_kmer_value = kmer_values1_in_window.back(); new_kmer_value < current.new_minimiser1_value) {
+        // if(uint64_t new_kmer_value = kmer_values1_in_window.back(); new_kmer_value < current.minimiser1_value) {
             current.minimiser1_value = current.new_minimiser1_value;
             current.new_minimiser1_value = new_kmer_value;
+            // current.minimiser1_value = new_kmer_value;
             minimiser1_position = minimisers_in_window;
             new_min1 = true;
         }
 
-        if(uint64_t new_kmer_value = kmer_values2_in_window.back(); new_kmer_value < current.minimiser2_value) {
+        if(uint64_t new_kmer_value = kmer_values2_in_window.back(); new_kmer_value < current.new_minimiser2_value) {
+        // if(uint64_t new_kmer_value = kmer_values2_in_window.back(); new_kmer_value < current.minimiser2_value) {
             current.minimiser2_value = current.new_minimiser2_value;
             current.new_minimiser2_value = new_kmer_value;
-            current.occurrences2 = current.new_occurrences2 + 1;
-            current.new_occurrences2 = 0;
+            // current.minimiser2_value = new_kmer_value;
+            // current.occurrences2 = current.new_occurrences2 + 1;
+            // current.new_occurrences2 = 0;
             minimiser2_position = minimisers_in_window;
             new_min2 = true;
         }
@@ -1164,7 +1170,7 @@ private:
         if(!new_min1)
             --minimiser1_position;
         if(!new_min2) {
-            ++current.new_occurrences2;
+            // ++current.new_occurrences2;
             --minimiser2_position;
         }
 
@@ -1315,9 +1321,8 @@ private:
     range_iterator_t range_it{};
 
     uint64_t kmer_mask{std::numeric_limits<uint64_t>::max()};
-    uint64_t window_mask{std::numeric_limits<uint64_t>::max()};
-    uint64_t seed1{};
-    uint64_t seed2{};
+    uint64_t seed1{0x8F'3F'73'B5'CF'1C'9A'DE};
+    uint64_t seed2{1};
     uint8_t minimisers_in_window{};
     uint64_t minimiser_size{};
     uint64_t window_size{};
@@ -1360,7 +1365,6 @@ public:
         :
         range_it{it.range_it},
         kmer_mask{it.kmer_mask},
-        window_mask{it.window_mask},
         kmer_value{it.kmer_value},
         kmer_value_rev{it.kmer_value_rev},
         range_size{it.range_size},
@@ -1377,7 +1381,6 @@ public:
                    two_minimisers_hash_parameters const & params) :
         range_it{std::move(range_iterator)},
         kmer_mask{compute_mask(2u * params.minimiser_size)},
-        window_mask{compute_mask(2u * params.window_size)},
         range_size{range_size}
     {
         if (range_size < params.window_size)
@@ -1502,7 +1505,7 @@ private:
 
     bool next_minimiser_is_new()
     {
-        if (range_position + 1 == range_size)
+        if(range_position + 1 == range_size)
             return ++range_position;
 
         next_window<pop_first::yes>();

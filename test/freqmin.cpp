@@ -4,13 +4,13 @@
 #include <seqan3/contrib/sdsl-lite.hpp>
 #include <seqan3/core/debug_stream.hpp>
 
-#include "../source/minimiser_rev_hash_views.hpp"
+#include "../source/minimiser_rev_hash_views_debug.hpp"
 
 
 const uint8_t m_thres = 255;
-// const uint64_t seed1 = 0x8F'3F'73'B5'CF'1C'9A'DE;
-// const uint64_t seed2 = 0x29'6D'BD'33'32'56'8C'64;
-const uint64_t seed2 = 1;
+const uint64_t seed1 = 0x8F'3F'73'B5'CF'1C'9A'DE;
+const uint64_t seed2 = 0x29'6D'BD'33'32'56'8C'64;
+// const uint64_t seed2 = 1;
 
 
 seqan3::dna4_vector kmer_to_string(uint64_t kmer, size_t const kmer_size)
@@ -65,60 +65,60 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
 
     auto view = srindex::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k, .seed=seed2});
 
-    const uint64_t M = 1ULL << (m+m);
-    seqan3::contrib::sdsl::bit_vector r = seqan3::contrib::sdsl::bit_vector(M, 0);
+    // const uint64_t M = 1ULL << (m+m);
+    // seqan3::contrib::sdsl::bit_vector r = seqan3::contrib::sdsl::bit_vector(M, 0);
     
-    for(auto & record : input) {
-        for(auto && minimiser : record | view)
-            r[minimiser.minimiser_value] = 1;
-    }
-    seqan3::contrib::sdsl::rank_support_v<1> r_rank = seqan3::contrib::sdsl::rank_support_v<1>(&r);
+    // for(auto & record : input) {
+    //     for(auto && minimiser : record | view)
+    //         r[minimiser.minimiser_value] = 1;
+    // }
+    // seqan3::contrib::sdsl::rank_support_v<1> r_rank = seqan3::contrib::sdsl::rank_support_v<1>(&r);
     
-    size_t c = r_rank(M);
-    uint32_t* count = new uint32_t[c];
-    std::memset(count, 0, c*sizeof(uint32_t));
+    // size_t c = r_rank(M);
+    // uint32_t* count = new uint32_t[c];
+    // std::memset(count, 0, c*sizeof(uint32_t));
 
-    uint32_t max_occs = 0;
-    uint64_t max_minimizer;
-    for(auto & sequence : input) {
-        for(auto && minimiser : sequence | view) {
-            size_t i = r_rank(minimiser.minimiser_value);
-            count[i] += minimiser.occurrences/span + 1;
-            if(count[i] > max_occs) {
-                max_occs = count[i];
-                max_minimizer = minimiser.minimiser_value;
-            }
-        }
-    }
+    // uint32_t max_occs = 0;
+    // uint64_t max_minimizer;
+    // for(auto & sequence : input) {
+    //     for(auto && minimiser : sequence | view) {
+    //         size_t i = r_rank(minimiser.minimiser_value);
+    //         count[i] += minimiser.occurrences/span + 1;
+    //         if(count[i] > max_occs) {
+    //             max_occs = count[i];
+    //             max_minimizer = minimiser.minimiser_value;
+    //         }
+    //     }
+    // }
 
-    seqan3::debug_stream << "hashed minimizer: " << kmer_to_string(max_minimizer, m) << " appearing in " << max_occs << " super-kmers, covered by ";
-    std::unordered_set<uint64_t> freq_kmers;
-    const uint64_t kmer_mask = compute_mask(2u * m);
-    for(auto & sequence : input) {
-        for(auto && minimiser : sequence | view) {
-            if(minimiser.minimiser_value == max_minimizer) {
-                size_t end = minimiser.range_position + k + minimiser.occurrences;
-                if(end > sequence.size())
-                    end = sequence.size();
-                // for(size_t j = minimiser.range_position; j < end; j++) {
-                //     seqan3::debug_stream << sequence[j];
-                // }
-                uint64_t kmer;
-                for(size_t j = minimiser.range_position; j < minimiser.range_position + k; j++) {
-                    uint64_t const base = seqan3::to_rank(sequence[j]);
-                    kmer = ((kmer << 2) | base);
-                }
-                freq_kmers.insert(kmer & kmer_mask);
-                for(size_t j = minimiser.range_position + k; j < end; j++) {
-                    uint64_t const base = seqan3::to_rank(sequence[j]);
-                    kmer = ((kmer << 2) | base) & kmer_mask;
-                    freq_kmers.insert(kmer);
-                }
-                // seqan3::debug_stream << '\n';
-            }
-        }
-    }
-    seqan3::debug_stream << freq_kmers.size() << " kmers\n";
+    // std::unordered_set<uint64_t> freq_kmers;
+    // const uint64_t kmer_mask = compute_mask(2u * m);
+    
+    // for(auto & sequence : input) {
+    //     for(auto && minimiser : sequence | view) {
+    //         if(minimiser.minimiser_value == max_minimizer) {
+    //             size_t end = minimiser.range_position + k + minimiser.occurrences;
+    //             if(end > sequence.size())
+    //                 end = sequence.size();
+    //             // for(size_t j = minimiser.range_position; j < end; j++) {
+    //             //     seqan3::debug_stream << sequence[j];
+    //             // }
+    //             uint64_t kmer;
+    //             for(size_t j = minimiser.range_position; j < minimiser.range_position + k; j++) {
+    //                 uint64_t const base = seqan3::to_rank(sequence[j]);
+    //                 kmer = ((kmer << 2) | base);
+    //             }
+    //             freq_kmers.insert(kmer & kmer_mask);
+    //             for(size_t j = minimiser.range_position + k; j < end; j++) {
+    //                 uint64_t const base = seqan3::to_rank(sequence[j]);
+    //                 kmer = ((kmer << 2) | base) & kmer_mask;
+    //                 freq_kmers.insert(kmer);
+    //             }
+    //             // seqan3::debug_stream << '\n';
+    //         }
+    //     }
+    // }
+    // seqan3::debug_stream << "minimizer: " << kmer_to_string(max_minimizer, m) << " appearing in " << max_occs << " super-kmers, covered by " << freq_kmers.size() << " kmers\n";
 
     std::unordered_map<uint64_t, uint32_t> freq_minimizers;
     for(auto & sequence : input) {
@@ -133,18 +133,63 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     std::sort(vec.begin(), vec.end(), [](const auto& a, const auto& b) {return a.second > b.second;});
 
     auto view2 = srindex::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k, .seed=seed2});
-
     int n = 5;
     for (const auto& p : vec) {
-        seqan3::debug_stream << "hashed minimizer: " << kmer_to_string(p.first, m) << " appearing in " << p.second << " super-kmers, covered by ";
-        std::unordered_set<uint64_t> freq_kmers;
+        uint64_t minimiser_value;
+        std::unordered_set<uint64_t> skmers;
         for(auto & sequence : input) {
             for(auto && minimiser : sequence | view2) {
-                if(minimiser.minimiser_value == p.first)
-                    freq_kmers.insert(minimiser.window_value);
+                if(minimiser.minimiser_hash == p.first) {
+                    skmers.insert(minimiser.window_value);
+                    minimiser_value = minimiser.minimiser_value;
+                }
             }
         }
-        seqan3::debug_stream << freq_kmers.size() << " kmers\n";
+        seqan3::debug_stream << "minimizer: " << kmer_to_string(minimiser_value, m) << " hashed " << kmer_to_string(p.first, m) << " appearing in " << p.second << " super-kmers, covered by " << skmers.size() << " distinct kmers\n";
+        if(n == 0)
+            break;
+        n--;
+    }
+
+    n = 5;
+    for (const auto& p : vec)
+    {
+        uint64_t minimiser_value;
+        bool done = false;
+        for(auto & sequence : input) {
+            for(auto && minimiser : sequence | view2) {
+                if(minimiser.minimiser_hash == p.first) {
+                    minimiser_value = minimiser.minimiser_value;
+                    done = true;
+                    break;
+                }
+            }
+            if(done)
+                break;
+        }
+        seqan3::debug_stream << "minimizer: " << kmer_to_string(minimiser_value, m) << " revc " << kmer_to_string(srindex::util::crc(minimiser_value, m), m) << " hashed " << kmer_to_string(p.first, m) << " appearing in " << p.second << " super-kmers: \n";
+        int skmers = 1000;
+        done = false;
+        for(auto & sequence : input) {
+            for(auto && minimiser : sequence | view) {
+                if(minimiser.minimiser_value == p.first) {
+                    size_t end = minimiser.range_position + k + minimiser.occurrences;
+                    if(end > sequence.size())
+                        end = sequence.size();
+                    for(uint64_t j = minimiser.range_position; j < end; j++) {
+                        seqan3::debug_stream << sequence[j];
+                    }
+                    seqan3::debug_stream << '\n';
+                    skmers--;
+                }
+                if(skmers == 0) {
+                    done = true;
+                    break;
+                }
+            }
+            if(done)
+                break;
+        }
         if(n == 0)
             break;
         n--;
@@ -179,7 +224,8 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
 
 int main(int argc, char** argv)
 {
-    std::filesystem::path path = "/bigdata/ag_abi/jonas/kmerdict/skmers2.fasta";
+    // std::filesystem::path path = "/bigdata/ag_abi/jonas/kmerdict/skmers2.fasta";
+    std::filesystem::path path = "/Users/adm_js4718fu/Code/kmerdict/benchmarks/skmers2.fasta";
     std::vector<std::vector<seqan3::dna4>> text;
     load_file(path, text);
     stats(text);

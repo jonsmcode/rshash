@@ -147,27 +147,31 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     };
 
     for(auto & sequence : input) {
-        size_t delta;
-        for(auto && minimiser : sequence | view3)
-        {
-            bool level1 = r1[minimiser.minimiser1_value];
-            bool next_level1 = r1[minimiser.new_minimiser1_value];
-            bool m2_change = minimiser.minimiser2_value != minimiser.new_minimiser2_value;
+        uint64_t current_m1;
+        uint64_t current_m2;
+        for(auto && minimiser : sequence | view4) {
+            current_m1 = minimiser.minimiser1_value;
+            current_m2 = minimiser.minimiser2_value;
+            break;
+        }
+        size_t occurrences = 1; // occurences of minimiser 2
+        for(auto && minimiser : sequence | view4) {
+            bool level1 = r1[current_m1];
+            bool new_level1 = r1[minimiser.minimiser1_value];
+            bool m2_change = current_m2 != minimiser.minimiser2_value;
 
             // in level 2 update count2 when going to level 1 or minimiser 2 changes
-            if(!level1) {
-                if(next_level1 || m2_change)
-                    // update_count2(minimiser.minimiser2_value, minimiser.occurrences2);
-                    update_count2(minimiser.minimiser2_value, minimiser.occurrences2 - delta);
-            }
-            // // when changing level update occurences i.e. delta of minimiser in level 2 respectively
-            if(level1 != next_level1)
-                delta = minimiser.occurrences2;
-            // if minimiser 2 changes set delta to zero
-            delta *= !m2_change;
+            if(!level1 && (new_level1 || m2_change))
+                update_count2(minimiser.minimiser2_value, occurrences);
+
+            // if level or minimiser 2 changes, reset occurences
+            occurrences *= !((level1 != new_level1) || m2_change);
+            ++occurrences;
+
+            current_m1 = minimiser.minimiser1_value;
+            current_m2 = minimiser.minimiser2_value;
         }
     }
-
 
     std::cout << "mark unfrequent minimisers2, filling HT...\n";
     seqan3::contrib::sdsl::bit_vector r3 = seqan3::contrib::sdsl::bit_vector(M, 0);
@@ -175,7 +179,7 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     std::unordered_set<uint64_t> freq_minimzer;
 
     for(auto & sequence : input) {
-        for(auto && minimiser : sequence | view3) {
+        for(auto && minimiser : sequence | view4) {
             if(!r1[minimiser.minimiser1_value]) {
                 size_t i = r2_rank(minimiser.minimiser2_value);
                 if(count2[i] < m_thres2)
@@ -195,8 +199,8 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     std::memset(count3, 0, c3*sizeof(uint8_t));
 
     for(auto & sequence : input) {
-        for(auto && minimiser : sequence | view3) {
-            if(r3[minimiser.minimiser2_value])
+        for(auto && minimiser : sequence | view4) {
+            if(!r1[minimiser.minimiser1_value] && r3[minimiser.minimiser2_value])
                 count3[r3_rank(minimiser.minimiser2_value)] = count2[r2_rank(minimiser.minimiser2_value)];
         }
     }
@@ -212,7 +216,7 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     std::memset(counter1, 0, m_thres1*sizeof(uint64_t));
     for(uint64_t i=0; i < c1; i++) {
         for(int j=0; j < m_thres1; j++) {
-            if(count1[i] == j+1) {
+            if(count1[i] == j) {
                 counter1[j]++;
                 break;
             }
@@ -222,7 +226,7 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     std::memset(counter2, 0, m_thres2*sizeof(uint64_t));
     for(uint64_t i=0; i < c3; i++) {
         for(int j=0; j < m_thres2; j++) {
-            if(count3[i] == j+1) {
+            if(count3[i] == j) {
                 counter2[j]++;
                 break;
             }
@@ -234,8 +238,8 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "\nminimiser 1 distribution:\n";
     for(int j=0; j < m_thres1; j++) {
         cum += counter1[j];
-        cum_skmers += (j+1)*counter1[j];
-        std::cout << "occurrences " << (j+1) << ": " << counter1[j] << " " << (double) counter1[j]/c1*100 << "%  cum: " << cum << " " << (double) cum/c1*100 << "% covering " << cum_skmers << ' ' << (double) cum_skmers/n*100 << "% superkmers\n";
+        cum_skmers += (j)*counter1[j];
+        std::cout << "occurrences " << (j) << ": " << counter1[j] << " " << (double) counter1[j]/c1*100 << "%  cum: " << cum << " " << (double) cum/c1*100 << "% covering " << cum_skmers << ' ' << (double) cum_skmers/n*100 << "% superkmers\n";
     }
     std::cout << "avg superkmers1: " << (double) n1/c1 <<  '\n';
     std::cout << "minimisers going to level 2: " << c-c1 << "  " << (double) (c-c1)/c*100 << "% to cover " << (double) (n-n1)/n*100 << "% superkmers\n";
@@ -244,8 +248,8 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "\nminimiser 2 distribution:\n";
     for(int j=0; j < m_thres2; j++) {
         cum += counter2[j];
-        cum_skmers += (j+1)*counter2[j];
-        std::cout << "occurrences " << (j+1) << ": " << counter2[j] << " " << (double) counter2[j]/c3*100 << "%  cum: " << cum << " " << (double) cum/c3*100 << "% covering " << cum_skmers << ' ' << (double) cum_skmers/n*100 << "% superkmers\n";
+        cum_skmers += (j)*counter2[j];
+        std::cout << "occurrences " << (j) << ": " << counter2[j] << " " << (double) counter2[j]/c3*100 << "%  cum: " << cum << " " << (double) cum/c3*100 << "% covering " << cum_skmers << ' ' << (double) cum_skmers/n*100 << "% superkmers\n";
     }
     std::cout << "avg superkmers2: " << (double) n2/c3 <<  '\n';
     // std::cout << "minimisers going to HT: " << c1-c2 << " " << (double) freq_minimzer.size()/(n2)*100 << "%\n";
