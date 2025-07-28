@@ -93,10 +93,10 @@ void check(const std::vector<std::vector<seqan3::dna4>> &input)
             break;
         }
         for(auto && minimiser : sequence | view2) {
-            minimisers3_1.push_back(current_m1);
-            minimisers3_2.push_back(current_m2);
             current_m1 = minimiser.minimiser1_value;
             current_m2 = minimiser.minimiser2_value;
+            minimisers3_1.push_back(current_m1);
+            minimisers3_2.push_back(current_m2);
         }
     }
 
@@ -151,35 +151,33 @@ void check(const std::vector<std::vector<seqan3::dna4>> &input)
     //     }
     // }
 
-    if(minimisers1_1.size() != minimisers3_1.size()) {
-        std::cout << "minimisers 1 size differ " << minimisers1_1.size() << ' ' << minimisers3_1.size() << '\n';
-        // return;
-    }
-    if(minimisers1_2.size() != minimisers3_2.size()) {
-        std::cout << "minimisers 2 size differ " << minimisers1_2.size() << ' ' << minimisers3_2.size() << '\n';
-        // return;
-    }
+    // if(minimisers1_1.size() != minimisers3_1.size()) {
+    //     std::cout << "minimisers 1 size differ " << minimisers1_1.size() << ' ' << minimisers3_1.size() << '\n';
+    //     // return;
+    // }
+    // if(minimisers1_2.size() != minimisers3_2.size()) {
+    //     std::cout << "minimisers 2 size differ " << minimisers1_2.size() << ' ' << minimisers3_2.size() << '\n';
+    //     // return;
+    // }
 
-    // for(size_t i=0; i < 100; i++)
-    //     std::cout << i << " " << minimisers1_1[i] << ' ' << minimisers1_2[i] << "   " << minimisers3_1[i] << ' ' << minimisers3_2[i] << '\n';
+    for(size_t i=0; i < 10; i++)
+        std::cout << i << " " << minimisers1_1[i] << ' ' << minimisers1_2[i] << "   " << minimisers3_1[i] << ' ' << minimisers3_2[i] << '\n';
     // for(size_t i=minimisers1_1.size()-10; i < minimisers1_1.size(); i++)
     //     std::cout << i << " " << minimisers1_1[i] << '\n';
     // for(size_t i=minimisers3_1.size()-10; i < minimisers3_1.size(); i++)
     //     std::cout << i << " " << minimisers3_1[i] << '\n';
 
-    // for(size_t i=0; i < minimisers1_1.size(); i++)
-    //     if(minimisers1_1[i] != minimisers3_1[i]) {
-    //         std::cout << i << " ";
-    //         // return;
-    //         break;
-    //     }
-    // for(size_t i=0; i < minimisers1_2.size(); i++) {
-    //     if(minimisers1_2[i] != minimisers3_2[i]) {
-    //         std::cout << i << " ";
-    //         // return;
-    //         break;
-    //     }
-    // }
+    for(size_t i=0; i < minimisers1_1.size(); i++)
+        if(minimisers1_1[i] != minimisers3_1[i]) {
+            std::cout << "minimisers 1 differ at "<< i << "\n";
+            return;
+        }
+    for(size_t i=0; i < minimisers1_2.size(); i++) {
+        if(minimisers1_2[i] != minimisers3_2[i]) {
+            std::cout << "minimisers 2 differ at "<< i << "\n";
+            return;
+        }
+    }
 
     // std::cout << "checking view 1 and 4...\n";
 

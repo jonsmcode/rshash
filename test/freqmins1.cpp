@@ -65,7 +65,6 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
 
     auto view1 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m, .window_size = k, .seed=seed1});
     auto view2 = srindex::views::two_minimisers_hash({.minimiser_size = m, .window_size = k, .seed1=seed1, .seed2=seed2});
-    auto view3 = srindex::views::two_minimisers_and_occurence_hash({.minimiser_size = m, .window_size = k, .seed1=seed1, .seed2=seed2});
     auto view4 = srindex::views::two_minimisers_and_window_hash({.minimiser_size = m, .window_size = k, .seed1=seed1, .seed2=seed2});
 
     const uint64_t M = 1ULL << (m+m);
@@ -147,30 +146,36 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     };
 
     for(auto & sequence : input) {
-        uint64_t current_m1;
-        uint64_t current_m2;
+        uint64_t current_m1, current_m2;
+        bool level1, new_level1, m2_change;
+
         for(auto && minimiser : sequence | view4) {
             current_m1 = minimiser.minimiser1_value;
             current_m2 = minimiser.minimiser2_value;
             break;
         }
-        size_t occurrences = 1; // occurences of minimiser 2
-        for(auto && minimiser : sequence | view4) {
-            bool level1 = r1[current_m1];
-            bool new_level1 = r1[minimiser.minimiser1_value];
-            bool m2_change = current_m2 != minimiser.minimiser2_value;
+        size_t occurrences = 0; // occurences of minimiser2
+        level1 = r1[current_m1];
 
-            // in level 2 update count2 when going to level 1 or minimiser 2 changes
+        for(auto && minimiser : sequence | view4) {
+            new_level1 = r1[minimiser.minimiser1_value];
+            m2_change = current_m2 != minimiser.minimiser2_value;
+
+            // in level 2 update count2 when going to level 1 or minimiser2 changes
             if(!level1 && (new_level1 || m2_change))
                 update_count2(minimiser.minimiser2_value, occurrences);
 
-            // if level or minimiser 2 changes, reset occurences
-            occurrences *= !((level1 != new_level1) || m2_change);
-            ++occurrences;
+            occurrences++;
+            // reset occurences, if level or minimiser2 changes
+            // occurrences *= !((level1 != new_level1) || m2_change);
 
             current_m1 = minimiser.minimiser1_value;
             current_m2 = minimiser.minimiser2_value;
+            level1 = new_level1;
         }
+        
+        if(!level1)
+            update_count2(current_m2, occurrences);
     }
 
     std::cout << "mark unfrequent minimisers2, filling HT...\n";
@@ -179,9 +184,15 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     std::unordered_set<uint64_t> freq_minimzer;
 
     for(auto & sequence : input) {
+        size_t j = 0;
+        bool error = false;
         for(auto && minimiser : sequence | view4) {
             if(!r1[minimiser.minimiser1_value]) {
                 size_t i = r2_rank(minimiser.minimiser2_value);
+                if(count2[i] == 0) {
+                    error = true;
+                    std::cout << j << " ";
+                }
                 if(count2[i] < m_thres2)
                     r3[minimiser.minimiser2_value] = 1;
                 else {
@@ -189,7 +200,10 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
                     freq_minimzer.insert(minimiser.minimiser2_value);
                 }
             }
+            j++;
         }
+        if(error)
+            std::cout << sequence.size() << '\n';
     }
 
     std::cout << "counting unfrequent minimisers2...\n";

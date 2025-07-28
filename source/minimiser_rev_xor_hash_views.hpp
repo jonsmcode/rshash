@@ -432,8 +432,7 @@ private:
         if(!new_min2)
             --minimiser2_position;
 
-        // return true;
-        return new_min1 || new_min2;
+        return true;
     }
 };
 
