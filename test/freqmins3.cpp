@@ -10,8 +10,8 @@
 const uint64_t seed1 = 0x8F'3F'73'B5'CF'1C'9A'DE;
 const uint64_t seed2 = 1;
 
-const uint8_t m_thres1 = 20;
-const uint8_t m_thres2 = 20;
+const uint8_t m_thres1 = 10;
+const uint8_t m_thres2 = 10;
 
 const uint8_t k = 31;
 const uint8_t m = 16;
@@ -122,16 +122,22 @@ inline uint8_t* compute_level(const ViewType& view, const uint8_t m_thres, const
 
 
 template <typename ViewType>
-inline std::vector<std::vector<seqan3::dna4>> extract_frequent_parts(
+inline std::vector<std::vector<seqan3::dna4>> get_frequent_skmers(
     const ViewType& view, const std::vector<std::vector<seqan3::dna4>> &input, sdsl::bit_vector &r)
 {
     std::vector<std::vector<seqan3::dna4>> freq_sequences;
     for(auto & sequence : input) {
         size_t start_position;
-        bool freq = false;
-        bool current_freq = false;
+        bool freq;
+        bool current_freq;
         for(auto && minimiser : sequence | view) {
-            current_freq = r[minimiser.minimiser_value];
+            freq = !r[minimiser.minimiser_value];
+            if(freq)
+                start_position = 0;
+            break;
+        }
+        for(auto && minimiser : sequence | view) {
+            current_freq = !r[minimiser.minimiser_value];
 
             if(!freq && current_freq)
                 start_position = minimiser.range_position;
@@ -176,7 +182,7 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
 
     std::cout << "extract uncovered sequence parts...\n";
     std::vector<std::vector<seqan3::dna4>> remaining_sequences1;
-    remaining_sequences1 = extract_frequent_parts(view1, input, r1);
+    remaining_sequences1 = get_frequent_skmers(view1, input, r1);
 
     size_t len_rem_seqs = 0;
     for(auto & sequence : remaining_sequences1) {
@@ -192,7 +198,7 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
 
     std::cout << "extract uncovered sequence parts...\n";
     std::vector<std::vector<seqan3::dna4>> remaining_sequences2;
-    remaining_sequences2 = extract_frequent_parts(view2, remaining_sequences1, r2);
+    remaining_sequences2 = get_frequent_skmers(view2, remaining_sequences1, r2);
 
     len_rem_seqs = 0;
     for(auto & sequence : remaining_sequences2) {
@@ -209,7 +215,7 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     for(auto & sequence : remaining_sequences2) {
         for(auto && minimiser : sequence | view3) {
             freq_minimzer.insert(minimiser.minimiser_value);
-            // freq_kmers.insert(minimiser.window_value);
+            freq_kmers.insert(minimiser.window_value);
         }
     }
 
@@ -273,12 +279,11 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "text length: " << N << "\n";
     std::cout << "no kmers: " << kmers <<  '\n';
     std::cout << "no superkmers: " << skmers << "\n";
-    // std::cout << "no distinct minimiser: " << c << "\n";
     std::cout << "no minimiser1: " << n1 << "\n";
     std::cout << "no distinct minimiser1: " << c1 << "\n";
     std::cout << "no minimiser2: " << n2 << "\n";
     std::cout << "no distinct minimiser2: " << c2 << "\n";
-    std::cout << "no minimiser HT: " << freq_minimzer.size() << "\n";
+    std::cout << "no minimiser HT: " << freq_minimzer.size() << " " << (double)freq_minimzer.size()/skmers*100 << "%\n";
     std::cout << "no kmers HT: " << freq_kmers.size() << " " << (double) freq_kmers.size()/kmers*100 << "%\n";
     std::cout << "density r1: " << (double) c1/M*100 << "%\n";
     std::cout << "density r2: " << (double) c2/M*100 << "%\n";
