@@ -185,9 +185,8 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     remaining_sequences1 = get_frequent_skmers(view1, input, r1);
 
     size_t len_rem_seqs = 0;
-    for(auto & sequence : remaining_sequences1) {
+    for(auto & sequence : remaining_sequences1)
         len_rem_seqs += sequence.size();
-    }
     std::cout << "remaining superkmers " << remaining_sequences1.size() << " (" << (double)remaining_sequences1.size()/skmers*100 << "%) ";
     std::cout << "total length: " << len_rem_seqs << " (" << (double) len_rem_seqs/N*100 << "%)\n";
 
@@ -201,9 +200,8 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     remaining_sequences2 = get_frequent_skmers(view2, remaining_sequences1, r2);
 
     len_rem_seqs = 0;
-    for(auto & sequence : remaining_sequences2) {
+    for(auto & sequence : remaining_sequences2)
         len_rem_seqs += sequence.size();
-    }
     std::cout << "remaining superkmers " << remaining_sequences2.size() << " (" << (double)remaining_sequences2.size()/skmers*100 << "%) ";
     std::cout << "total length: " << len_rem_seqs << " (" << (double) len_rem_seqs/N*100 << "%)\n";
 
