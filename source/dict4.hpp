@@ -3,6 +3,7 @@
 #include <seqan3/contrib/sdsl-lite.hpp>
 #include <sux/bits/SimpleSelect.hpp>
 #include <sux/bits/EliasFano.hpp>
+#include <gtl/phmap.hpp>
 
 using namespace seqan3::literals;
 using namespace seqan3::contrib::sdsl;
@@ -28,6 +29,8 @@ private:
     int_vector<0> offsets1;
     int_vector<0> offsets2;
     seqan3::bitpacked_sequence<seqan3::dna4> text;
+    // std::unordered_set<uint64_t> hashmap;
+    // gtl::flat_hash_set<uint64_t> hashmap;
     void fill_buffer1(std::vector<uint64_t> &, const uint64_t, size_t, size_t);
     void fill_buffer2(std::vector<uint64_t> &, const uint64_t, size_t, size_t);
 
