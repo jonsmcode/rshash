@@ -36,6 +36,15 @@ add_executable (comp_lookup comp_lookup.cpp dict_comp.cpp)
 target_include_directories(comp_lookup PRIVATE ${CMAKE_SOURCE_DIR}/sux)
 target_link_libraries (comp_lookup PRIVATE seqan3::seqan3)
 
-add_executable (lookup2 lookup_unitigs2.cpp dict_unitigs_hash2.cpp)
+#add_executable (lookup2 lookup_unitigs2.cpp dict_unitigs_hash2.cpp)
+#target_include_directories(lookup2 PRIVATE ${CMAKE_SOURCE_DIR}/sux)
+#target_link_libraries (lookup2 PRIVATE seqan3::seqan3)
+
+add_executable (lookup2 lookup_unitigs2.cpp dict_unitigs_hash2_.cpp)
 target_include_directories(lookup2 PRIVATE ${CMAKE_SOURCE_DIR}/sux)
 target_link_libraries (lookup2 PRIVATE seqan3::seqan3)
+
+#add_executable (lookup3 lookup_unitigs3.cpp dict_unitigs_hash4.cpp)
+#target_include_directories(lookup3 PRIVATE ${CMAKE_SOURCE_DIR}/sux)
+#target_link_libraries (lookup3 PRIVATE seqan3::seqan3)
+

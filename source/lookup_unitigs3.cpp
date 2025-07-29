@@ -2,7 +2,7 @@
 #include <seqan3/argument_parser/all.hpp>
 #include <seqan3/io/sequence_file/all.hpp>
 
-#include "dict.hpp"
+#include "dict4.hpp"
 
 
 struct cmd_arguments {
@@ -49,15 +49,25 @@ struct my_traits:seqan3::sequence_file_input_default_traits_dna {
 };
 
 
-void load_file(const std::filesystem::path &filepath, std::vector<std::vector<seqan3::dna4>> &output) {
+// void load_file(const std::filesystem::path &filepath, std::vector<std::vector<seqan3::dna4>> &output) {
+//     auto stream = seqan3::sequence_file_input<my_traits>{filepath};
+//     for (auto & record : stream) {
+//         output.push_back(std::move(record.sequence()));
+//     }
+// }
+
+uint64_t load_file(const std::filesystem::path &filepath, std::vector<std::vector<seqan3::dna4>> &output) {
     auto stream = seqan3::sequence_file_input<my_traits>{filepath};
-    size_t N = 0;
+    uint64_t N = 0;
     for (auto & record : stream) {
         N += record.sequence().size();
         output.push_back(std::move(record.sequence()));
         // if(N >= 1000000000)
-        //     return;
+        //     break;
+        if(N >= 10000000)
+            break;
     }
+    return N;
 }
 
 // todo: ignore queries with 'N's!

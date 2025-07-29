@@ -4,16 +4,16 @@
 #include <seqan3/alphabet/container/bitpacked_sequence.hpp>
 #include <cereal/archives/binary.hpp>
 
-#include "dict.hpp"
+#include "dict4.hpp"
 #include "minimiser_rev_hash_views.hpp"
 #include "minimiser_rev_hash_views2.hpp"
 
 
 const uint8_t m_thres1 = 10;
-const uint8_t m_thres2 = 20;
+const uint8_t m_thres2 = 10;
 
 const uint64_t seed1 = 0x8F'3F'73'B5'CF'1C'9A'DE;
-const uint64_t seed2 = 0x29'6D'BD'33'32'56'8C'64;
+const uint64_t seed2 = 1;
 
 const size_t span = 31;
 
@@ -106,15 +106,15 @@ int UnitigsDictionaryHash2::build(const std::vector<std::vector<seqan3::dna4>> &
             if(count[i] < m_thres1)
                 r1[minimisers.minimiser1_value] = 1;
             else if(count[i] < m_thres2)
-                r2[minimisers.minimiser2_value] = 1;
+                r2[minimisers.minimiser1_value] = 1;
             // else
-                // todo
+                // todo minimisers.minimiser2_value
         }
     }
     r1_rank = seqan3::contrib::sdsl::rank_support_v<1>(&r1);
     r2_rank = seqan3::contrib::sdsl::rank_support_v<1>(&r2);
 
-    // seqan3::contrib::sdsl::util::clear(r);
+    seqan3::contrib::sdsl::util::clear(r);
     delete[] count;
 
     std::cout << "count minimizers1 again...\n";
@@ -175,15 +175,13 @@ int UnitigsDictionaryHash2::build(const std::vector<std::vector<seqan3::dna4>> &
 
     std::cout << "count minimizers2...\n";
     size_t c2 = r2_rank(M);
-    // uint8_t* count2 = new uint8_t[c2];
-    // std::memset(count2, 0, c2*sizeof(uint8_t));
+    uint8_t* count2 = new uint8_t[c2];
+    std::memset(count2, 0, c2*sizeof(uint8_t));
     // std::unordered_map<uint64_t, uint32_t> cb;
-    uint32_t* count2 = new uint32_t[c2];
-    std::memset(count2, 0, c2*sizeof(uint32_t));
 
     auto view2 = srindex::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k, .seed=seed2});
     for(auto & sequence : input) {
-        for(auto && minimiser : sequence | view2) {
+        for(auto && minimiser : sequence | view1) {
             if(r2[minimiser.minimiser_value]) {
                 size_t i = r2_rank(minimiser.minimiser_value);
                 count2[i] += minimiser.occurrences/span + 1;
@@ -223,12 +221,11 @@ int UnitigsDictionaryHash2::build(const std::vector<std::vector<seqan3::dna4>> &
     std::cout << "filling offsets_2...\n";
     offsets2.width(offset_width);
     offsets2.resize(n2);
-    // std::memset(count2, 0, c2*sizeof(uint8_t));
-    std::memset(count2, 0, c2*sizeof(uint32_t));
+    std::memset(count2, 0, c2*sizeof(uint8_t));
 
     length = 0;
     for(auto & sequence : input) {
-        for (auto && minimiser : sequence | view2) {
+        for (auto && minimiser : sequence | view1) {
             if(r2[minimiser.minimiser_value]) {
                 size_t i = r2_rank(minimiser.minimiser_value);
                 size_t s = s2_select.select(i);
@@ -378,7 +375,7 @@ uint64_t UnitigsDictionaryHash2::streaming_query(const std::vector<seqan3::dna4>
 
     for(auto && minimisers : query | view)
     {
-        if(minimisers.minimiser1_value == current_minimiser || minimisers.minimiser2_value == current_minimiser) {
+        if(minimisers.minimiser1_value == current_minimiser) {
             occurences += lookup_serial(buffer, minimisers.window_value, minimisers.window_value_rev, last_found);
         }
         else {
@@ -394,8 +391,8 @@ uint64_t UnitigsDictionaryHash2::streaming_query(const std::vector<seqan3::dna4>
                 current_minimiser = minimisers.minimiser1_value;
             }
             else {
-                if(r2[minimisers.minimiser2_value]) {
-                    size_t minimizer_id = r2_rank(minimisers.minimiser2_value);
+                if(r2[minimisers.minimiser1_value]) {
+                    size_t minimizer_id = r2_rank(minimisers.minimiser1_value);
                     size_t p = s2_select.select(minimizer_id);
                     size_t q = s2_select.select(minimizer_id+1);
 
@@ -403,7 +400,7 @@ uint64_t UnitigsDictionaryHash2::streaming_query(const std::vector<seqan3::dna4>
                     last_found = 0;
                     fill_buffer2(buffer, mask, p, q);
                     occurences += lookup_serial(buffer, minimisers.window_value, minimisers.window_value_rev, last_found);
-                    current_minimiser = minimisers.minimiser2_value;
+                    current_minimiser = minimisers.minimiser1_value;
                 }
             }
         }
