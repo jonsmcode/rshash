@@ -3,21 +3,18 @@
 #include <seqan3/core/debug_stream.hpp>
 #include <seqan3/alphabet/container/bitpacked_sequence.hpp>
 #include <cereal/archives/binary.hpp>
-// #include <cereal/types/unordered_map.hpp>
-// #include <cereal/types/memory.hpp>
-// #include <cereal/types/bitset.hpp>
 
 #include "dict4.hpp"
 #include "io.hpp"
-#include "minimiser_rev_hash_views.hpp"
-#include "minimiser_rev_hash_views2.hpp"
+// #include "minimiser_rev_hash_views.hpp"
+#include "minimiser_rev_xor_views.hpp"
 
 
 const uint8_t m_thres1 = 100;
 const uint8_t m_thres2 = 50;
 
 const uint64_t seed1 = 0x8F'3F'73'B5'CF'1C'9A'DE;
-const uint64_t seed2 = 0x29'6D'BD'33'32'56'8C'64;
+// const uint64_t seed2 = 0x29'6D'BD'33'32'56'8C'64;
 
 const size_t span = 31;
 
@@ -45,7 +42,8 @@ UnitigsDictionaryHash2::UnitigsDictionaryHash2(uint8_t const k, uint8_t const m)
 
 int UnitigsDictionaryHash2::build(const std::vector<std::vector<seqan3::dna4>> &input)
 {
-    auto view1 = srindex::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k, .seed=seed1});
+    // auto view1 = srindex::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k, .seed=seed1});
+    auto view1 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m, .window_size = k, .seed=seed1});
 
     // assert(m <= 32);
     const uint64_t M = 1ULL << (m+m);
@@ -340,8 +338,8 @@ int UnitigsDictionaryHash2::build(const std::vector<std::vector<seqan3::dna4>> &
     // std::cout << "total length: " << len_rem_seqs << " (" << (double) len_rem_seqs/N*100 << "%)\n";
 
     std::cout << "filling HT...\n";
-    // todo: k-mer hash view only
-    auto view3 = srindex::views::two_minimisers_and_window_hash({.minimiser_size = m, .window_size = k, .seed1=seed1, .seed2=seed2});
+    // auto view3 = srindex::views::two_minimisers_and_window_hash({.minimiser_size = m, .window_size = k, .seed1=seed1, .seed2=seed2});
+    auto view3 = srindex::views::xor_minimiser_and_window({.minimiser_size = m, .window_size = k, .seed=seed1});
     // for(auto & sequence : freq_skmers2) {
     for(auto & sequence : freq_skmers1) {
         for(auto && minimiser : sequence | view3) {
@@ -469,78 +467,109 @@ inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query, uint64_t
 }
 
 
+// uint64_t UnitigsDictionaryHash2::streaming_query(const std::vector<seqan3::dna4> &query)
+// {
+//     auto view = srindex::views::two_minimisers_and_window_hash({.minimiser_size = m, .window_size = k, .seed1=seed1, .seed2=seed2});
+
+//     uint64_t occurences1 = 0;
+//     uint64_t occurences2 = 0;
+//     uint64_t occurences3 = 0;
+//     const uint64_t mask = compute_mask(2u * k);
+//     uint64_t current_minimiser1=std::numeric_limits<uint64_t>::max();
+//     uint64_t current_minimiser2=std::numeric_limits<uint64_t>::max();
+//     std::vector<uint64_t> buffer1;
+//     std::vector<uint64_t> buffer2;
+//     size_t last_found1 = 0;
+//     size_t last_found2 = 0;
+
+//     // for(auto && minimisers : query | view) {
+//     //     if(r1[minimisers.minimiser1_value]) {
+//     //         size_t minimizer_id = r1_rank(minimisers.minimiser1_value);
+//     //         size_t p = s1_select.select(minimizer_id);
+//     //         size_t q = s1_select.select(minimizer_id+1);
+//     //         fill_buffer1(buffer1, mask, p, q);
+//     //         current_minimiser1 = minimisers.minimiser1_value;
+//     //     }
+//     //     else if(r2[minimisers.minimiser2_value]) {
+//     //         size_t minimizer_id = r2_rank(minimisers.minimiser2_value);
+//     //         size_t p = s2_select.select(minimizer_id);
+//     //         size_t q = s2_select.select(minimizer_id+1);
+//     //         fill_buffer2(buffer2, mask, p, q);
+//     //         current_minimiser2 = minimisers.minimiser2_value;
+//     //     }
+//     //     break;
+//     // }
+
+//     for(auto && minimisers : query | view)
+//     {
+//         if(minimisers.minimiser1_value == current_minimiser1)
+//             occurences1 += lookup_serial(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1);
+//         // else if(minimisers.minimiser2_value == current_minimiser2)
+//         //     occurences2 += lookup_serial(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2);
+//         else if(r1[minimisers.minimiser1_value]) {
+//             size_t minimizer_id = r1_rank(minimisers.minimiser1_value);
+//             size_t p = s1_select.select(minimizer_id);
+//             size_t q = s1_select.select(minimizer_id+1);
+
+//             buffer1.clear();
+//             fill_buffer1(buffer1, mask, p, q);
+//             last_found1 = 0;
+//             occurences1 += lookup_serial(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1);
+//             current_minimiser1 = minimisers.minimiser1_value;
+//         }
+//         // else if(r2[minimisers.minimiser2_value]) {
+//         //     std::cout << "in level 2 ";
+//         //     size_t minimizer_id = r2_rank(minimisers.minimiser2_value);
+//         //     size_t p = s2_select.select(minimizer_id);
+//         //     size_t q = s2_select.select(minimizer_id+1);
+
+//         //     buffer2.clear();
+//         //     fill_buffer2(buffer2, mask, p, q);
+//         //     std::cout << "filled buffer " << buffer2.size();
+//         //     last_found2 = 0;
+//         //     occurences2 += lookup_serial(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2);
+//         //     std::cout << "found " << occurences2 << '\n';
+//         //     current_minimiser2 = minimisers.minimiser2_value;
+//         // }
+//         else
+//             occurences3 += hashmap.contains(std::min<uint64_t>(minimisers.window_value, minimisers.window_value_rev));
+//     }
+//     // if(occurences2 > 0)
+//     //     std::cout << "occs2: " << occurences2 << '\n';
+//     // std::cout << "occs1: " << occurences1 << "occs2: " << occurences2 << "occs3: " << occurences3 << '\n';
+
+//     return occurences1+occurences2+occurences3;
+// }
+
 uint64_t UnitigsDictionaryHash2::streaming_query(const std::vector<seqan3::dna4> &query)
 {
-    auto view = srindex::views::two_minimisers_and_window_hash({.minimiser_size = m, .window_size = k, .seed1=seed1, .seed2=seed2});
-
-    uint64_t occurences1 = 0;
-    uint64_t occurences2 = 0;
-    uint64_t occurences3 = 0;
+    auto view = srindex::views::xor_minimiser_and_window({.minimiser_size = m, .window_size = k, .seed=seed1});
+    uint64_t occurences = 0;
     const uint64_t mask = compute_mask(2u * k);
-    uint64_t current_minimiser1=std::numeric_limits<uint64_t>::max();
-    uint64_t current_minimiser2=std::numeric_limits<uint64_t>::max();
-    std::vector<uint64_t> buffer1;
-    std::vector<uint64_t> buffer2;
-    size_t last_found1 = 0;
-    size_t last_found2 = 0;
-
-    // for(auto && minimisers : query | view) {
-    //     if(r1[minimisers.minimiser1_value]) {
-    //         size_t minimizer_id = r1_rank(minimisers.minimiser1_value);
-    //         size_t p = s1_select.select(minimizer_id);
-    //         size_t q = s1_select.select(minimizer_id+1);
-    //         fill_buffer1(buffer1, mask, p, q);
-    //         current_minimiser1 = minimisers.minimiser1_value;
-    //     }
-    //     else if(r2[minimisers.minimiser2_value]) {
-    //         size_t minimizer_id = r2_rank(minimisers.minimiser2_value);
-    //         size_t p = s2_select.select(minimizer_id);
-    //         size_t q = s2_select.select(minimizer_id+1);
-    //         fill_buffer2(buffer2, mask, p, q);
-    //         current_minimiser2 = minimisers.minimiser2_value;
-    //     }
-    //     break;
-    // }
+    uint64_t current_minimiser=std::numeric_limits<uint64_t>::max();
+    std::vector<uint64_t> buffer;
+    size_t last_found = 0;
 
     for(auto && minimisers : query | view)
     {
-        if(minimisers.minimiser1_value == current_minimiser1)
-            occurences1 += lookup_serial(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1);
-        // else if(minimisers.minimiser2_value == current_minimiser2)
-        //     occurences2 += lookup_serial(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2);
-        else if(r1[minimisers.minimiser1_value]) {
-            size_t minimizer_id = r1_rank(minimisers.minimiser1_value);
+        if(minimisers.minimiser_value == current_minimiser)
+            occurences += lookup_serial(buffer, minimisers.window_value, minimisers.window_value_rev, last_found);
+        else if(r1[minimisers.minimiser_value]) {
+            size_t minimizer_id = r1_rank(minimisers.minimiser_value);
             size_t p = s1_select.select(minimizer_id);
             size_t q = s1_select.select(minimizer_id+1);
 
-            buffer1.clear();
-            fill_buffer1(buffer1, mask, p, q);
-            last_found1 = 0;
-            occurences1 += lookup_serial(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1);
-            current_minimiser1 = minimisers.minimiser1_value;
+            buffer.clear();
+            fill_buffer1(buffer, mask, p, q);
+            last_found = 0;
+            occurences += lookup_serial(buffer, minimisers.window_value, minimisers.window_value_rev, last_found);
+            current_minimiser = minimisers.minimiser_value;
         }
-        // else if(r2[minimisers.minimiser2_value]) {
-        //     std::cout << "in level 2 ";
-        //     size_t minimizer_id = r2_rank(minimisers.minimiser2_value);
-        //     size_t p = s2_select.select(minimizer_id);
-        //     size_t q = s2_select.select(minimizer_id+1);
-
-        //     buffer2.clear();
-        //     fill_buffer2(buffer2, mask, p, q);
-        //     std::cout << "filled buffer " << buffer2.size();
-        //     last_found2 = 0;
-        //     occurences2 += lookup_serial(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2);
-        //     std::cout << "found " << occurences2 << '\n';
-        //     current_minimiser2 = minimisers.minimiser2_value;
-        // }
         else
-            occurences3 += hashmap.contains(std::min<uint64_t>(minimisers.window_value, minimisers.window_value_rev));
+            occurences += hashmap.contains(std::min<uint64_t>(minimisers.window_value, minimisers.window_value_rev));
     }
-    // if(occurences2 > 0)
-    //     std::cout << "occs2: " << occurences2 << '\n';
-    // std::cout << "occs1: " << occurences1 << "occs2: " << occurences2 << "occs3: " << occurences3 << '\n';
 
-    return occurences1+occurences2+occurences3;
+    return occurences;
 }
 
 
@@ -549,11 +578,11 @@ int UnitigsDictionaryHash2::save(const std::filesystem::path &filepath) {
     seqan3::contrib::sdsl::serialize(this->k, out);
     seqan3::contrib::sdsl::serialize(this->m, out);
     seqan3::contrib::sdsl::serialize(r1, out);
-    seqan3::contrib::sdsl::serialize(r2, out);
+    // seqan3::contrib::sdsl::serialize(r2, out);
     seqan3::contrib::sdsl::serialize(s1, out);
-    seqan3::contrib::sdsl::serialize(s2, out);
+    // seqan3::contrib::sdsl::serialize(s2, out);
     seqan3::contrib::sdsl::serialize(this->offsets1, out);
-    seqan3::contrib::sdsl::serialize(this->offsets2, out);
+    // seqan3::contrib::sdsl::serialize(this->offsets2, out);
     seqan3::contrib::sdsl::serialize(this->endpoints, out);
 
     cereal::BinaryOutputArchive archive(out);
@@ -569,11 +598,11 @@ int UnitigsDictionaryHash2::load(const std::filesystem::path &filepath) {
     seqan3::contrib::sdsl::load(this->k, in);
     seqan3::contrib::sdsl::load(this->m, in);
     seqan3::contrib::sdsl::load(r1, in);
-    seqan3::contrib::sdsl::load(r2, in);
+    // seqan3::contrib::sdsl::load(r2, in);
     seqan3::contrib::sdsl::load(s1, in);
-    seqan3::contrib::sdsl::load(s2, in);
+    // seqan3::contrib::sdsl::load(s2, in);
     seqan3::contrib::sdsl::load(this->offsets1, in);
-    seqan3::contrib::sdsl::load(this->offsets2, in);
+    // seqan3::contrib::sdsl::load(this->offsets2, in);
     seqan3::contrib::sdsl::load(this->endpoints, in);
 
     cereal::BinaryInputArchive archive(in);
@@ -583,9 +612,9 @@ int UnitigsDictionaryHash2::load(const std::filesystem::path &filepath) {
     in.close();
 
     r1_rank = rank_support_v<1>(&r1);
-    r2_rank = rank_support_v<1>(&r2);
+    // r2_rank = rank_support_v<1>(&r2);
     this->s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), s1.size(), 3);
-    this->s2_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s2.data()), s2.size(), 3);
+    // this->s2_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s2.data()), s2.size(), 3);
     endpoints_rank = rank_support_sd<>(&endpoints);
     endpoints_select = seqan3::contrib::sdsl::select_support_sd<>(&endpoints);
     
