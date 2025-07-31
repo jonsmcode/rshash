@@ -2,39 +2,26 @@
 #include <seqan3/alphabet/nucleotide/dna4.hpp>
 #include <seqan3/io/sequence_file/all.hpp>
 #include <seqan3/contrib/sdsl-lite.hpp>
-#include <seqan3/core/debug_stream.hpp>
 
-
-#include "../source/minimiser_rev_xor_hash_views.hpp"
+#include "../source/minimiser_rev_xor_views.hpp"
+#include "../source/minimiser_rev_hash_views.hpp"
 
 
 const uint64_t seed1 = 0x8F'3F'73'B5'CF'1C'9A'DE;
 const uint64_t seed2 = 1;
 
-const uint8_t m_thres1 = 20;
-const uint8_t m_thres2 = 20;
+const uint8_t m_thres1 = 100;
+const uint8_t m_thres2 = 0;
+
+const uint8_t k = 31;
+const uint8_t m = 16;
+
+const uint64_t M = 1ULL << (m+m);
+
+const size_t span = 100;
 
 
-seqan3::dna4_vector kmer_to_string(uint64_t kmer, size_t const kmer_size)
-{
-    seqan3::dna4_vector result(kmer_size);
-    for (size_t i = 0; i < kmer_size; ++i)
-    {
-        result[kmer_size - 1 - i].assign_rank(kmer & 0b11);
-        kmer >>= 2;
-    }
-    return result;
-}
-
-static inline constexpr uint64_t compute_mask(uint64_t const size) {
-        assert(size > 0u);
-        assert(size <= 64u);
-
-        if (size == 64u)
-            return std::numeric_limits<uint64_t>::max();
-        else
-            return (uint64_t{1u} << (size)) - 1u;
-    }
+namespace sdsl = seqan3::contrib::sdsl;
 
 
 struct my_traits:seqan3::sequence_file_input_default_traits_dna {
@@ -48,249 +35,217 @@ uint64_t load_file(const std::filesystem::path &filepath, std::vector<std::vecto
     for (auto & record : stream) {
         N += record.sequence().size();
         output.push_back(std::move(record.sequence()));
-        if(N >= 1000000000)
-            break;
+        // if(N >= 1000000000)
+        //     return N;
     }
     return N;
 }
 
 
-void stats(const std::vector<std::vector<seqan3::dna4>> &input)
+template <typename ViewType>
+inline uint8_t* count_minimisers(const ViewType& view, const uint8_t m_thres, const std::vector<std::vector<seqan3::dna4>> &input,
+                        sdsl::bit_vector &r, sdsl::rank_support_v<1> &r_rank)
 {
-    const uint8_t k = 31;
-    uint8_t m = 16;
-    std::cout << "m: " << +m << '\n';
-
-    const size_t span = 100;
-
-    auto view1 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m, .window_size = k, .seed=seed1});
-    auto view2 = srindex::views::two_minimisers_hash({.minimiser_size = m, .window_size = k, .seed1=seed1, .seed2=seed2});
-    auto view4 = srindex::views::two_minimisers_and_window_hash({.minimiser_size = m, .window_size = k, .seed1=seed1, .seed2=seed2});
-
-    const uint64_t M = 1ULL << (m+m);
-
-    std::cout << "scanning minimizers...\n";
-    seqan3::contrib::sdsl::bit_vector r = seqan3::contrib::sdsl::bit_vector(M, 0);
-    
     for(auto & record : input) {
-        for(auto && minimiser : record | view1)
+        for(auto && minimiser : record | view)
             r[minimiser.minimiser_value] = 1;
     }
 
-    std::cout << "counting minimisers...\n";
-    seqan3::contrib::sdsl::rank_support_v<1> r_rank = seqan3::contrib::sdsl::rank_support_v<1>(&r);
+    r_rank = sdsl::rank_support_v<1>(&r);
     size_t c = r_rank(M);
     uint8_t* count = new uint8_t[c];
     std::memset(count, 0, c*sizeof(uint8_t));
 
+    auto update_count = [&](uint64_t minimiser_value, size_t occurrences) {
+        size_t i = r_rank(minimiser_value);
+        count[i] += occurrences/span + 1;
+        if(count[i] > m_thres)
+            count[i] = m_thres;
+    };
+
+    for(auto & sequence : input) {
+        for(auto && minimiser : sequence | view)
+            update_count(minimiser.minimiser_value, minimiser.occurrences);
+    }
+
+    return count;
+}
+
+
+template <typename ViewType>
+inline uint8_t* build_r_and_count(const ViewType& view, const uint8_t m_thres, const std::vector<std::vector<seqan3::dna4>> &input,
+                            sdsl::bit_vector &rnew, sdsl::rank_support_v<1> &rnew_rank,
+                            uint8_t* count, sdsl::rank_support_v<1> &r_rank)
+{
+    for(auto & sequence : input) {
+        for(auto && minimiser : sequence | view) {
+            size_t i = r_rank(minimiser.minimiser_value);
+            if(count[i] < m_thres)
+                rnew[minimiser.minimiser_value] = 1;
+        }
+    }
+
+    rnew_rank = sdsl::rank_support_v<1>(&rnew);
+
+    size_t c = rnew_rank(M);
+    uint8_t* new_count = new uint8_t[c];
+    std::memset(new_count, 0, c*sizeof(uint8_t));
+
+    for(auto & sequence : input) {
+        for(auto && minimiser : sequence | view) {
+            if(rnew[minimiser.minimiser_value])
+                new_count[rnew_rank(minimiser.minimiser_value)] = count[r_rank(minimiser.minimiser_value)];
+        }
+    }
+
+    return new_count;
+}
+
+
+template <typename ViewType>
+inline uint8_t* compute_level(const ViewType& view, const uint8_t m_thres, const std::vector<std::vector<seqan3::dna4>> &input,
+                        sdsl::bit_vector &r,
+                        sdsl::rank_support_v<1> &r_rank)
+{
+    sdsl::bit_vector rtmp = sdsl::bit_vector(M, 0);
+    sdsl::rank_support_v<1> rtmp_rank;
+
+    std::cout << "count minimisers and fill temporary bitvector R and count array...\n";
+    uint8_t* count_tmp = count_minimisers(view, m_thres, input, rtmp, rtmp_rank);
+    std::cout << "build final bitvector and count array...\n";
+    uint8_t* count = build_r_and_count(view, m_thres, input, r, r_rank, count_tmp, rtmp_rank);
+
+    delete[] count_tmp;
+    // delete rtmp
+
+    return count;
+}
+
+
+template <typename ViewType>
+inline std::vector<std::vector<seqan3::dna4>> get_frequent_skmers(
+    const ViewType& view, const std::vector<std::vector<seqan3::dna4>> &input, sdsl::bit_vector &r)
+{
+    std::vector<std::vector<seqan3::dna4>> skmers;
+    for(auto & sequence : input) {
+        size_t start_position;
+        bool level_up;
+        bool current_level_up;
+        for(auto && minimiser : sequence | view) {
+            level_up = r[minimiser.minimiser_value];
+            break;
+        }
+        if(!level_up)
+            start_position = 0;
+        for(auto && minimiser : sequence | view) {
+            current_level_up = r[minimiser.minimiser_value];
+
+            if(level_up && !current_level_up)
+                start_position = minimiser.range_position;
+            if(!level_up && current_level_up) {
+                std::vector<seqan3::dna4> skmer;
+                for(size_t i=start_position; i < minimiser.range_position+k; i++)
+                    skmer.push_back(sequence[i]);
+                skmers.push_back(skmer);
+            }
+
+            level_up = current_level_up;
+        }
+        if(!current_level_up) {
+            std::vector<seqan3::dna4> skmer;
+            for(size_t i=start_position; i < sequence.size(); i++)
+                skmer.push_back(sequence[i]);
+            skmers.push_back(skmer);
+        }
+    }
+
+    return skmers;
+}
+
+
+void stats(const std::vector<std::vector<seqan3::dna4>> &input)
+{
+    auto view1 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m, .window_size = k, .seed=seed1});
+    auto view2 = srindex::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k, .seed=seed2});
+
+    std::cout << "counting (super-)kmers...\n";
     size_t N = 0;
-    uint64_t n = 0;
+    uint64_t skmers = 0;
     uint64_t kmers = 0;
     for(auto & sequence : input) {
         for(auto && minimiser : sequence | view1) {
-            size_t i = r_rank(minimiser.minimiser_value);
             size_t o = minimiser.occurrences;
             const uint8_t w = o/span + 1;
-            count[i] += w;
-            if(count[i] > m_thres1)
-                count[i] = m_thres1;
             kmers += o;
-            n += w;
+            skmers += w;
         }
         N += sequence.size();
     }
 
-    std::cout << "mark (un)frequent minimisers...\n";
-    seqan3::contrib::sdsl::bit_vector r1 = seqan3::contrib::sdsl::bit_vector(M, 0);
-    seqan3::contrib::sdsl::bit_vector r2 = seqan3::contrib::sdsl::bit_vector(M, 0);
-    for(auto & sequence : input) {
-        for(auto && minimiser : sequence | view2) {
-            size_t i = r_rank(minimiser.minimiser1_value);
-            if(count[i] < m_thres1)
-                r1[minimiser.minimiser1_value] = 1;
-            else
-                r2[minimiser.minimiser2_value] = 1;
-        }
-    }
+    std::cout << "compute level 1...\n";
+    sdsl::bit_vector r1 = sdsl::bit_vector(M, 0);
+    sdsl::rank_support_v<1> r1_rank;
+    uint8_t* count1 = compute_level(view1, m_thres1, input, r1, r1_rank);
 
-    std::cout << "counting minimisers1...\n";
-    seqan3::contrib::sdsl::rank_support_v<1> r1_rank = seqan3::contrib::sdsl::rank_support_v<1>(&r1);
-    size_t c1 = r1_rank(M);
-    uint8_t* count1 = new uint8_t[c1];
-    std::memset(count1, 0, c1*sizeof(uint8_t));
+    std::cout << "extract uncovered sequence parts...\n";
+    std::vector<std::vector<seqan3::dna4>> remaining_sequences1;
+    remaining_sequences1 = get_frequent_skmers(view1, input, r1);
 
-    for(auto & sequence : input) {
-        for(auto && minimiser : sequence | view1) {
-            if(r1[minimiser.minimiser_value])
-                count1[r1_rank(minimiser.minimiser_value)] = count[r_rank(minimiser.minimiser_value)];
-        }
-    }
-    uint64_t n1 = 0;
-    for(uint64_t i=0; i < c1; i++)
-        n1 += count1[i];
+    size_t len_rem_seqs = 0;
+    for(auto & sequence : remaining_sequences1)
+        len_rem_seqs += sequence.size();
+    std::cout << "remaining superkmers " << remaining_sequences1.size() << " (" << (double)remaining_sequences1.size()/skmers*100 << "%) ";
+    std::cout << "total length: " << len_rem_seqs << " (" << (double) len_rem_seqs/N*100 << "%)\n";
 
-    delete[] count;
-    // delete r
-
-    std::cout << "counting minimisers2...\n";
-    seqan3::contrib::sdsl::rank_support_v<1> r2_rank = seqan3::contrib::sdsl::rank_support_v<1>(&r2);
-    size_t c2 = r2_rank(M);
-    uint8_t* count2 = new uint8_t[c2];
-    std::memset(count2, 0, c2*sizeof(uint8_t));
-
-    auto update_count2 = [&](uint64_t minimiser_value, size_t occurrences) {
-        size_t i = r2_rank(minimiser_value);
-        count2[i] += occurrences/span + 1;
-        if(count2[i] > m_thres2)
-            count2[i] = m_thres2;
-    };
-
-    for(auto & sequence : input) {
-        uint64_t current_m1, current_m2;
-        bool level1, new_level1, m2_change;
-
-        for(auto && minimiser : sequence | view4) {
-            current_m1 = minimiser.minimiser1_value;
-            current_m2 = minimiser.minimiser2_value;
-            break;
-        }
-        size_t occurrences = 0; // occurences of minimiser2
-        level1 = r1[current_m1];
-
-        for(auto && minimiser : sequence | view4) {
-            new_level1 = r1[minimiser.minimiser1_value];
-            m2_change = current_m2 != minimiser.minimiser2_value;
-
-            // in level 2 update count2 when going to level 1 or minimiser2 changes
-            if(!level1 && (new_level1 || m2_change))
-                update_count2(minimiser.minimiser2_value, occurrences);
-
-            occurrences++;
-            // reset occurences, if level or minimiser2 changes
-            // occurrences *= !((level1 != new_level1) || m2_change);
-
-            current_m1 = minimiser.minimiser1_value;
-            current_m2 = minimiser.minimiser2_value;
-            level1 = new_level1;
-        }
-        
-        if(!level1)
-            update_count2(current_m2, occurrences);
-    }
-
-    std::cout << "mark unfrequent minimisers2, filling HT...\n";
-    seqan3::contrib::sdsl::bit_vector r3 = seqan3::contrib::sdsl::bit_vector(M, 0);
+    std::cout << "filling HT...\n";
     std::unordered_set<uint64_t> freq_kmers;
     std::unordered_set<uint64_t> freq_minimzer;
 
-    for(auto & sequence : input) {
-        size_t j = 0;
-        bool error = false;
-        for(auto && minimiser : sequence | view4) {
-            if(!r1[minimiser.minimiser1_value]) {
-                size_t i = r2_rank(minimiser.minimiser2_value);
-                if(count2[i] == 0) {
-                    error = true;
-                    std::cout << j << " ";
-                }
-                if(count2[i] < m_thres2)
-                    r3[minimiser.minimiser2_value] = 1;
-                else {
-                    // freq_kmers.insert(minimiser.window_value);
-                    freq_minimzer.insert(minimiser.minimiser2_value);
-                }
-            }
-            j++;
-        }
-        if(error)
-            std::cout << sequence.size() << '\n';
-    }
-
-    std::cout << "counting unfrequent minimisers2...\n";
-    seqan3::contrib::sdsl::rank_support_v<1> r3_rank = seqan3::contrib::sdsl::rank_support_v<1>(&r3);
-    size_t c3 = r3_rank(M);
-    uint8_t* count3 = new uint8_t[c3];
-    std::memset(count3, 0, c3*sizeof(uint8_t));
-
-    for(auto & sequence : input) {
-        for(auto && minimiser : sequence | view4) {
-            if(!r1[minimiser.minimiser1_value] && r3[minimiser.minimiser2_value])
-                count3[r3_rank(minimiser.minimiser2_value)] = count2[r2_rank(minimiser.minimiser2_value)];
+    auto view3 = srindex::views::minimiser_and_window_hash({.minimiser_size = m, .window_size = k, .seed=seed2});
+    for(auto & sequence : remaining_sequences1) {
+        for(auto && minimiser : sequence | view3) {
+            freq_minimzer.insert(minimiser.minimiser_value);
+            freq_kmers.insert(minimiser.window_value);
         }
     }
-    uint64_t n2 = 0;
-    for(uint64_t i=0; i < c3; i++)
-        n2 += count3[i];
-
-    // delete r2
-    delete[] count2;
 
     std::cout << "computing distributions...\n";
-    uint64_t* counter1 = new uint64_t[m_thres1];
-    std::memset(counter1, 0, m_thres1*sizeof(uint64_t));
-    for(uint64_t i=0; i < c1; i++) {
-        for(int j=0; j < m_thres1; j++) {
+
+    size_t c1 = r1_rank(M);
+    uint64_t counter1[m_thres1] = {0};
+    for(size_t i=0; i < c1; i++) {
+        for(size_t j=0; j < m_thres1; j++) {
             if(count1[i] == j) {
                 counter1[j]++;
                 break;
             }
         }
     }
-    uint64_t* counter2 = new uint64_t[m_thres2];
-    std::memset(counter2, 0, m_thres2*sizeof(uint64_t));
-    for(uint64_t i=0; i < c3; i++) {
-        for(int j=0; j < m_thres2; j++) {
-            if(count3[i] == j) {
-                counter2[j]++;
-                break;
-            }
-        }
-    }
+    uint64_t n1 = 0;
+    for(size_t i=0; i < c1; i++)
+        n1 += count1[i];
 
     uint64_t cum = 0;
     uint64_t cum_skmers = 0;
     std::cout << "\nminimiser 1 distribution:\n";
-    for(int j=0; j < m_thres1; j++) {
+    for(uint64_t j=0; j < m_thres1; j++) {
         cum += counter1[j];
         cum_skmers += (j)*counter1[j];
-        std::cout << "occurrences " << (j) << ": " << counter1[j] << " " << (double) counter1[j]/c1*100 << "%  cum: " << cum << " " << (double) cum/c1*100 << "% covering " << cum_skmers << ' ' << (double) cum_skmers/n*100 << "% superkmers\n";
+        std::cout << "occurrences " << (j) << ": " << counter1[j] << " " << (double) counter1[j]/c1*100 << "%  cum: " << cum << " " << (double) cum/c1*100 << "% covering " << cum_skmers << ' ' << (double) cum_skmers/skmers*100 << "% superkmers\n";
     }
     std::cout << "avg superkmers1: " << (double) n1/c1 <<  '\n';
-    std::cout << "minimisers going to level 2: " << c-c1 << "  " << (double) (c-c1)/c*100 << "% to cover " << (double) (n-n1)/n*100 << "% superkmers\n";
-    
-    cum = 0;
-    std::cout << "\nminimiser 2 distribution:\n";
-    for(int j=0; j < m_thres2; j++) {
-        cum += counter2[j];
-        cum_skmers += (j)*counter2[j];
-        std::cout << "occurrences " << (j) << ": " << counter2[j] << " " << (double) counter2[j]/c3*100 << "%  cum: " << cum << " " << (double) cum/c3*100 << "% covering " << cum_skmers << ' ' << (double) cum_skmers/n*100 << "% superkmers\n";
-    }
-    std::cout << "avg superkmers2: " << (double) n2/c3 <<  '\n';
-    // std::cout << "minimisers going to HT: " << c1-c2 << " " << (double) freq_minimzer.size()/(n2)*100 << "%\n";
-
-    // std::cout << "superkmers to cover by HT: " << 100.0 - (double) cum_skmers/(n1+n2+n3)*100 << "%\n";
-    // std::cout << "freq minimisers left: " << freq_minimzer.size() << " " << (double) freq_minimzer.size()/n*100 << "%\n";
-    // std::cout << "kmers in HT: " << freq_kmers.size() << " " << (double) freq_kmers.size()/kmers*100 << "%\n";
 
     std::cout << "\n====== report ======\n";
     std::cout << "text length: " << N << "\n";
     std::cout << "no kmers: " << kmers <<  '\n';
-    std::cout << "no minimiser: " << n << "\n";
-    // std::cout << "no distinct minimiser: " << c << "\n";
+    std::cout << "no superkmers: " << skmers << "\n";
     std::cout << "no minimiser1: " << n1 << "\n";
     std::cout << "no distinct minimiser1: " << c1 << "\n";
-    std::cout << "no minimiser2: " << n2 << "\n";
-    std::cout << "no distinct minimiser2: " << c3 << "\n";
-    std::cout << "no minimiser HT: " << freq_minimzer.size() << "\n";
+    std::cout << "no minimiser HT: " << freq_minimzer.size() << " " << (double)freq_minimzer.size()/skmers*100 << "%\n";
     std::cout << "no kmers HT: " << freq_kmers.size() << " " << (double) freq_kmers.size()/kmers*100 << "%\n";
     std::cout << "density r1: " << (double) c1/M*100 << "%\n";
-    std::cout << "density r2: " << (double) c3/M*100 << "%\n";
 
     delete[] count1;
-    delete[] counter1;
-    delete[] count3;
-    delete[] counter2;
-
 }
 
 

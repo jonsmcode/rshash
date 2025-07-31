@@ -10,8 +10,8 @@
 const uint64_t seed1 = 0x8F'3F'73'B5'CF'1C'9A'DE;
 const uint64_t seed2 = 1;
 
-const uint8_t m_thres1 = 10;
-const uint8_t m_thres2 = 10;
+const uint8_t m_thres1 = 50;
+const uint8_t m_thres2 = 50;
 
 const uint8_t k = 31;
 const uint8_t m = 16;
@@ -19,6 +19,7 @@ const uint8_t m = 16;
 const uint64_t M = 1ULL << (m+m);
 
 const size_t span = 100;
+
 
 namespace sdsl = seqan3::contrib::sdsl;
 
@@ -34,8 +35,8 @@ uint64_t load_file(const std::filesystem::path &filepath, std::vector<std::vecto
     for (auto & record : stream) {
         N += record.sequence().size();
         output.push_back(std::move(record.sequence()));
-        if(N >= 1000000000)
-            break;
+        // if(N >= 1000000000)
+        //     return N;
     }
     return N;
 }
@@ -125,34 +126,40 @@ template <typename ViewType>
 inline std::vector<std::vector<seqan3::dna4>> get_frequent_skmers(
     const ViewType& view, const std::vector<std::vector<seqan3::dna4>> &input, sdsl::bit_vector &r)
 {
-    std::vector<std::vector<seqan3::dna4>> freq_sequences;
+    std::vector<std::vector<seqan3::dna4>> skmers;
     for(auto & sequence : input) {
         size_t start_position;
-        bool freq;
-        bool current_freq;
+        bool level_up;
+        bool current_level_up;
         for(auto && minimiser : sequence | view) {
-            freq = !r[minimiser.minimiser_value];
-            if(freq)
-                start_position = 0;
+            level_up = r[minimiser.minimiser_value];
             break;
         }
+        if(!level_up)
+            start_position = 0;
         for(auto && minimiser : sequence | view) {
-            current_freq = !r[minimiser.minimiser_value];
+            current_level_up = r[minimiser.minimiser_value];
 
-            if(!freq && current_freq)
+            if(level_up && !current_level_up)
                 start_position = minimiser.range_position;
-            if(freq && !current_freq) {
-                std::vector<seqan3::dna4> freq_sequence;
-                for(size_t i=start_position; i < minimiser.range_position+k-1; i++)
-                    freq_sequence.push_back(sequence[i]);
-                freq_sequences.push_back(freq_sequence);
+            if(!level_up && current_level_up) {
+                std::vector<seqan3::dna4> skmer;
+                for(size_t i=start_position; i < minimiser.range_position+k; i++)
+                    skmer.push_back(sequence[i]);
+                skmers.push_back(skmer);
             }
 
-            freq = current_freq;
+            level_up = current_level_up;
+        }
+        if(!current_level_up) {
+            std::vector<seqan3::dna4> skmer;
+            for(size_t i=start_position; i < sequence.size(); i++)
+                skmer.push_back(sequence[i]);
+            skmers.push_back(skmer);
         }
     }
 
-    return freq_sequences;
+    return skmers;
 }
 
 

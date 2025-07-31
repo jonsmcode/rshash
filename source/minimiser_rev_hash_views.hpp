@@ -561,8 +561,7 @@ private:
     uint64_t kmer_mask{std::numeric_limits<uint64_t>::max()};
     uint64_t kmer_value{};
     uint64_t kmer_value_rev{};
-    // uint64_t seed{0x8F'3F'73'B5'CF'1C'9A'DE};
-    uint64_t seed{1};
+    uint64_t seed{};
 
     uint64_t minimiser_size{};
 
@@ -691,7 +690,6 @@ private:
 
     void init()
     {
-        // seed = params.seed & kmer_mask;
         seed = params.seed;
         minimiser_size = params.minimiser_size;
 

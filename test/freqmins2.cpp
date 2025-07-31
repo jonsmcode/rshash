@@ -108,8 +108,12 @@ inline std::vector<std::vector<seqan3::dna4>> extract_frequent_parts(
     std::vector<std::vector<seqan3::dna4>> freq_sequences;
     for(auto & sequence : input) {
         size_t start_position;
-        bool freq = false;
-        bool current_freq = false;
+        bool freq;
+        for(auto && minimiser : sequence | view) {
+            freq = r[minimiser.minimiser_value];
+            break;
+        }
+        bool current_freq;
         for(auto && minimiser : sequence | view)
         {
             current_freq = r[minimiser.minimiser_value];
@@ -118,7 +122,7 @@ inline std::vector<std::vector<seqan3::dna4>> extract_frequent_parts(
                 start_position = minimiser.range_position;
             if(freq && !current_freq) {
                 std::vector<seqan3::dna4> freq_sequence;
-                for(size_t i=start_position; i < minimiser.range_position+k-1; i++)
+                for(size_t i=start_position; i < minimiser.range_position+k; i++)
                     freq_sequence.push_back(sequence[i]);
                 freq_sequences.push_back(freq_sequence);
             }

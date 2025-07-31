@@ -8,7 +8,7 @@
 using namespace seqan3::literals;
 using namespace seqan3::contrib::sdsl;
 
-namespace sdsl = seqan3::contrib::sdsl;
+// namespace sdsl = seqan3::contrib::sdsl;
 
 
 class UnitigsDictionaryHash2
@@ -16,23 +16,22 @@ class UnitigsDictionaryHash2
 private:
     uint8_t k, m;
     bit_vector r1;
-    bit_vector r2;
-    bit_vector s1;
-    bit_vector s2;
-    seqan3::contrib::sdsl::sd_vector<> endpoints;
-    seqan3::contrib::sdsl::rank_support_sd<> endpoints_rank;
-    seqan3::contrib::sdsl::select_support_sd<> endpoints_select;
     rank_support_v<1> r1_rank;
+    bit_vector r2;
     rank_support_v<1> r2_rank;
+    bit_vector s1;
     sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s1_select;
+    bit_vector s2;
     sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s2_select;
     int_vector<0> offsets1;
     int_vector<0> offsets2;
+    gtl::flat_hash_set<uint64_t> hashmap;
+    sd_vector<> endpoints;
+    rank_support_sd<> endpoints_rank;
+    select_support_sd<> endpoints_select;
     seqan3::bitpacked_sequence<seqan3::dna4> text;
-    // std::unordered_set<uint64_t> hashmap;
-    // gtl::flat_hash_set<uint64_t> hashmap;
-    void fill_buffer1(std::vector<uint64_t> &, const uint64_t, size_t, size_t);
-    void fill_buffer2(std::vector<uint64_t> &, const uint64_t, size_t, size_t);
+    void fill_buffer1(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
+    void fill_buffer2(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
 
 
 public:

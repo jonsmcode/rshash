@@ -2,7 +2,7 @@
 #include <seqan3/argument_parser/all.hpp>
 #include <seqan3/io/sequence_file/all.hpp>
 
-#include "dict.hpp"
+#include "dict4.hpp"
 
 
 struct cmd_arguments {
@@ -55,8 +55,8 @@ void load_file(const std::filesystem::path &filepath, std::vector<std::vector<se
     for (auto & record : stream) {
         N += record.sequence().size();
         output.push_back(std::move(record.sequence()));
-        if(N >= 1000000000)
-            return;
+        // if(N >= 1000000000)
+        //     return;
     }
 }
 
