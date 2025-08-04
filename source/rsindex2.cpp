@@ -11,16 +11,6 @@
 #include "minimiser_rev_xor_views.hpp"
 
 
-const uint8_t m_thres1 = 50;
-const uint8_t m_thres2 = 50;
-
-const uint64_t seed1 = 0x8F'3F'73'B5'CF'1C'9A'DE;
-const uint64_t seed2 = 0x29'6D'BD'33'32'56'8C'64;
-
-// const size_t span = 31;
-
-
-
 static inline constexpr uint64_t compute_mask(uint64_t const size)
 {
     assert(size > 0u);
@@ -396,12 +386,16 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
 }
 
 
-
-inline void RSIndex::fill_buffer1(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q)
+template<int level>
+inline void RSIndex::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q)
 {
     for(uint64_t i = 0; i < q-p; i++) {
         uint64_t hash = 0;
-        size_t o = offsets1[p+i];
+        size_t o;
+        if constexpr (level == 1)
+            o = offsets1[p+i];
+        if constexpr (level == 2)
+            o = offsets2[p+i];
         size_t next_endpoint = endpoints_select(endpoints_rank(o+1)+1);
         size_t e = o+k+span;
         if(e > next_endpoint)
@@ -422,40 +416,6 @@ inline void RSIndex::fill_buffer1(std::vector<uint64_t> &buffer, const uint64_t 
     }
 }
 
-
-inline void RSIndex::fill_buffer2(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q)
-{
-    for(uint64_t i = 0; i < q-p; i++) {
-        uint64_t hash = 0;
-        size_t o = offsets2[p+i];
-        size_t next_endpoint = endpoints_select(endpoints_rank(o+1)+1);
-        size_t e = o+k+span;
-        if(e > next_endpoint)
-            e = next_endpoint;
-        for (uint64_t j=o; j < o+k; j++) {
-            uint64_t const new_rank = seqan3::to_rank(text[j]);
-            hash <<= 2;
-            hash |= new_rank;
-        }
-        buffer.push_back(hash);
-        for(size_t j=o+k; j < e; j++) {
-            uint64_t const new_rank = seqan3::to_rank(text[j]);
-            hash <<= 2;
-            hash |= new_rank;
-            hash &= mask;
-            buffer.push_back(hash);
-        }
-    }
-}
-
-
-// inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query, uint64_t query_rev) {
-//     for(uint64_t i=0; i < array.size(); i++) {
-//         if(array[i] == query || array[i] == query_rev)
-//             return true;
-//     }
-//     return false;
-// }
 
 inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found) {
     for(size_t i=last_found+1; i < array.size(); i++) {
@@ -497,7 +457,7 @@ uint64_t RSIndex::streaming_query(const std::vector<seqan3::dna4> &query)
             size_t q = s1_select.select(minimizer_id+1);
 
             buffer1.clear();
-            fill_buffer1(buffer1, mask, p, q);
+            fill_buffer<1>(buffer1, mask, p, q);
             last_found1 = 0;
             occurences += lookup_serial(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1);
             current_minimiser1 = minimisers.minimiser1_value;
@@ -510,7 +470,7 @@ uint64_t RSIndex::streaming_query(const std::vector<seqan3::dna4> &query)
             size_t q = s2_select.select(minimizer_id+1);
 
             buffer2.clear();
-            fill_buffer2(buffer2, mask, p, q);
+            fill_buffer<2>(buffer2, mask, p, q);
             last_found2 = 0;
             occurences += lookup_serial(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2);
             current_minimiser2 = minimisers.minimiser2_value;

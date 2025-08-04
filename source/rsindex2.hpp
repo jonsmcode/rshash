@@ -9,8 +9,16 @@ using namespace seqan3::literals;
 using namespace seqan3::contrib::sdsl;
 
 // namespace sdsl = seqan3::contrib::sdsl;
+const uint8_t m_thres1 = 50;
+const uint8_t m_thres2 = 50;
 
-const size_t span = 100;
+const uint64_t seed1 = 0x8F'3F'73'B5'CF'1C'9A'DE;
+const uint64_t seed2 = 0x29'6D'BD'33'32'56'8C'64;
+
+const uint8_t m1=15;
+const uint8_t m2=17;
+
+const size_t span = 31;
 
 class RSIndex
 {
@@ -31,8 +39,8 @@ private:
     rank_support_sd<> endpoints_rank;
     select_support_sd<> endpoints_select;
     seqan3::bitpacked_sequence<seqan3::dna4> text;
-    void fill_buffer1(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
-    void fill_buffer2(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
+    template<int level>
+    void fill_buffer(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
 
 
 public:
