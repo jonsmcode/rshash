@@ -1,15 +1,12 @@
 #!/bin/bash
 
 PROGRAM="../build/source/lookup2"
-# PROGRAM="../build/source/lookup_unitigsr"
-# PROGRAM="../build/source/comp_lookup"
 
 today=$(date +%Y-%m-%d-%H-%M-%S)
 
-# DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../test/datasets" >/dev/null 2>&1 && pwd )"
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../../../datasets/unitigs" >/dev/null 2>&1 && pwd )"
 LOG="log.txt"
-CSV="lookup-results-$today.csv"
+CSV="lookup2-results-$today.csv"
 
 run()
 {
@@ -37,24 +34,10 @@ run()
 
               echo $f >> $LOG
 
-              /usr/bin/time -l -o time.txt $PROGRAM build -i "$f" -d "${BASENAME}.dict" -k $k -m $m > prog_out.txt 2>&1
+              /usr/bin/time -l -o time.txt $PROGRAM build -i "$f" -d "${BASENAME}.dict" -k $k -m $((m - 1)) -n $m > prog_out.txt 2>&1
 
               cat prog_out.txt >> $LOG
 
-              # file_size=$(stat -f%z "${BASENAME}.dict")
-              # buildtime=$(cat time.txt | grep "real" | awk '{print $1}')
-              # buildmem=$(cat time.txt  | grep "maximum resident set size" | awk '{print $1}')
-              # textlength=$(grep "text length: " prog_out.txt | sed -E 's/.*text length: ([0-9]+).*/\1/')
-              # no_distinct_kmers=$(awk '/no distinct kmers/ {print $4}' prog_out.txt | tr -d ',')
-              # density_r=$(awk '/density r/ {print $3}' prog_out.txt | tr -d '%')
-              # density_s=$(awk '/density s/ {print $3}' prog_out.txt | tr -d '%')
-              # no_kmers=$(awk '/no kmers/ {print $3}' prog_out.txt)
-              # no_minimiser=$(awk '/no minimiser/ {print $3}' prog_out.txt)
-              # freq_kmers=$(awk '/freq kmers/ {print $3}' prog_out.txt)
-              # spaceoffsets=$(grep '^offsets:' prog_out.txt | cut -d':' -f2 | xargs)
-              # spacer=$(grep '^R:' prog_out.txt | cut -d':' -f2 | xargs)
-              # spaces=$(grep '^S:' prog_out.txt | cut -d':' -f2 | xargs)
-              # spacetotal=$(grep '^total:' prog_out.txt | cut -d':' -f2 | xargs)
               file_size=$(stat -f%z "${BASENAME}.dict")
               buildtime=$(cat time.txt | grep "real" | awk '{print $1}')
               buildmem=$(cat time.txt  | grep "maximum resident set size" | awk '{print $1}')
@@ -79,18 +62,6 @@ run()
               parent_dir=$(dirname "$f")
               file_name=$(basename "$f")
 
-              # if [[ "$BASENAME" == *"bacterial"* ]]; then
-              #   queries=("${parent_dir/unitigs/queries}/SRR5901135_1.fastq.gz" "${parent_dir/unitigs/queries}/SRR5833294.fastq.gz")
-              # elif [[ "$BASENAME" == *"cod"* ]]; then
-              #   queries=("${parent_dir/unitigs/queries}/SRR12858649.fastq.gz" "${parent_dir/unitigs/queries}/SRR11449743_1.fastq.gz")
-              # elif [[ "$BASENAME" == *"kestrel"* ]]; then
-              #   queries=("${parent_dir/unitigs/queries}/SRR11449743_1.fastq.gz" "${parent_dir/unitigs/queries}/SRR12858649.fastq.gz")
-              # elif [[ "$BASENAME" == *"human"* ]]; then
-              #   queries=("${parent_dir/unitigs/queries}/SRR5833294.fastq.gz" "${parent_dir/unitigs/queries}/SRR5901135_1.fastq.gz")
-              # else
-              #   queries=()
-              # fi
-
               # low hitrates
               if [[ "$BASENAME" == *"bacterial"* ]]; then
                 queries=("${parent_dir/unitigs/queries}/SRR5833294.fastq.gz")
@@ -103,23 +74,12 @@ run()
               else
                 queries=()
               fi
-              # if [[ "$BASENAME" == *"bacterial"* ]]; then
-              #   queries=("${parent_dir/unitigs/queries}/SRR5833294.K100.fastq.gz")
-              # elif [[ "$BASENAME" == *"cod"* ]]; then
-              #   queries=("${parent_dir/unitigs/queries}/SRR11449743_1.K100.fastq.gz")
-              # elif [[ "$BASENAME" == *"kestrel"* ]]; then
-              #   queries=("${parent_dir/unitigs/queries}/SRR12858649.K100.fastq.gz")
-              # elif [[ "$BASENAME" == *"human"* ]]; then
-              #   queries=("${parent_dir/unitigs/queries}/SRR5901135_1.K100.fastq.gz")
-              # else
-              #   queries=()
-              # fi
 
               for query in "${queries[@]}"; do
                   echo $f >> $LOG
                   echo $query >> $LOG
                   echo $query
-                  /usr/bin/time -l -o time.txt $PROGRAM query -i "$f" -d "${BASENAME}.dict" -q $query -k $k -m $m > prog_out.txt 2>&1
+                  /usr/bin/time -l -o time.txt $PROGRAM query -d "${BASENAME}.dict" -q $query > prog_out.txt 2>&1
 
                   cat prog_out.txt >> $LOG
                   
@@ -137,17 +97,6 @@ run()
               done
 
               # high hitrates
-              # if [[ "$BASENAME" == *"bacterial"* ]]; then
-              #   queries=("${parent_dir/unitigs/queries}/SRR5901135_1.K100.fastq.gz")
-              # elif [[ "$BASENAME" == *"cod"* ]]; then
-              #   queries=("${parent_dir/unitigs/queries}/SRR12858649.K100.fastq.gz")
-              # elif [[ "$BASENAME" == *"kestrel"* ]]; then
-              #   queries=("${parent_dir/unitigs/queries}/SRR11449743_1.K100.fastq.gz")
-              # elif [[ "$BASENAME" == *"human"* ]]; then
-              #   queries=("${parent_dir/unitigs/queries}/SRR5833294.K100.fastq.gz")
-              # else
-              #   queries=()
-              # fi
               if [[ "$BASENAME" == *"bacterial"* ]]; then
                 queries=("${parent_dir/unitigs/queries}/SRR5901135_1.fastq.gz")
               elif [[ "$BASENAME" == *"cod"* ]]; then
@@ -164,7 +113,7 @@ run()
                   echo $f >> $LOG
                   echo $query >> $LOG
                   echo $query
-                  /usr/bin/time -l -o time.txt $PROGRAM query -i "$f" -d "${BASENAME}.dict" -q $query -k $k -m $m > prog_out.txt 2>&1
+                  /usr/bin/time -l -o time.txt $PROGRAM query -d "${BASENAME}.dict" -q $query > prog_out.txt 2>&1
 
                   cat prog_out.txt >> $LOG
                   

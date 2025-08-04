@@ -5,10 +5,8 @@
 #include <cereal/archives/binary.hpp>
 
 #include "rsindex2.hpp"
-// #include "buffer.hpp"
 #include "io.hpp"
-// #include "minimiser_rev_hash_views.hpp"
-#include "minimiser_rev_xor_views.hpp"
+#include "minimiser_rev_xor_views2.hpp"
 
 
 static inline constexpr uint64_t compute_mask(uint64_t const size)
@@ -25,22 +23,23 @@ static inline constexpr uint64_t compute_mask(uint64_t const size)
 
 RSIndex::RSIndex() {}
 
-RSIndex::RSIndex(uint8_t const k, uint8_t const m) {
+RSIndex::RSIndex(uint8_t const k, uint8_t const m1, uint8_t const m2) {
     this->k = k;
-    this->m = m;
+    this->m1 = m1;
+    this->m2 = m2;
 }
 
 
 int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
 {
-    // auto view1 = srindex::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k, .seed=seed1});
-    auto view1 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m, .window_size = k, .seed=seed1});
+    auto view1 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
 
     // assert(m <= 32);
-    const uint64_t M = 1ULL << (m+m);
+    const uint64_t M1 = 1ULL << (m1+m1);
+    const uint64_t M2 = 1ULL << (m2+m2);
 
     std::cout << "find minimizers...\n";
-    bit_vector r1tmp = bit_vector(M, 0);
+    bit_vector r1tmp = bit_vector(M1, 0);
 
     size_t N = 0;
     uint64_t no_sequences = 0;
@@ -66,7 +65,7 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     endpoints_select = seqan3::contrib::sdsl::select_support_sd<>(&endpoints);
 
     std::cout << "count minimizers...\n";
-    size_t c1tmp = r1tmp_rank(M);
+    size_t c1tmp = r1tmp_rank(M1);
     uint8_t* count1tmp = new uint8_t[c1tmp];
     std::memset(count1tmp, 0, c1tmp*sizeof(uint8_t));
 
@@ -86,7 +85,7 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     }
 
     std::cout << "filling R_1...\n";
-    r1 = bit_vector(M, 0);
+    r1 = bit_vector(M1, 0);
     for(auto & sequence : input) {
         for(auto && minimisers : sequence | view1) {
             if(count1tmp[r1tmp_rank(minimisers.minimiser_value)] < m_thres1)
@@ -98,7 +97,7 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     delete[] count1tmp;
 
     std::cout << "count minimizers1 again...\n";
-    size_t c1 = r1_rank(M);
+    size_t c1 = r1_rank(M1);
     uint8_t* count1 = new uint8_t[c1];
     std::memset(count1, 0, c1*sizeof(uint8_t));
     for(auto & sequence : input) {
@@ -202,9 +201,8 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
 
 
     std::cout << "build level 2...\n";
-    auto view2 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m, .window_size = k, .seed=seed2});
-    // auto view2 = srindex::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k, .seed=seed2});
-    bit_vector r2tmp = bit_vector(M, 0);
+    auto view2 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m2, .window_size = k, .seed=seed2});
+    bit_vector r2tmp = bit_vector(M2, 0);
 
     for(auto & record : freq_skmers1) {
         for(auto && minimiser : record | view2)
@@ -213,7 +211,7 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     rank_support_v<1> r2tmp_rank = rank_support_v<1>(&r2tmp);
 
     std::cout << "count minimizers2...\n";
-    size_t c2tmp = r2tmp_rank(M);
+    size_t c2tmp = r2tmp_rank(M2);
     uint8_t* count2tmp = new uint8_t[c2tmp];
     std::memset(count2tmp, 0, c2tmp*sizeof(uint8_t));
 
@@ -227,7 +225,7 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     }
 
     std::cout << "fill R2...\n";
-    r2 = bit_vector(M, 0);
+    r2 = bit_vector(M2, 0);
     for(auto & sequence : freq_skmers1) {
         for(auto && minimiser : sequence | view2) {
             if(count2tmp[r2tmp_rank(minimiser.minimiser_value)] < m_thres2)
@@ -237,7 +235,7 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     r2_rank = rank_support_v<1>(&r2);
 
     std::cout << "fill count 2...\n";
-    size_t c2 = r2_rank(M);
+    size_t c2 = r2_rank(M2);
     uint8_t* count2 = new uint8_t[c2];
     std::memset(count2, 0, c2*sizeof(uint8_t));
 
@@ -336,8 +334,7 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "total length: " << len_rem_seqs << " (" << (double) len_rem_seqs/N*100 << "%)\n";
 
     std::cout << "filling HT...\n";
-    // auto view3 = srindex::views::two_minimisers_and_window_hash({.minimiser_size = m, .window_size = k, .seed1=seed1, .seed2=seed2});
-    auto view3 = srindex::views::xor_minimiser_and_window({.minimiser_size = m, .window_size = k, .seed=seed2});
+    auto view3 = srindex::views::xor_minimiser_and_window({.minimiser_size = m1, .window_size = k, .seed=seed1});
     for(auto & sequence : freq_skmers2) {
         for(auto && minimiser : sequence | view3) {
             hashmap.insert(std::min<uint64_t>(minimiser.window_value, minimiser.window_value_rev));
@@ -365,8 +362,8 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "no minimiser HT: " << hashmap.size() << " " << (double)hashmap.size()/n*100 << "%\n";
     std::cout << "no kmers HT: " << hashmap.size() << " " << (double) hashmap.size()/kmers*100 << "%\n";
 
-    std::cout << "density r1: " << (double) c1/M*100 << "%\n";
-    std::cout << "density r2: " << (double) c2/M*100 << "%\n";
+    std::cout << "density r1: " << (double) c1/M1*100 << "%\n";
+    std::cout << "density r2: " << (double) c2/M2*100 << "%\n";
     std::cout << "density s1: " << (double) s1_select.bitCount()/(n1+1)*100 <<  "%\n";
     std::cout << "density s2: " << (double) s2_select.bitCount()/(n2+1)*100 <<  "%\n";
     std::cout << "\nspace per kmer in bit:\n";
@@ -375,12 +372,12 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "offsets1: " << (double) n1*offset_width/kmers << "\n";
     std::cout << "offsets2: " << (double) n2*offset_width/kmers << "\n";
     std::cout << "HT: " << (double) 8*hashmap.size()/kmers << "\n";
-    std::cout << "R_1: " << (double) M/kmers << "\n";
-    std::cout << "R_2: " << (double) M/kmers << "\n";
+    std::cout << "R_1: " << (double) M1/kmers << "\n";
+    std::cout << "R_2: " << (double) M2/kmers << "\n";
     std::cout << "S_1: " << (double) (n1+1)/kmers << "\n";
     std::cout << "S_2: " << (double) (n2+1)/kmers << "\n";
 
-    std::cout << "total: " << (double) (n1*offset_width+n2*offset_width+2*N+M+M+n1+1+n2+1+size_in_bytes(endpoints)/8+8*hashmap.size()/kmers)/kmers << "\n";
+    std::cout << "total: " << (double) (n1*offset_width+n2*offset_width+2*N+M1+M2+n1+1+n2+1+size_in_bytes(endpoints)/8+8*hashmap.size()/kmers)/kmers << "\n";
 
     return 0;
 }
@@ -436,7 +433,7 @@ inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query, uint64_t
 
 uint64_t RSIndex::streaming_query(const std::vector<seqan3::dna4> &query)
 {
-    auto view = srindex::views::two_minimisers_and_window_hash({.minimiser_size = m, .window_size = k, .seed1=seed1, .seed2=seed2});
+    auto view = srindex::views::two_minimisers_and_window_hash({.minimiser_size1 = m1, .minimiser_size2 = m2, .window_size = k, .seed1=seed1, .seed2=seed2});
 
     uint64_t occurences = 0;
     const uint64_t mask = compute_mask(2u * k);
@@ -486,7 +483,8 @@ uint64_t RSIndex::streaming_query(const std::vector<seqan3::dna4> &query)
 int RSIndex::save(const std::filesystem::path &filepath) {
     std::ofstream out(filepath, std::ios::binary);
     seqan3::contrib::sdsl::serialize(this->k, out);
-    seqan3::contrib::sdsl::serialize(this->m, out);
+    seqan3::contrib::sdsl::serialize(this->m1, out);
+    seqan3::contrib::sdsl::serialize(this->m2, out);
     seqan3::contrib::sdsl::serialize(r1, out);
     seqan3::contrib::sdsl::serialize(r2, out);
     seqan3::contrib::sdsl::serialize(s1, out);
@@ -506,7 +504,8 @@ int RSIndex::save(const std::filesystem::path &filepath) {
 int RSIndex::load(const std::filesystem::path &filepath) {
     std::ifstream in(filepath, std::ios::binary);
     seqan3::contrib::sdsl::load(this->k, in);
-    seqan3::contrib::sdsl::load(this->m, in);
+    seqan3::contrib::sdsl::load(this->m1, in);
+    seqan3::contrib::sdsl::load(this->m2, in);
     seqan3::contrib::sdsl::load(r1, in);
     seqan3::contrib::sdsl::load(r2, in);
     seqan3::contrib::sdsl::load(s1, in);

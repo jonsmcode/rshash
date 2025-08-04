@@ -12,6 +12,7 @@ struct cmd_arguments {
     std::filesystem::path d{};
     uint8_t k{};
     uint8_t m{};
+    uint8_t n{};
 };
 
 void initialise_argument_parser(seqan3::argument_parser &parser, cmd_arguments &args) {
@@ -20,7 +21,8 @@ void initialise_argument_parser(seqan3::argument_parser &parser, cmd_arguments &
     parser.add_option(args.q, 'q', "query", "provide query file");
     parser.add_option(args.d, 'd', "dict", "provide dict file");
     parser.add_option(args.k, 'k', "k-mer", "k-mer length");
-    parser.add_option(args.m, 'm', "minimiser", "minimiser length");
+    parser.add_option(args.m, 'm', "minimiser1", "minimiser1 length");
+    parser.add_option(args.n, 'n', "minimiser2", "minimiser2 length");
 }
 
 int check_arguments(seqan3::argument_parser &parser, cmd_arguments &args) {
@@ -32,7 +34,9 @@ int check_arguments(seqan3::argument_parser &parser, cmd_arguments &args) {
         if(!parser.is_option_set('k'))
             throw seqan3::user_input_error("specify k");
         if(!parser.is_option_set('m'))
-            throw seqan3::user_input_error("specify m");
+            throw seqan3::user_input_error("specify minimiser1");
+        if(!parser.is_option_set('n'))
+            throw seqan3::user_input_error("specify minimiser2");
     }
     else if(args.cmd == "query") {
         if(!parser.is_option_set('q'))
@@ -55,18 +59,8 @@ void load_file(const std::filesystem::path &filepath, std::vector<std::vector<se
     for (auto & record : stream) {
         N += record.sequence().size();
         output.push_back(std::move(record.sequence()));
-        // if(N >= 1000000000)
-        //     return;
     }
 }
-
-// todo: ignore queries with 'N's!
-// void load_queries(const std::filesystem::path &filepath, std::vector<std::vector<seqan3::dna4>> &output) {
-//     auto stream = seqan3::sequence_file_input{filepath};
-//     for (auto & record : stream) {
-//         output.push_back(std::move(record.sequence()));
-//     }
-// }
 
 
 int main(int argc, char** argv)
@@ -87,7 +81,7 @@ int main(int argc, char** argv)
         std::vector<std::vector<seqan3::dna4>> text;
         load_file(args.i, text);
         std::cout << "building dict...\n";
-        RSIndex dict(args.k, args.m);
+        RSIndex dict(args.k, args.m, args.n);
         dict.build(text);
         std::cout << "done.\n";
         dict.save(args.d);
@@ -104,7 +98,6 @@ int main(int argc, char** argv)
         std::cout << "querying...\n";
         uint64_t kmers = 0;
         uint64_t found = 0;
-        // todo: parallelize queries
         for(auto query : queries) {
             int occurences = dict.streaming_query(query);
             kmers += query.size()-dict.getk()+1;
@@ -113,14 +106,6 @@ int main(int argc, char** argv)
         std::cout << "==== query report:\n";
         std::cout << "num_kmers = " << kmers << '\n';
         std::cout << "num_positive_kmers = " << found << " (" << (double) found/kmers*100 << "%)\n";
-        // int q = 0;
-        // for(auto query : queries) {
-        //     std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> positions;
-        //     dict.streaming_query(query, positions);
-        //     for (auto const& [kmer, seq, pos] : positions)
-        //         std::cout << '(' << q << ','<< kmer << ',' << seq << ',' << pos << ") ";
-        //     q++;
-        // }
     }
  
     return 0;
