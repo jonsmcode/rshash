@@ -111,7 +111,8 @@ private:
 
     uint64_t kmer_mask{std::numeric_limits<uint64_t>::max()};
     uint64_t window_mask{std::numeric_limits<uint64_t>::max()};
-    uint64_t seed{0x8F'3F'73'B5'CF'1C'9A'DE};
+    // uint64_t seed{0x8F'3F'73'B5'CF'1C'9A'DE};
+    uint64_t seed{};
     uint8_t minimisers_in_window{};
     uint64_t minimiser_size{};
     uint64_t window_size{};
@@ -444,7 +445,8 @@ private:
     uint64_t kmer_mask{std::numeric_limits<uint64_t>::max()};
     uint64_t kmer_value{};
     uint64_t kmer_value_rev{};
-    uint64_t seed{0x8F'3F'73'B5'CF'1C'9A'DE};
+    // uint64_t seed{0x8F'3F'73'B5'CF'1C'9A'DE};
+    uint64_t seed{};
 
     uint64_t minimiser_size{};
 

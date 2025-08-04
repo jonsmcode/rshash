@@ -10,7 +10,7 @@ using namespace seqan3::contrib::sdsl;
 
 // namespace sdsl = seqan3::contrib::sdsl;
 
-const size_t span = 31;
+const size_t span = 100;
 
 class RSIndex
 {
@@ -31,7 +31,8 @@ private:
     rank_support_sd<> endpoints_rank;
     select_support_sd<> endpoints_select;
     seqan3::bitpacked_sequence<seqan3::dna4> text;
-    void fill_buffer(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
+    void fill_buffer1(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
+    void fill_buffer2(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
 
 
 public:
