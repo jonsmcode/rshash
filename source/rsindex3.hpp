@@ -11,26 +11,34 @@ using namespace seqan3::contrib::sdsl;
 // namespace sdsl = seqan3::contrib::sdsl;
 const uint8_t m_thres1 = 20;
 const uint8_t m_thres2 = 20;
+const uint8_t m_thres3 = 20;
 
 const uint64_t seed1 = 0x8F'3F'73'B5'CF'1C'9A'DE;
 const uint64_t seed2 = 0x29'6D'BD'33'32'56'8C'64;
+const uint64_t seed3 = 0xE5'9A'38'5F'03'76'C9'F6;
 
 const size_t span = 31;
+
 
 class RSIndex
 {
 private:
-    uint8_t k, m1, m2;
+    uint8_t k, m1, m2, m3;
     bit_vector r1;
     rank_support_v<1> r1_rank;
     bit_vector r2;
     rank_support_v<1> r2_rank;
+    bit_vector r3;
+    rank_support_v<1> r3_rank;
     bit_vector s1;
     sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s1_select;
     bit_vector s2;
     sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s2_select;
+    bit_vector s3;
+    sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s3_select;
     int_vector<0> offsets1;
     int_vector<0> offsets2;
+    int_vector<0> offsets3;
     gtl::flat_hash_set<uint64_t> hashmap;
     sd_vector<> endpoints;
     rank_support_sd<> endpoints_rank;
@@ -42,7 +50,7 @@ private:
 
 public:
     RSIndex();
-    RSIndex(uint8_t const k, uint8_t const m1, uint8_t const m2);
+    RSIndex(uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3);
     uint8_t getk() { return k; }
     int build(const std::vector<std::vector<seqan3::dna4>>&);
     uint64_t streaming_query(const std::vector<seqan3::dna4>&);
