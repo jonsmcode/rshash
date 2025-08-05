@@ -954,9 +954,9 @@ private:
         seed2 = params.seed2 & kmer_mask;
 
         uint64_t new_rank = seqan3::to_rank(*range_it);
-        current.window_value <<= 2;
+        current.window_value <<= 2; //
         current.window_value |= new_rank;
-        current.window_value_rev >>= 2;
+        current.window_value_rev >>= 2; //
         current.window_value_rev |= ((new_rank^0b11) << 2*(window_size-1));
         // kmer_value = ((kmer_value << 2) | new_rank) & kmer_mask;
         // kmer_value_rev = (kmer_value_rev >> 2) | ((new_rank^0b11) << 2*(minimiser_size-1));
@@ -1007,27 +1007,23 @@ private:
         if (minimiser1_position == 0) {
             find_minimiser1_in_window();
             new_min1 = true;
-            // return true;
         }
 
         if (minimiser2_position == 0) {
             find_minimiser2_in_window();
             new_min2 = true;
-            // return true;
         }
 
         if (uint64_t new_kmer_value = kmer_values1_in_window.back(); new_kmer_value < current.minimiser1_value) {
             current.minimiser1_value = new_kmer_value;
             minimiser1_position = minimisers_in_window;
             new_min1 = true;
-            // return true;
         }
 
         if (uint64_t new_kmer_value = kmer_values2_in_window.back(); new_kmer_value < current.minimiser2_value) {
             current.minimiser2_value = new_kmer_value;
             minimiser2_position = minimisers_in_window;
             new_min2 = true;
-            // return true;
         }
 
         if(!new_min1)

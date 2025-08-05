@@ -34,7 +34,8 @@ run()
 
               echo $f >> $LOG
 
-              /usr/bin/time -l -o time.txt $PROGRAM build -i "$f" -d "${BASENAME}.dict" -k $k -m $((m - 1)) -n $m > prog_out.txt 2>&1
+              # /usr/bin/time -l -o time.txt $PROGRAM build -i "$f" -d "${BASENAME}.dict" -k $k -m $((m - 1)) -n $m > prog_out.txt 2>&1
+              /usr/bin/time -l -o time.txt $PROGRAM build -i "$f" -d "${BASENAME}.dict" -k $k -m $m -n $m > prog_out.txt 2>&1
 
               cat prog_out.txt >> $LOG
 

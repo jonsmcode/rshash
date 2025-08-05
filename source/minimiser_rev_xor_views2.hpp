@@ -961,20 +961,19 @@ private:
         seed2 = params.seed2 & kmer_mask2;
 
         uint64_t new_rank = seqan3::to_rank(*range_it);
-        current.window_value <<= 2;
-        current.window_value |= new_rank;
-        current.window_value_rev >>= 2;
-        current.window_value_rev |= ((new_rank^0b11) << 2*(window_size-1));
+        current.window_value = ((current.window_value << 2) | new_rank);
+        current.window_value_rev = (current.window_value_rev >> 2) | ((new_rank^0b11) << 2*(window_size-1));
         for (size_t i = 1u; i < minimiser_size1; ++i) {
             ++range_position;
             ++range_it;
             new_rank = seqan3::to_rank(*range_it);
-            current.window_value <<= 2;
-            current.window_value |= new_rank;
-            current.window_value_rev >>= 2;
-            current.window_value_rev |= ((new_rank^0b11) << 2*(window_size-1));
+            current.window_value = ((current.window_value << 2) | new_rank);
+            current.window_value_rev = (current.window_value_rev >> 2) | ((new_rank^0b11) << 2*(window_size-1));
         }
-        const uint64_t canonical_kmer1 = std::min<uint64_t>(current.window_value, current.window_value_rev);
+        kmer_value1 = current.window_value & kmer_mask1;
+        kmer_value_rev1 = current.window_value_rev >> 2*(window_size - minimiser_size1);
+
+        const uint64_t canonical_kmer1 = std::min<uint64_t>(kmer_value1, kmer_value_rev1);
         const uint64_t kmerhash1 = canonical_kmer1 ^ seed1;
         kmer_values1_in_window.push_back(kmerhash1);
 
@@ -982,10 +981,9 @@ private:
             ++range_position;
             ++range_it;
             new_rank = seqan3::to_rank(*range_it);
-            current.window_value <<= 2;
-            current.window_value |= new_rank;
-            current.window_value_rev >>= 2;
-            current.window_value_rev |= ((new_rank^0b11) << 2*(window_size-1));
+
+            current.window_value = ((current.window_value << 2) | new_rank);
+            current.window_value_rev = (current.window_value_rev >> 2) | ((new_rank^0b11) << 2*(window_size-1));
             kmer_value1 = current.window_value & kmer_mask1;
             kmer_value_rev1 = current.window_value_rev >> 2*(window_size - minimiser_size1);
             const uint64_t canonical_kmer1 = std::min<uint64_t>(kmer_value1, kmer_value_rev1);
@@ -995,6 +993,7 @@ private:
 
         kmer_value2 = current.window_value & kmer_mask2;
         kmer_value_rev2 = current.window_value_rev >> 2*(window_size - minimiser_size2);
+
         const uint64_t canonical_kmer2 = std::min<uint64_t>(kmer_value2, kmer_value_rev2);
         const uint64_t kmerhash2 = canonical_kmer2 ^ seed2;
         kmer_values2_in_window.push_back(kmerhash2);
