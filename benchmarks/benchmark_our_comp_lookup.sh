@@ -89,7 +89,7 @@ run()
                 found=$(grep "num_positive_kmers" prog_out.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
                 querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
                 
-                echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$spaceoffsets,$spaceht,$spacer,$spaces,$density_r,$density_s,$density_ht,$no_minimiser,$no_distinct_minimiser,$spacetotal,$spacetotalreal,$querytimekmer,$querymem,$k_mers",$found" >> "$CSV"
+                echo "$f,$query,$k,$m,$thres,$buildtime,$buildmem",$file_size,$spaceoffsets,$spaceht,$spacer,$spaces,$density_r,$density_s,$density_ht,$no_minimiser,$no_distinct_minimiser,$spacetotal,$spacetotalreal,$querytimekmer,$querymem,$k_mers",$found" >> "$CSV"
 
                 # rm -f time.txt
                 # rm -f prog_out.txt
@@ -122,7 +122,7 @@ run()
                 found=$(grep "num_positive_kmers" prog_out.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
                 querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
                 
-                echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$spaceoffsets,$spaceht,$spacer,$spaces,$density_r,$density_s,$density_ht,$no_minimiser,$no_distinct_minimiser,$spacetotal,$spacetotalreal,$querytimekmer,$querymem,$k_mers",$found" >> "$CSV"
+                echo "$f,$query,$k,$m,$thres,$buildtime,$buildmem",$file_size,$spaceoffsets,$spaceht,$spacer,$spaces,$density_r,$density_s,$density_ht,$no_minimiser,$no_distinct_minimiser,$spacetotal,$spacetotalreal,$querytimekmer,$querymem,$k_mers",$found" >> "$CSV"
 
                 # rm -f time.txt
                 # rm -f prog_out.txt
@@ -140,6 +140,6 @@ run()
 
 for data in $(find $DIR -mindepth 0 -maxdepth 0 -type d); do
   FILENAME=$(basename $data)
-  echo "textfile,queryfile,k,m,buildtime [s],buildmem [B],indexsize [B],spaceoffsets [bits/kmer],space HT [bits/kmer],spaceR [bits/kmer],spaceS [bits/kmer],density_r [%],density_s [%],kmers HT [%],no minimizer, no distinct minimizer,space theo [bits/kmer],space real [bits/kmer],querytime [ns/kmer],querymem [B],kmers,found" > "$CSV"
+  echo "textfile,queryfile,k,m,thres,buildtime [s],buildmem [B],indexsize [B],spaceoffsets [bits/kmer],space HT [bits/kmer],spaceR [bits/kmer],spaceS [bits/kmer],density_r [%],density_s [%],kmers HT [%],no minimizer, no distinct minimizer,space theo [bits/kmer],space real [bits/kmer],querytime [ns/kmer],querymem [B],kmers,found" > "$CSV"
   run $data/
 done
