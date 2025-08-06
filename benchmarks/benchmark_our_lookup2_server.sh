@@ -48,8 +48,8 @@ run()
               cat prog_out.txt >> $LOG
 
               file_size=$(stat -c%s "${BASENAME}.dict")
-              buildtime=$(cat time.txt | grep "real" | awk '{print $1}')
-              buildmem=$(cat time.txt  | grep "maximum resident set size" | awk '{print $1}')
+              buildtime=$(grep "User time" time.txt | awk -F': ' '{print $2}')
+            buildmem=$(grep "Maximum resident set size" time.txt | awk -F': ' '{print $2}')
               textlength=$(grep "text length: " prog_out.txt | sed -E 's/.*text length: ([0-9]+).*/\1/')
               density_r1=$(awk '/density r1/ {print $3}' prog_out.txt | tr -d '%')
               density_r2=$(awk '/density r2/ {print $3}' prog_out.txt | tr -d '%')
