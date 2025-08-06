@@ -220,7 +220,6 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "no minimiser: " << n << "\n";
     std::cout << "no distinct minimiser: " << ctmp << "\n";
     std::cout << "minimiser going to HT: " << ctmp-c << "  " << (double) (ctmp-c)/ctmp*100 << "%\n";
-    std::cout << "no distinct minimiser: " << c << "\n";
     std::cout << "avg superkmers: " << (double) n/c <<  '\n';
     // std::cout << "no minimiser HT: " << hashmap.size() << " " << (double)hashmap.size()/n*100 << "%\n";
     std::cout << "no kmers HT: " << hashmap.size() << " " << (double) hashmap.size()/kmers*100 << "%\n";
