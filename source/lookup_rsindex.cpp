@@ -12,6 +12,8 @@ struct cmd_arguments {
     std::filesystem::path d{};
     uint8_t k{};
     uint8_t m{};
+    uint8_t t{100};
+    bool c{0};
 };
 
 void initialise_argument_parser(seqan3::argument_parser &parser, cmd_arguments &args) {
@@ -21,6 +23,8 @@ void initialise_argument_parser(seqan3::argument_parser &parser, cmd_arguments &
     parser.add_option(args.d, 'd', "dict", "provide dict file");
     parser.add_option(args.k, 'k', "k-mer", "k-mer length");
     parser.add_option(args.m, 'm', "minimiser", "minimiser length");
+    parser.add_option(args.t, 't', "thres", "threshold");
+    parser.add_flag(args.c, 'c', "comp", "compress level 2");
 }
 
 int check_arguments(seqan3::argument_parser &parser, cmd_arguments &args) {
@@ -86,41 +90,49 @@ int main(int argc, char** argv)
         std::cout << "loading text...\n";
         std::vector<std::vector<seqan3::dna4>> text;
         load_file(args.i, text);
+
         std::cout << "building dict...\n";
-        RSIndex index(args.k, args.m);
-        index.build(text);
-        std::cout << "done.\n";
-        index.save(args.d);
+        if(args.c) {
+            RSIndexComp index = RSIndexComp(args.k, args.m, args.t);
+            index.build(text);
+            index.save(args.d);
+        }
+        else {
+            RSIndex index = RSIndex(args.k, args.m, args.t);
+            index.build(text);
+            index.save(args.d);
+        }
     }
     else if(args.cmd == "query") {
-        std::cout << "loading index...\n";
-        RSIndex index;
-        index.load(args.d);
-
         std::cout << "loading queries...\n";
         std::vector<std::vector<seqan3::dna4>> queries;
         load_file(args.q, queries);
 
-        std::cout << "querying...\n";
+        std::cout << "loading dict...\n";
         uint64_t kmers = 0;
         uint64_t found = 0;
-        // todo: parallelize queries
-        for(auto query : queries) {
-            int occurences = index.streaming_query(query);
-            kmers += query.size()-index.getk()+1;
-            found += occurences;
+        if(args.c) {
+            RSIndexComp index;
+            index.load(args.d);
+            std::cout << "querying...\n";
+            for (auto query : queries) {
+                found += index.streaming_query(query);
+                kmers += query.size() - index.getk() + 1;
+            }
         }
+        else {
+            RSIndex index;
+            index.load(args.d);
+            std::cout << "querying...\n";
+            for (auto query : queries) {
+                found += index.streaming_query(query);
+                kmers += query.size() - index.getk() + 1;
+            }
+        }
+
         std::cout << "==== query report:\n";
         std::cout << "num_kmers = " << kmers << '\n';
         std::cout << "num_positive_kmers = " << found << " (" << (double) found/kmers*100 << "%)\n";
-        // int q = 0;
-        // for(auto query : queries) {
-        //     std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> positions;
-        //     index.streaming_query(query, positions);
-        //     for (auto const& [kmer, seq, pos] : positions)
-        //         std::cout << '(' << q << ','<< kmer << ',' << seq << ',' << pos << ") ";
-        //     q++;
-        // }
     }
  
     return 0;

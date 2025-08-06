@@ -9,9 +9,7 @@
 #include "minimiser_rev_xor_views.hpp"
 
 
-// const uint8_t m_thres = 100;
 const uint64_t seed = 0x8F'3F'73'B5'CF'1C'9A'DE;
-
 
 
 static inline constexpr uint64_t compute_mask(uint64_t const size)
@@ -26,16 +24,16 @@ static inline constexpr uint64_t compute_mask(uint64_t const size)
 }
 
 
-RSIndex::RSIndex() {}
+RSIndexComp::RSIndexComp() {}
 
-RSIndex::RSIndex(uint8_t const k, uint8_t const m, uint8_t const m_thres) {
+RSIndexComp::RSIndexComp(uint8_t const k, uint8_t const m, uint8_t const m_thres) {
     this->k = k;
     this->m = m;
     this->m_thres = m_thres;
 }
 
 
-int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
+int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
 {
     // auto view1 = srindex::views::minimiser_hash_and_positions({.minimiser_size = m, .window_size = k, .seed=seed});
     auto view1 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m, .window_size = k, .seed=seed});
@@ -90,14 +88,15 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     }
 
     std::cout << "filling R...\n";
-    r = bit_vector(M, 0);
+    bit_vector r_ = bit_vector(M, 0);
     for(auto & sequence : input) {
         for(auto && minimisers : sequence | view1) {
             if(counttmp[rtmp_rank(minimisers.minimiser_value)] < m_thres)
-                r[minimisers.minimiser_value] = 1;
+                r_[minimisers.minimiser_value] = 1;
         }
     }
-    r_rank = seqan3::contrib::sdsl::rank_support_v<1>(&r);
+    r = sd_vector<>(r_);
+    r_rank = rank_support_sd<>(&r);
 
     delete[] counttmp;
 
@@ -233,16 +232,16 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "endpoints: " << (double) 8*size_in_bytes(endpoints)/kmers << "\n";
     std::cout << "offsets: " << (double) n*offset_width/kmers << "\n";
     std::cout << "Hashtable: " << (double) 64*hashmap.size()/kmers << "\n";
-    std::cout << "R: " << (double) M/kmers << "\n";
+    std::cout << "R: " << (double) 8*size_in_bytes(r)/kmers << "\n";
     std::cout << "S: " << (double) (n+1)/kmers << "\n";
 
-    std::cout << "total: " << (double) (n*offset_width+2*N+M+n+1+8*size_in_bytes(endpoints)+64*hashmap.size())/kmers << "\n";
+    std::cout << "total: " << (double) (n*offset_width+2*N+8*size_in_bytes(r)+n+1+8*size_in_bytes(endpoints)+64*hashmap.size())/kmers << "\n";
 
     return 0;
 }
 
 
-inline void RSIndex::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q)
+inline void RSIndexComp::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q)
 {
     for(uint64_t i = 0; i < q-p; i++) {
         uint64_t hash = 0;
@@ -285,7 +284,7 @@ inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query, uint64_t
 }
 
 
-uint64_t RSIndex::streaming_query(const std::vector<seqan3::dna4> &query)
+uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query)
 {
     auto view = srindex::views::xor_minimiser_and_window({.minimiser_size = m, .window_size = k, .seed=seed});
     uint64_t occurences = 0;
@@ -317,7 +316,7 @@ uint64_t RSIndex::streaming_query(const std::vector<seqan3::dna4> &query)
 }
 
 
-int RSIndex::save(const std::filesystem::path &filepath) {
+int RSIndexComp::save(const std::filesystem::path &filepath) {
     std::ofstream out(filepath, std::ios::binary);
     seqan3::contrib::sdsl::serialize(this->k, out);
     seqan3::contrib::sdsl::serialize(this->m, out);
@@ -334,7 +333,7 @@ int RSIndex::save(const std::filesystem::path &filepath) {
     return 0;
 }
 
-int RSIndex::load(const std::filesystem::path &filepath) {
+int RSIndexComp::load(const std::filesystem::path &filepath) {
     std::ifstream in(filepath, std::ios::binary);
     seqan3::contrib::sdsl::load(this->k, in);
     seqan3::contrib::sdsl::load(this->m, in);
@@ -349,7 +348,7 @@ int RSIndex::load(const std::filesystem::path &filepath) {
 
     in.close();
 
-    r_rank = rank_support_v<1>(&r);
+    r_rank = rank_support_sd<>(&r);
     this->s_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s.data()), s.size(), 3);
     endpoints_rank = rank_support_sd<>(&endpoints);
     endpoints_select = seqan3::contrib::sdsl::select_support_sd<>(&endpoints);

@@ -349,7 +349,7 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
 
     std::cout << "====== report ======\n";
     std::cout << "text length: " << N << "\n";
-    std::cout << "no kmers: " << kmers <<  '\n';
+    std::cout << "text kmers: " << kmers <<  '\n';
     
     std::cout << "no minimiser: " << n << "\n";
     std::cout << "no distinct minimiser: " << c1tmp << "\n";
@@ -368,16 +368,16 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "density s2: " << (double) s2_select.bitCount()/(n2+1)*100 <<  "%\n";
     std::cout << "\nspace per kmer in bit:\n";
     std::cout << "text: " << (double) 2*N/kmers << "\n";
-    std::cout << "endpoints: " << (double) size_in_bytes(endpoints)/(8*kmers) << "\n";
+    std::cout << "endpoints: " << (double) 8*size_in_bytes(endpoints)/kmers << "\n";
     std::cout << "offsets1: " << (double) n1*offset_width/kmers << "\n";
     std::cout << "offsets2: " << (double) n2*offset_width/kmers << "\n";
-    std::cout << "Hashtable: " << (double) 8*hashmap.size()/kmers << "\n";
+    std::cout << "Hashtable: " << (double) 64*hashmap.size()/kmers << "\n";
     std::cout << "R_1: " << (double) M1/kmers << "\n";
-    std::cout << "R_2: " << (double) size_in_bytes(r2)/(8*kmers) << "\n";
+    std::cout << "R_2: " << (double) 8*size_in_bytes(r2)/kmers << "\n";
     std::cout << "S_1: " << (double) (n1+1)/kmers << "\n";
     std::cout << "S_2: " << (double) (n2+1)/kmers << "\n";
 
-    std::cout << "total: " << (double) (n1*offset_width+n2*offset_width+2*N+M1+size_in_bytes(r2)/8+n1+1+n2+1+size_in_bytes(endpoints)/8+8*hashmap.size()/kmers)/kmers << "\n";
+    std::cout << "total: " << (double) (n1*offset_width+n2*offset_width+2*N+M1+8*size_in_bytes(r2)+n1+1+n2+1+8*size_in_bytes(endpoints)+64*hashmap.size())/kmers << "\n";
 
     return 0;
 }

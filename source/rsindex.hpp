@@ -15,7 +15,7 @@ const size_t span = 31;
 class RSIndex
 {
 private:
-    uint8_t k, m;
+    uint8_t k, m, m_thres;
     bit_vector r;
     rank_support_v<1> r_rank;
     bit_vector s;
@@ -31,7 +31,7 @@ private:
 
 public:
     RSIndex();
-    RSIndex(uint8_t const k, uint8_t const m);
+    RSIndex(uint8_t const k, uint8_t const m, uint8_t const m_thres);
     uint8_t getk() { return k; }
     int build(const std::vector<std::vector<seqan3::dna4>>&);
     uint64_t streaming_query(const std::vector<seqan3::dna4>&);
@@ -40,4 +40,30 @@ public:
     int load(const std::filesystem::path&);
 };
 
+
+class RSIndexComp
+{
+private:
+    uint8_t k, m, m_thres;
+    sd_vector<> r;
+    rank_support_sd<> r_rank;
+    bit_vector s;
+    sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s_select;
+    int_vector<0> offsets;
+    gtl::flat_hash_set<uint64_t> hashmap;
+    sd_vector<> endpoints;
+    rank_support_sd<> endpoints_rank;
+    select_support_sd<> endpoints_select;
+    seqan3::bitpacked_sequence<seqan3::dna4> text;
+    void fill_buffer(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
+
+public:
+    RSIndexComp();
+    RSIndexComp(uint8_t const k, uint8_t const m, uint8_t m_thres);
+    uint8_t getk() { return k; }
+    int build(const std::vector<std::vector<seqan3::dna4>>&);
+    uint64_t streaming_query(const std::vector<seqan3::dna4>&);
+    int save(const std::filesystem::path&);
+    int load(const std::filesystem::path&);
+};
 

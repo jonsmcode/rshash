@@ -4,10 +4,9 @@ PROGRAM="../build/source/lookup"
 
 today=$(date +%Y-%m-%d-%H-%M-%S)
 
-# DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../test/datasets" >/dev/null 2>&1 && pwd )"
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../../../datasets/unitigs" >/dev/null 2>&1 && pwd )"
 LOG="log.txt"
-CSV="lookup-results-$today.csv"
+CSV="comp_lookup-results-$today.csv"
 
 run()
 {
@@ -23,13 +22,13 @@ run()
         length=$(python3 -c "import gzip; print(sum(len(line.strip()) for line in gzip.open('$f') if not line.startswith(b'>')))")
 
         ms=()
-        for ((i=-1; i<=0; i++)); do
+        for ((i=0; i<=2; i++)); do
             m=$(echo "l($length)/l(4)+$i" | bc -l)
             m=$(printf "%.0f" "$m")
             ms+=("$m")
         done
 
-        thresholds=(100 50)
+        thresholds=(50 20)
 
         for m in "${ms[@]}"; do
           for thres in "${thresholds[@]}"; do
@@ -39,7 +38,7 @@ run()
 
             echo $f >> $LOG
 
-            /usr/bin/time -l -o time.txt $PROGRAM build -i "$f" -d "${BASENAME}.dict" -k $k -m $m -t $thres > prog_out.txt 2>&1
+            /usr/bin/time -l -o time.txt $PROGRAM build -i "$f" -d "${BASENAME}.dict" -k $k -m $m -t $thres -c > prog_out.txt 2>&1
 
             cat prog_out.txt >> $LOG
 
@@ -80,7 +79,7 @@ run()
                 echo $f >> $LOG
                 echo $query >> $LOG
                 echo $query
-                /usr/bin/time -l -o time.txt $PROGRAM query -d "${BASENAME}.dict" -q $query > prog_out.txt 2>&1
+                /usr/bin/time -l -o time.txt $PROGRAM query -d "${BASENAME}.dict" -q $query -c > prog_out.txt 2>&1
 
                 cat prog_out.txt >> $LOG
                 
@@ -113,7 +112,7 @@ run()
                 echo $f >> $LOG
                 echo $query >> $LOG
                 echo $query
-                /usr/bin/time -l -o time.txt $PROGRAM query -d "${BASENAME}.dict" -q $query > prog_out.txt 2>&1
+                /usr/bin/time -l -o time.txt $PROGRAM query -d "${BASENAME}.dict" -q $query -c > prog_out.txt 2>&1
 
                 cat prog_out.txt >> $LOG
                 
@@ -141,6 +140,6 @@ run()
 
 for data in $(find $DIR -mindepth 0 -maxdepth 0 -type d); do
   FILENAME=$(basename $data)
-  echo "textfile,queryfile,k,m,buildtime [s],buildmem [B],indexsize [B],spaceoffsets [bits/kmer],spaceR [bits/kmer],spaceS [bits/kmer],density_r [%],density_s [%],kmers HT [%],no minimizer, no distinct minimizer,space theo [bits/kmer],space real [bits/kmer],querytime [ns/kmer],querymem [B],kmers,found" > "$CSV"
+  echo "textfile,queryfile,k,m,buildtime [s],buildmem [B],indexsize [B],spaceoffsets [bits/kmer] [bits/kmer],spaceR [bits/kmer],spaceS [bits/kmer],density_r [%],density_s [%],kmers HT [%],no minimizer, no distinct minimizer,spacetotal [bits/kmer],querytime [ns/kmer],querymem [B],kmers,found" > "$CSV"
   run $data/
 done
