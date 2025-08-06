@@ -83,8 +83,8 @@ run()
 
                 cat prog_out.txt >> $LOG
                 
-                querytime=$(cat time.txt | grep "real" | awk '{print $1}')
-                querymem=$(cat time.txt  | grep "maximum resident set size" | awk '{print $1}')
+                querytime=$(grep "User time" time.txt | awk -F': ' '{print $2}')
+                querymem=$(grep "Maximum resident set size" time.txt | awk -F': ' '{print $2}')
                 k_mers=$(grep "num_kmers" prog_out.txt | sed -E 's/.*num_kmers = ([0-9]+).*/\1/')
                 found=$(grep "num_positive_kmers" prog_out.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
                 querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
@@ -116,8 +116,8 @@ run()
 
                 cat prog_out.txt >> $LOG
                 
-                querytime=$(cat time.txt | grep "real" | awk '{print $1}')
-                querymem=$(cat time.txt  | grep "maximum resident set size" | awk '{print $1}')
+                querytime=$(grep "User time" time.txt | awk -F': ' '{print $2}')
+                querymem=$(grep "Maximum resident set size" time.txt | awk -F': ' '{print $2}')
                 k_mers=$(grep "num_kmers" prog_out.txt | sed -E 's/.*num_kmers = ([0-9]+).*/\1/')
                 found=$(grep "num_positive_kmers" prog_out.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
                 querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
