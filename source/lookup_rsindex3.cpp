@@ -13,7 +13,7 @@ struct cmd_arguments {
     uint8_t k{};
     uint8_t m{};
     uint8_t n{};
-    uint8_t o{};
+    uint8_t p{};
 };
 
 void initialise_argument_parser(seqan3::argument_parser &parser, cmd_arguments &args) {
@@ -24,7 +24,7 @@ void initialise_argument_parser(seqan3::argument_parser &parser, cmd_arguments &
     parser.add_option(args.k, 'k', "k-mer", "k-mer length");
     parser.add_option(args.m, 'm', "minimiser1", "minimiser1 length");
     parser.add_option(args.n, 'n', "minimiser2", "minimiser2 length");
-    parser.add_option(args.o, 'o', "minimiser3", "minimiser3 length");
+    parser.add_option(args.p, 'p', "minimiser3", "minimiser3 length");
 }
 
 int check_arguments(seqan3::argument_parser &parser, cmd_arguments &args) {
@@ -39,7 +39,7 @@ int check_arguments(seqan3::argument_parser &parser, cmd_arguments &args) {
             throw seqan3::user_input_error("specify minimiser1");
         if(!parser.is_option_set('n'))
             throw seqan3::user_input_error("specify minimiser2");
-        if(!parser.is_option_set('o'))
+        if(!parser.is_option_set('p'))
             throw seqan3::user_input_error("specify minimiser3");
     }
     else if(args.cmd == "query") {
@@ -85,7 +85,7 @@ int main(int argc, char** argv)
         std::vector<std::vector<seqan3::dna4>> text;
         load_file(args.i, text);
         std::cout << "building dict...\n";
-        RSIndex dict(args.k, args.m, args.n, args.o);
+        RSIndex dict(args.k, args.m, args.n, args.p);
         dict.build(text);
         std::cout << "done.\n";
         dict.save(args.d);

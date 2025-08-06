@@ -45,8 +45,12 @@ target_include_directories(lookup PRIVATE ${CMAKE_SOURCE_DIR}/sux)
 target_include_directories(lookup PRIVATE ${CMAKE_SOURCE_DIR}/gtl)
 target_link_libraries (lookup PRIVATE seqan3::seqan3)
 
-add_executable (lookup2 lookup_rsindex2.cpp rsindex2.cpp)
+add_executable (lookup2 lookup_rsindex2.cpp rsindex2.cpp rsindex2_comp.cpp)
 target_include_directories(lookup2 PRIVATE ${CMAKE_SOURCE_DIR}/sux)
 target_include_directories(lookup2 PRIVATE ${CMAKE_SOURCE_DIR}/gtl)
 target_link_libraries (lookup2 PRIVATE seqan3::seqan3)
 
+add_executable (lookup3 lookup_rsindex3.cpp rsindex3.cpp)
+target_include_directories(lookup3 PRIVATE ${CMAKE_SOURCE_DIR}/sux)
+target_include_directories(lookup3 PRIVATE ${CMAKE_SOURCE_DIR}/gtl)
+target_link_libraries (lookup3 PRIVATE seqan3::seqan3)

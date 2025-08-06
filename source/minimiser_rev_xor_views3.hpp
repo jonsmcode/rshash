@@ -1003,7 +1003,6 @@ private:
         }
         kmer_value1 = current.window_value & kmer_mask1;
         kmer_value_rev1 = current.window_value_rev >> 2*(window_size - minimiser_size1);
-
         const uint64_t canonical_kmer1 = std::min<uint64_t>(kmer_value1, kmer_value_rev1);
         const uint64_t kmerhash1 = canonical_kmer1 ^ seed1;
         kmer_values1_in_window.push_back(kmerhash1);
@@ -1015,6 +1014,7 @@ private:
 
             current.window_value = ((current.window_value << 2) | new_rank);
             current.window_value_rev = (current.window_value_rev >> 2) | ((new_rank^0b11) << 2*(window_size-1));
+
             kmer_value1 = current.window_value & kmer_mask1;
             kmer_value_rev1 = current.window_value_rev >> 2*(window_size - minimiser_size1);
             const uint64_t canonical_kmer1 = std::min<uint64_t>(kmer_value1, kmer_value_rev1);
@@ -1024,7 +1024,6 @@ private:
 
         kmer_value2 = current.window_value & kmer_mask2;
         kmer_value_rev2 = current.window_value_rev >> 2*(window_size - minimiser_size2);
-
         const uint64_t canonical_kmer2 = std::min<uint64_t>(kmer_value2, kmer_value_rev2);
         const uint64_t kmerhash2 = canonical_kmer2 ^ seed2;
         kmer_values2_in_window.push_back(kmerhash2);
@@ -1051,7 +1050,6 @@ private:
 
         kmer_value3 = current.window_value & kmer_mask3;
         kmer_value_rev3 = current.window_value_rev >> 2*(window_size - minimiser_size3);
-
         const uint64_t canonical_kmer3 = std::min<uint64_t>(kmer_value3, kmer_value_rev3);
         const uint64_t kmerhash3 = canonical_kmer3 ^ seed3;
         kmer_values3_in_window.push_back(kmerhash3);
@@ -1144,8 +1142,10 @@ struct three_minimisers_and_window_hash_fn
             throw std::invalid_argument{"minimiser_size must be <= 32."};
         if (params.minimiser_size3 == 0u)
             throw std::invalid_argument{"minimiser_size must be > 0."};
-        if (params.minimiser_size3 > 32u)
+        if (params.minimiser_size3 > 32u) {
+            std::cout << params.minimiser_size3 << '\n';
             throw std::invalid_argument{"minimiser_size must be <= 32."};
+        }
         if (params.window_size == 0u)
             throw std::invalid_argument{"window_size must be > 0."};
         if (params.window_size > 32u)

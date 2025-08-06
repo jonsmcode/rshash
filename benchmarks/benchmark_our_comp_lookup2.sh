@@ -6,7 +6,7 @@ today=$(date +%Y-%m-%d-%H-%M-%S)
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../../../datasets/unitigs" >/dev/null 2>&1 && pwd )"
 LOG="log.txt"
-CSV="lookup2-results-$today.csv"
+CSV="comp_lookup2-results-$today.csv"
 
 run()
 {
@@ -23,14 +23,14 @@ run()
         m=$(echo "l($length)/l(4)" | bc -l)
         m=$(printf "%.0f" "$m")
 
-        thresholds=(50 20)
+        thresholds=(50 20 10)
 
         m1s=()
-        for ((i=-1; i>=-2; i--)); do
+        for ((i=0; i>=-1; i--)); do
             m1s+=($((m + i)))
         done
         m2s=()
-        for ((i=0; i<=0; i++)); do
+        for ((i=0; i<=2; i++)); do
             m2s+=($((m + i)))
         done
         for m1 in "${m1s[@]}"; do
@@ -43,7 +43,7 @@ run()
 
               echo $f >> $LOG
 
-              /usr/bin/time -l -o time.txt $PROGRAM build -i "$f" -d "${BASENAME}.dict" -k $k -m $m1 -n $m2 -t $thres > prog_out.txt 2>&1
+              /usr/bin/time -l -o time.txt $PROGRAM build -i "$f" -d "${BASENAME}.dict" -k $k -m $m1 -n $m2 -t $thres -c > prog_out.txt 2>&1
 
               cat prog_out.txt >> $LOG
 
@@ -89,7 +89,7 @@ run()
                   echo $f >> $LOG
                   echo $query >> $LOG
                   echo $query
-                  /usr/bin/time -l -o time.txt $PROGRAM query -d "${BASENAME}.dict" -q $query > prog_out.txt 2>&1
+                  /usr/bin/time -l -o time.txt $PROGRAM query -d "${BASENAME}.dict" -q $query -c > prog_out.txt 2>&1
 
                   cat prog_out.txt >> $LOG
                   
@@ -122,7 +122,7 @@ run()
                   echo $f >> $LOG
                   echo $query >> $LOG
                   echo $query
-                  /usr/bin/time -l -o time.txt $PROGRAM query -d "${BASENAME}.dict" -q $query > prog_out.txt 2>&1
+                  /usr/bin/time -l -o time.txt $PROGRAM query -d "${BASENAME}.dict" -q $query -c > prog_out.txt 2>&1
 
                   cat prog_out.txt >> $LOG
                   

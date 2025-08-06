@@ -21,9 +21,9 @@ static inline constexpr uint64_t compute_mask(uint64_t const size)
 }
 
 
-RSIndex::RSIndex() {}
+RSIndexComp::RSIndexComp() {}
 
-RSIndex::RSIndex(uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m_thres) {
+RSIndexComp::RSIndexComp(uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m_thres) {
     this->k = k;
     this->m1 = m1;
     this->m2 = m2;
@@ -31,11 +31,10 @@ RSIndex::RSIndex(uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t co
 }
 
 
-int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
+int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
 {
     auto view1 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
 
-    // assert(m <= 32);
     const uint64_t M1 = 1ULL << (m1+m1);
     const uint64_t M2 = 1ULL << (m2+m2);
 
@@ -226,14 +225,15 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     }
 
     std::cout << "fill R2...\n";
-    r2 = bit_vector(M2, 0);
+    bit_vector r2_ = bit_vector(M2, 0);
     for(auto & sequence : freq_skmers1) {
         for(auto && minimiser : sequence | view2) {
             if(count2tmp[r2tmp_rank(minimiser.minimiser_value)] < m_thres)
-                r2[minimiser.minimiser_value] = 1;
+                r2_[minimiser.minimiser_value] = 1;
         }
     }
-    r2_rank = rank_support_v<1>(&r2);
+    r2 = sd_vector<>(r2_);
+    r2_rank = rank_support_sd<>(&r2);
 
     std::cout << "fill count 2...\n";
     size_t c2 = r2_rank(M2);
@@ -373,18 +373,18 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "offsets2: " << (double) n2*offset_width/kmers << "\n";
     std::cout << "Hashtable: " << (double) 8*hashmap.size()/kmers << "\n";
     std::cout << "R_1: " << (double) M1/kmers << "\n";
-    std::cout << "R_2: " << (double) M2/kmers << "\n";
+    std::cout << "R_2: " << (double) size_in_bytes(r2)/(8*kmers) << "\n";
     std::cout << "S_1: " << (double) (n1+1)/kmers << "\n";
     std::cout << "S_2: " << (double) (n2+1)/kmers << "\n";
 
-    std::cout << "total: " << (double) (n1*offset_width+n2*offset_width+2*N+M1+M2+n1+1+n2+1+size_in_bytes(endpoints)/8+8*hashmap.size()/kmers)/kmers << "\n";
+    std::cout << "total: " << (double) (n1*offset_width+n2*offset_width+2*N+M1+size_in_bytes(r2)/8+n1+1+n2+1+size_in_bytes(endpoints)/8+8*hashmap.size()/kmers)/kmers << "\n";
 
     return 0;
 }
 
 
 template<int level>
-inline void RSIndex::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q)
+inline void RSIndexComp::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q)
 {
     for(uint64_t i = 0; i < q-p; i++) {
         uint64_t hash = 0;
@@ -431,7 +431,7 @@ inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query, uint64_t
 }
 
 
-uint64_t RSIndex::streaming_query(const std::vector<seqan3::dna4> &query)
+uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query)
 {
     auto view = srindex::views::two_minimisers_and_window_hash({.minimiser_size1 = m1, .minimiser_size2 = m2, .window_size = k, .seed1=seed1, .seed2=seed2});
 
@@ -480,7 +480,7 @@ uint64_t RSIndex::streaming_query(const std::vector<seqan3::dna4> &query)
 }
 
 
-int RSIndex::save(const std::filesystem::path &filepath) {
+int RSIndexComp::save(const std::filesystem::path &filepath) {
     std::ofstream out(filepath, std::ios::binary);
     seqan3::contrib::sdsl::serialize(this->k, out);
     seqan3::contrib::sdsl::serialize(this->m1, out);
@@ -501,7 +501,7 @@ int RSIndex::save(const std::filesystem::path &filepath) {
     return 0;
 }
 
-int RSIndex::load(const std::filesystem::path &filepath) {
+int RSIndexComp::load(const std::filesystem::path &filepath) {
     std::ifstream in(filepath, std::ios::binary);
     seqan3::contrib::sdsl::load(this->k, in);
     seqan3::contrib::sdsl::load(this->m1, in);
@@ -521,7 +521,7 @@ int RSIndex::load(const std::filesystem::path &filepath) {
     in.close();
 
     r1_rank = rank_support_v<1>(&r1);
-    r2_rank = rank_support_v<1>(&r2);
+    r2_rank = rank_support_sd<>(&r2);
     this->s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), s1.size(), 3);
     this->s2_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s2.data()), s2.size(), 3);
     endpoints_rank = rank_support_sd<>(&endpoints);
