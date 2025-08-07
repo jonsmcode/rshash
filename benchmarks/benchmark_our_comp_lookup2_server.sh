@@ -25,7 +25,7 @@ run()
 
         thresholds=(50 20 10)
         
-        for ((i=-1; i<=0; i++)); do
+        for ((i=0; i<=1; i++)); do
           m1=($((m + i)))
           for ((j=1; j<=2; j++)); do
             m2=($((m + i + j)))
