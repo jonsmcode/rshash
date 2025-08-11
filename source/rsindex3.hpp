@@ -9,9 +9,9 @@ using namespace seqan3::literals;
 using namespace seqan3::contrib::sdsl;
 
 // namespace sdsl = seqan3::contrib::sdsl;
-const uint8_t m_thres1 = 20;
-const uint8_t m_thres2 = 20;
-const uint8_t m_thres3 = 20;
+// const uint8_t m_thres1 = 20;
+// const uint8_t m_thres2 = 20;
+// const uint8_t m_thres3 = 20;
 
 const uint64_t seed1 = 0x8F'3F'73'B5'CF'1C'9A'DE;
 const uint64_t seed2 = 0x29'6D'BD'33'32'56'8C'64;
@@ -23,7 +23,7 @@ const size_t span = 31;
 class RSIndex
 {
 private:
-    uint8_t k, m1, m2, m3;
+    uint8_t k, m1, m2, m3, m_thres;
     bit_vector r1;
     rank_support_v<1> r1_rank;
     bit_vector r2;
@@ -50,7 +50,7 @@ private:
 
 public:
     RSIndex();
-    RSIndex(uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3);
+    RSIndex(uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3, uint8_t const m_thres);
     uint8_t getk() { return k; }
     int build(const std::vector<std::vector<seqan3::dna4>>&);
     uint64_t streaming_query(const std::vector<seqan3::dna4>&);

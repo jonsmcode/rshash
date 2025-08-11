@@ -14,6 +14,7 @@ struct cmd_arguments {
     uint8_t m{};
     uint8_t n{};
     uint8_t p{};
+    uint8_t t{100};
 };
 
 void initialise_argument_parser(seqan3::argument_parser &parser, cmd_arguments &args) {
@@ -25,6 +26,7 @@ void initialise_argument_parser(seqan3::argument_parser &parser, cmd_arguments &
     parser.add_option(args.m, 'm', "minimiser1", "minimiser1 length");
     parser.add_option(args.n, 'n', "minimiser2", "minimiser2 length");
     parser.add_option(args.p, 'p', "minimiser3", "minimiser3 length");
+    parser.add_option(args.t, 't', "thres", "threshold");
 }
 
 int check_arguments(seqan3::argument_parser &parser, cmd_arguments &args) {
@@ -85,7 +87,7 @@ int main(int argc, char** argv)
         std::vector<std::vector<seqan3::dna4>> text;
         load_file(args.i, text);
         std::cout << "building dict...\n";
-        RSIndex dict(args.k, args.m, args.n, args.p);
+        RSIndex dict(args.k, args.m, args.n, args.p, args.t);
         dict.build(text);
         std::cout << "done.\n";
         dict.save(args.d);
