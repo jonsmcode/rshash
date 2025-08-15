@@ -17,6 +17,11 @@ list (APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/seqan3/cmake")
 # require seqan3 with a version between >=3.0.0 and <4.0.0
 find_package (seqan3 3.0 REQUIRED)
 
+
+list (APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/sharg-parser/cmake")
+
+find_package (sharg 1.0 REQUIRED)
+
 add_subdirectory(source)
 
 # build tests

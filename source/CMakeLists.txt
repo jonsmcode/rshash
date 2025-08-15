@@ -1,5 +1,6 @@
 #find_library(PROFILER_LIB profiler REQUIRED)
 
+
 #add_executable (main main.cpp dict.cpp)
 #target_include_directories(main PRIVATE ${CMAKE_SOURCE_DIR}/sux)
 ##target_link_libraries (main PRIVATE seqan3::seqan3 ${PROFILER_LIB})
@@ -50,7 +51,7 @@ target_include_directories(lookup2 PRIVATE ${CMAKE_SOURCE_DIR}/sux)
 target_include_directories(lookup2 PRIVATE ${CMAKE_SOURCE_DIR}/gtl)
 target_link_libraries (lookup2 PRIVATE seqan3::seqan3)
 
-add_executable (lookup3 lookup_rsindex3.cpp rsindex3.cpp)
+add_executable (lookup3 lookup_rsindex3.cpp rsindex3.cpp rsindex3_comp.cpp)
 target_include_directories(lookup3 PRIVATE ${CMAKE_SOURCE_DIR}/sux)
 target_include_directories(lookup3 PRIVATE ${CMAKE_SOURCE_DIR}/gtl)
-target_link_libraries (lookup3 PRIVATE seqan3::seqan3)
+target_link_libraries (lookup3 PRIVATE seqan3::seqan3 sharg::sharg)

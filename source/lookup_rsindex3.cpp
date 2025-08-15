@@ -1,5 +1,5 @@
 #include <seqan3/core/debug_stream.hpp>
-#include <seqan3/argument_parser/all.hpp>
+#include <sharg/all.hpp>
 #include <seqan3/io/sequence_file/all.hpp>
 
 #include "rsindex3.hpp"
@@ -11,46 +11,45 @@ struct cmd_arguments {
     std::filesystem::path q{};
     std::filesystem::path d{};
     uint8_t k{};
-    uint8_t m{};
-    uint8_t n{};
-    uint8_t p{};
-    uint8_t t{100};
+    uint8_t m1{14};
+    uint8_t m2{15};
+    uint8_t m3{16};
+    uint8_t t1{10};
+    uint8_t t2{20};
+    uint8_t t3{30};
+    bool c{0};
 };
 
-void initialise_argument_parser(seqan3::argument_parser &parser, cmd_arguments &args) {
-    parser.add_positional_option(args.cmd, "command options: build, query");
-    parser.add_option(args.i, 'i', "input", "provide input file");
-    parser.add_option(args.q, 'q', "query", "provide query file");
-    parser.add_option(args.d, 'd', "dict", "provide dict file");
-    parser.add_option(args.k, 'k', "k-mer", "k-mer length");
-    parser.add_option(args.m, 'm', "minimiser1", "minimiser1 length");
-    parser.add_option(args.n, 'n', "minimiser2", "minimiser2 length");
-    parser.add_option(args.p, 'p', "minimiser3", "minimiser3 length");
-    parser.add_option(args.t, 't', "thres", "threshold");
+void initialise_argument_parser(sharg::parser &parser, cmd_arguments &args) {
+    parser.add_positional_option(args.cmd, sharg::config{.description = "command options: build, query"});
+    parser.add_option(args.i, sharg::config{.short_id = 'i', .long_id = "input", .description = "provide input file"});
+    parser.add_option(args.q, sharg::config{.short_id = 'q', .long_id = "query", .description = "provide query file"});
+    parser.add_option(args.d, sharg::config{.short_id = 'd', .long_id = "dict", .description = "provide dict file"});
+    parser.add_option(args.k, sharg::config{.short_id = 'k', .long_id = "k-mer", .description = "k-mer length"});
+    parser.add_option(args.m1, sharg::config{.long_id = "m1", .description = "minimiser1 length"});
+    parser.add_option(args.m2, sharg::config{.long_id = "m2", .description = "minimiser2 length"});
+    parser.add_option(args.m3, sharg::config{.long_id = "m3", .description = "minimiser3 length"});
+    parser.add_option(args.t1, sharg::config{.long_id = "t1", .description = "threshold1"});
+    parser.add_option(args.t2, sharg::config{.long_id = "t2", .description = "threshold2"});
+    parser.add_option(args.t3, sharg::config{.long_id = "t3", .description = "threshold3"});
+    parser.add_flag(args.c, sharg::config{.short_id = 'c', .long_id = "comp", .description = "compress level 2 and 3"});
 }
 
-int check_arguments(seqan3::argument_parser &parser, cmd_arguments &args) {
+int check_arguments(sharg::parser &parser, cmd_arguments &args) {
     if(!parser.is_option_set('d'))
-            throw seqan3::user_input_error("provide dict file.");
+        throw sharg::user_input_error("provide index file.");
     if(args.cmd == "build") {
         if(!parser.is_option_set('i'))
-            throw seqan3::user_input_error("provide input file.");
+            throw sharg::user_input_error("provide input file.");
         if(!parser.is_option_set('k'))
-            throw seqan3::user_input_error("specify k");
-        if(!parser.is_option_set('m'))
-            throw seqan3::user_input_error("specify minimiser1");
-        if(!parser.is_option_set('n'))
-            throw seqan3::user_input_error("specify minimiser2");
-        if(!parser.is_option_set('p'))
-            throw seqan3::user_input_error("specify minimiser3");
+            throw sharg::user_input_error("specify k");
     }
     else if(args.cmd == "query") {
         if(!parser.is_option_set('q'))
-            throw seqan3::user_input_error("provide query file.");
+            throw sharg::user_input_error("provide query file.");
     }
     else
-        throw seqan3::user_input_error("illegal command");
-
+        throw sharg::user_input_error("illegal command");
     return 0;
 }
 
@@ -71,14 +70,14 @@ void load_file(const std::filesystem::path &filepath, std::vector<std::vector<se
 
 int main(int argc, char** argv)
 {
-    seqan3::argument_parser parser{"kmerdict", argc, argv};
+    sharg::parser parser{"kmerdict", argc, argv};
     cmd_arguments args{};
     initialise_argument_parser(parser, args);
     try {
         parser.parse();
         check_arguments(parser, args);
     }
-    catch (seqan3::argument_parser_error const &ext) {
+    catch (sharg::parser_error const &ext) {
         return -1;
     }
 
@@ -87,27 +86,42 @@ int main(int argc, char** argv)
         std::vector<std::vector<seqan3::dna4>> text;
         load_file(args.i, text);
         std::cout << "building dict...\n";
-        RSIndex dict(args.k, args.m, args.n, args.p, args.t);
-        dict.build(text);
-        std::cout << "done.\n";
-        dict.save(args.d);
+        if(args.c) {
+            RSIndexComp index = RSIndexComp(args.k, args.m1, args.m2, args.m3, args.t1, args.t2, args.t3);
+            index.build(text);
+            index.save(args.d);
+        }
+        else {
+            RSIndex index = RSIndex(args.k, args.m1, args.m2, args.m3, args.t1, args.t2, args.t3);
+            index.build(text);
+            index.save(args.d);
+        }
     }
     else if(args.cmd == "query") {
-        std::cout << "loading dict...\n";
-        RSIndex dict;
-        dict.load(args.d);
-
         std::cout << "loading queries...\n";
         std::vector<std::vector<seqan3::dna4>> queries;
         load_file(args.q, queries);
 
-        std::cout << "querying...\n";
+        std::cout << "loading dict...\n";
         uint64_t kmers = 0;
         uint64_t found = 0;
-        for(auto query : queries) {
-            int occurences = dict.streaming_query(query);
-            kmers += query.size()-dict.getk()+1;
-            found += occurences;
+        if(args.c) {
+            RSIndexComp index;
+            index.load(args.d);
+            std::cout << "querying...\n";
+            for (auto query : queries) {
+                found += index.streaming_query(query);
+                kmers += query.size() - index.getk() + 1;
+            }
+        }
+        else {
+            RSIndex index;
+            index.load(args.d);
+            std::cout << "querying...\n";
+            for (auto query : queries) {
+                found += index.streaming_query(query);
+                kmers += query.size() - index.getk() + 1;
+            }
         }
         std::cout << "==== query report:\n";
         std::cout << "num_kmers = " << kmers << '\n';
