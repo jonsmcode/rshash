@@ -9,9 +9,6 @@ using namespace seqan3::literals;
 using namespace seqan3::contrib::sdsl;
 
 // namespace sdsl = seqan3::contrib::sdsl;
-// const uint8_t m_thres1 = 20;
-// const uint8_t m_thres2 = 20;
-// const uint8_t m_thres3 = 20;
 
 const uint64_t seed1 = 0x8F'3F'73'B5'CF'1C'9A'DE;
 const uint64_t seed2 = 0x29'6D'BD'33'32'56'8C'64;

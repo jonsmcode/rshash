@@ -105,7 +105,7 @@ int main(int argc, char** argv)
         std::cout << "loading dict...\n";
         uint64_t kmers = 0;
         uint64_t found = 0;
-        std::chrono::nanoseconds ns_per_kmer;
+        double ns_per_kmer;
         if(args.c) {
             RSIndexComp index;
             index.load(args.d);
@@ -117,8 +117,8 @@ int main(int argc, char** argv)
                 kmers += query.size() - index.getk() + 1;
             }
             std::chrono::high_resolution_clock::time_point t_stop = std::chrono::high_resolution_clock::now();
-            auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
-            ns_per_kmer = elapsed / kmers;
+            std::chrono::nanoseconds elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
+            ns_per_kmer = (double) elapsed.count() / kmers;
         }
         else {
             RSIndex index;
@@ -131,8 +131,8 @@ int main(int argc, char** argv)
                 kmers += query.size() - index.getk() + 1;
             }
             std::chrono::high_resolution_clock::time_point t_stop = std::chrono::high_resolution_clock::now();
-            auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
-            ns_per_kmer = elapsed / kmers;
+            std::chrono::nanoseconds elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
+            ns_per_kmer = (double) elapsed.count() / kmers;
         }
         std::cout << "==== query report:\n";
         std::cout << "num_kmers = " << kmers << '\n';

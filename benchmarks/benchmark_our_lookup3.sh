@@ -23,9 +23,9 @@ run()
         m=$(echo "l($length)/l(4)" | bc -l)
         m=$(printf "%.0f" "$m")
 
-        t1=20
-        t2=50
-        t3=1000
+        t1=50
+        t2=100
+        t3=500
 
         m1s=()
         for ((i=-1; i>=-1; i--)); do
@@ -88,14 +88,25 @@ run()
               file_name=$(basename "$f")
 
               # low hitrates
+              # if [[ "$BASENAME" == *"bacterial"* ]]; then
+              #   queries=("${parent_dir/unitigs/queries}/SRR5833294.fastq.gz")
+              # elif [[ "$BASENAME" == *"cod"* ]]; then
+              #   queries=("${parent_dir/unitigs/queries}/SRR11449743_1.fastq.gz")
+              # elif [[ "$BASENAME" == *"kestrel"* ]]; then
+              #   queries=("${parent_dir/unitigs/queries}/SRR12858649.fastq.gz")
+              # elif [[ "$BASENAME" == *"human"* ]]; then
+              #   queries=("${parent_dir/unitigs/queries}/SRR5901135_1.fastq.gz")
+              # else
+              #   queries=()
+              # fi
               if [[ "$BASENAME" == *"bacterial"* ]]; then
-                queries=("${parent_dir/unitigs/queries}/SRR5833294.fastq.gz")
+                queries=("${parent_dir/unitigs/queries}/SRR5833294.10K.fastq.gz")
               elif [[ "$BASENAME" == *"cod"* ]]; then
-                queries=("${parent_dir/unitigs/queries}/SRR11449743_1.fastq.gz")
+                queries=("${parent_dir/unitigs/queries}/SRR11449743_1.K100.fastq.gz")
               elif [[ "$BASENAME" == *"kestrel"* ]]; then
-                queries=("${parent_dir/unitigs/queries}/SRR12858649.fastq.gz")
+                queries=("${parent_dir/unitigs/queries}/SRR12858649.K100.fastq.gz")
               elif [[ "$BASENAME" == *"human"* ]]; then
-                queries=("${parent_dir/unitigs/queries}/SRR5901135_1.fastq.gz")
+                queries=("${parent_dir/unitigs/queries}/SRR5901135_1.K100.fastq.gz")
               else
                 queries=()
               fi
@@ -113,7 +124,7 @@ run()
                   k_mers=$(grep "num_kmers" prog_out.txt | sed -E 's/.*num_kmers = ([0-9]+).*/\1/')
                   found=$(grep "num_positive_kmers" prog_out.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
                   # querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
-                  querytimekmer=$(grep 'ns_per_kmer' prog_out.txt | awk -F'=' '{print $2}' | awk '{print $1}')
+                  querytimekmer=$(grep 'time_per_kmer' prog_out.txt | awk -F'=' '{print $2}' | awk '{print $1}' | sed 's/ns//')
                   
                   echo "$f,$query,$k,$m1,$m2,$m3,$t1,$t2,$t3,$buildtime,$buildmem",$file_size,$spaceoffsets1,$spaceoffsets2,$spaceoffsets3,$spaceht,$spacer1,$spacer2,$spacer3,$spaces1,$spaces2,$spaces3,$density_r1,$density_r2,$density_r3,$density_s1,$density_s2,$density_s3,$density_ht,$no_minimiser1,$no_minimiser2,$no_minimiser3,$no_distinct_minimiser1,$no_distinct_minimiser2,$no_distinct_minimiser3,$spacetotal,$spacetotalreal,$querytimekmer,$querymem,$k_mers",$found" >> "$CSV"
 
@@ -122,14 +133,25 @@ run()
               done
 
               # high hitrates
+              # if [[ "$BASENAME" == *"bacterial"* ]]; then
+              #   queries=("${parent_dir/unitigs/queries}/SRR5901135_1.fastq.gz")
+              # elif [[ "$BASENAME" == *"cod"* ]]; then
+              #   queries=("${parent_dir/unitigs/queries}/SRR12858649.fastq.gz")
+              # elif [[ "$BASENAME" == *"kestrel"* ]]; then
+              #   queries=("${parent_dir/unitigs/queries}/SRR11449743_1.fastq.gz")
+              # elif [[ "$BASENAME" == *"human"* ]]; then
+              #   queries=("${parent_dir/unitigs/queries}/SRR5833294.fastq.gz")
+              # else
+              #   queries=()
+              # fi
               if [[ "$BASENAME" == *"bacterial"* ]]; then
-                queries=("${parent_dir/unitigs/queries}/SRR5901135_1.fastq.gz")
+                queries=("${parent_dir/unitigs/queries}/SRR5901135_1.K100.fastq.gz")
               elif [[ "$BASENAME" == *"cod"* ]]; then
-                queries=("${parent_dir/unitigs/queries}/SRR12858649.fastq.gz")
+                queries=("${parent_dir/unitigs/queries}/SRR12858649.K100.fastq.gz")
               elif [[ "$BASENAME" == *"kestrel"* ]]; then
-                queries=("${parent_dir/unitigs/queries}/SRR11449743_1.fastq.gz")
+                queries=("${parent_dir/unitigs/queries}/SRR11449743_1.K100.fastq.gz")
               elif [[ "$BASENAME" == *"human"* ]]; then
-                queries=("${parent_dir/unitigs/queries}/SRR5833294.fastq.gz")
+                queries=("${parent_dir/unitigs/queries}/SRR5833294.10K.fastq.gz")
               else
                 queries=()
               fi
@@ -147,7 +169,7 @@ run()
                   k_mers=$(grep "num_kmers" prog_out.txt | sed -E 's/.*num_kmers = ([0-9]+).*/\1/')
                   found=$(grep "num_positive_kmers" prog_out.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
                   # querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
-                  querytimekmer=$(grep 'ns_per_kmer' prog_out.txt | awk -F'=' '{print $2}' | awk '{print $1}')
+                  querytimekmer=$(grep 'time_per_kmer' prog_out.txt | awk -F'=' '{print $2}' | awk '{print $1}' | sed 's/ns//')
                   
                   echo "$f,$query,$k,$m1,$m2,$m3,$t1,$t2,$t3,$buildtime,$buildmem",$file_size,$spaceoffsets1,$spaceoffsets2,$spaceoffsets3,$spaceht,$spacer1,$spacer2,$spacer3,$spaces1,$spaces2,$spaces3,$density_r1,$density_r2,$density_r3,$density_s1,$density_s2,$density_s3,$density_ht,$no_minimiser1,$no_minimiser2,$no_minimiser3,$no_distinct_minimiser1,$no_distinct_minimiser2,$no_distinct_minimiser3,$spacetotal,$spacetotalreal,$querytimekmer,$querymem,$k_mers",$found" >> "$CSV"
 
