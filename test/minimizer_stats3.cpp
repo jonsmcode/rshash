@@ -8,9 +8,12 @@
 #include "../source/minimiser_rev_xor_views3.hpp"
 
 const uint8_t k = 31;
-const uint8_t m1 = 15;
-const uint8_t m2 = 16;
-const uint8_t m3 = 18;
+// const uint8_t m1 = 15;
+// const uint8_t m2 = 16;
+// const uint8_t m3 = 18;
+const uint8_t m1 = 12;
+const uint8_t m2 = 13;
+const uint8_t m3 = 14;
 const uint8_t m_thres = 20;
 const uint8_t span = 31;
 
@@ -40,6 +43,25 @@ struct my_traits:seqan3::sequence_file_input_default_traits_dna {
 };
 
 
+void load_frac_file(const std::filesystem::path &filepath, std::vector<std::vector<seqan3::dna4>> &output) {
+    auto stream = seqan3::sequence_file_input<my_traits>{filepath};
+    uint64_t N = 0;
+    for (auto & record : stream) {
+        N += record.sequence().size();
+        // output.push_back(std::move(record.sequence()));
+        if(N >= 1000000000)
+            break;
+    }
+    uint64_t n = 0;
+    for (auto & record : stream) {
+        n += record.sequence().size();
+        output.push_back(std::move(record.sequence()));
+        if(n >= N/64)
+            break;
+    }
+}
+
+
 void load_file(const std::filesystem::path &filepath, std::vector<std::vector<seqan3::dna4>> &output) {
     auto stream = seqan3::sequence_file_input<my_traits>{filepath};
     uint64_t N = 0;
@@ -56,6 +78,7 @@ void load_file(const std::filesystem::path &filepath, std::vector<std::vector<se
 
 void stats(const std::vector<std::vector<seqan3::dna4>> &input)
 {
+    auto view = srindex::views::xor_minimiser_and_window({.minimiser_size = m1, .window_size = k, .seed=seed1});
     auto view1 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
 
     std::cout << +m1 << " " << +m2 << " " << +m3 << "\n";
@@ -64,17 +87,25 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     const uint64_t M2 = 1ULL << (m2+m2);
     const uint64_t M3 = 1ULL << (m3+m3);
 
-    std::cout << "find minimizers...\n";
-    sdsl::bit_vector r1tmp = sdsl::bit_vector(M1, 0);
-
+    std::cout << "kmers in HT...\n";
+    std::unordered_set<uint64_t> ukmers;
     size_t N = 0;
     uint64_t no_sequences = 0;
+    for(auto & record : input) {
+        for(auto && minimiser : record | view) {
+            ukmers.insert(std::min<uint64_t>(minimiser.window_value, minimiser.window_value_rev));
+        }
+        N += record.size();
+        no_sequences++;
+    }
+
+    std::cout << "find minimizers...\n";
+    sdsl::bit_vector r1tmp = sdsl::bit_vector(M1, 0);
+    
     for(auto & record : input) {
         for(auto && minimiser : record | view1) {
             r1tmp[minimiser.minimiser_value] = 1;
         }
-        N += record.size();
-        no_sequences++;
     }
     sdsl::rank_support_v<1> r1tmp_rank = sdsl::rank_support_v<1>(&r1tmp);
 
@@ -171,6 +202,13 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     for(auto & sequence : freq_skmers1)
         len_rem_seqs1 += sequence.size();
 
+    std::cout << "ukmers1 in HT...\n";
+    std::unordered_set<uint64_t> ukmers1;
+    for(auto & record : freq_skmers1) {
+        for(auto && minimiser : record | view) {
+            ukmers1.insert(std::min<uint64_t>(minimiser.window_value, minimiser.window_value_rev));
+        }
+    }
 
     std::cout << "level 2...\n";
     auto view2 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m2, .window_size = k, .seed=seed2});
@@ -261,6 +299,14 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
             freq_skmers2.push_back(skmer);
         }
 
+    }
+
+    std::cout << "ukmers2 in HT...\n";
+    std::unordered_set<uint64_t> ukmers2;
+    for(auto & record : freq_skmers2) {
+        for(auto && minimiser : record | view) {
+            ukmers2.insert(std::min<uint64_t>(minimiser.window_value, minimiser.window_value_rev));
+        }
     }
     
     size_t len_rem_seqs2 = 0;
@@ -362,6 +408,14 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
         }
     }
 
+    std::cout << "ukmers3 in HT...\n";
+    std::unordered_set<uint64_t> ukmers3;
+    for(auto & record : freq_skmers3) {
+        for(auto && minimiser : record | view) {
+            ukmers3.insert(std::min<uint64_t>(minimiser.window_value, minimiser.window_value_rev));
+        }
+    }
+
     size_t len_rem_seqs3 = 0;
     for(auto & sequence : freq_skmers3)
         len_rem_seqs3 += sequence.size();
@@ -411,13 +465,13 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "text:\n";
     std::cout << "text length: " << N << "\n";
     std::cout << "#kmers: " << kmers <<  '\n';
-    std::cout << "#ukmers: todo\n";
-    std::cout << "#kmers/#ukmers: todo\n\n";
+    std::cout << "#ukmers: " << ukmers.size() << "\n";
+    std::cout << "#kmers/#ukmers: " << (double) ukmers.size()/kmers*100 << "%\n\n";
 
     std::cout << "Level1: m1=" << +m1 << ", threshold=" << +m_thres << "\n";
     std::cout << "#minis1: " << n << "\n";
     std::cout << "#uminis1: " << c1tmp << "\n";
-    std::cout << "#skmers1: todo\n";
+    std::cout << "#ukmers1: " << ukmers1.size() << "\n";
     std::cout << "#unfreq minis1: " << n1 << " (" << (double) n1/n*100 << "%)\n";
     std::cout << "#unfreq uminis1: " << c1 << " ("<< (double) c1/c1tmp*100 << "%)\n\n";
     uint64_t cum = 0;
@@ -437,7 +491,7 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "Level2: m2=" << +m2 << ", threshold=" << +m_thres << "\n";
     std::cout << "#minis2: " << n2tmp << "\n";
     std::cout << "#uminis2: " << c2tmp << "\n";
-    std::cout << "#skmers2: todo\n";
+    std::cout << "#ukmers2: " << ukmers2.size() << "\n";
     std::cout << "#unfreq minis2: " << n2 << " (" << (double) n2/n2tmp*100 << "%)\n";
     std::cout << "#unfreq uminis2: " << c2 << " ("<< (double) c2/c2tmp*100 << "%)\n";
     cum = 0;
@@ -457,7 +511,8 @@ void stats(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "Level3: m3=" << +m3 << ", threshold=" << +m_thres << "\n";
     std::cout << "#minis3: " << n3tmp << "\n";
     std::cout << "#uminis3: " << c3tmp << "\n";
-    std::cout << "#skmers3: todo\n";
+    std::cout << "#ukmers3: " << ukmers3.size() << "\n";
+
     std::cout << "#unfreq minis3: " << n3 << " (" << (double) n3/n3tmp*100 << "%)\n";
     std::cout << "#unfreq uminis3: " << c3 << " ("<< (double) c3/c3tmp*100 << "%)\n\n";
     cum = 0;
@@ -486,6 +541,7 @@ int main(int argc, char** argv)
     // std::filesystem::path path = "/bigdata/ag_abi/jonas/datasets/human.k31.unitigs.fa.ust.fa.gz";
     std::filesystem::path path = "/Users/adm_js4718fu/datasets/unitigs/human.k31.unitigs.fa.ust.fa.gz";
     std::vector<std::vector<seqan3::dna4>> text;
-    load_file(path, text);
+    load_frac_file(path, text);
+    // load_file(path, text);
     stats(text);
 }

@@ -23,7 +23,8 @@ const size_t span = 31;
 class RSIndex
 {
 private:
-    uint8_t k, m1, m2, m3, m_thres1, m_thres2, m_thres3;
+    uint8_t k, m1, m2, m3, m_thres1, m_thres2;
+    uint16_t m_thres3;
     bit_vector r1;
     rank_support_v<1> r1_rank;
     bit_vector r2;
@@ -51,7 +52,7 @@ private:
 public:
     RSIndex();
     RSIndex(uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3,
-        uint8_t const m_thres1, uint8_t const m_thres2, uint8_t const m_thres3);
+        uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3);
     uint8_t getk() { return k; }
     int build(const std::vector<std::vector<seqan3::dna4>>&);
     uint64_t streaming_query(const std::vector<seqan3::dna4>&);
@@ -64,7 +65,8 @@ public:
 class RSIndexComp
 {
 private:
-    uint8_t k, m1, m2, m3, m_thres1, m_thres2, m_thres3;
+    uint8_t k, m1, m2, m3, m_thres1, m_thres2;
+    uint8_t m_thres3;
     bit_vector r1;
     rank_support_v<1> r1_rank;
     sd_vector<> r2;
@@ -92,7 +94,7 @@ private:
 public:
     RSIndexComp();
     RSIndexComp(uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3,
-        uint8_t const m_thres1, uint8_t const m_thres2, uint8_t const m_thres3);
+        uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3);
     uint8_t getk() { return k; }
     int build(const std::vector<std::vector<seqan3::dna4>>&);
     uint64_t streaming_query(const std::vector<seqan3::dna4>&);

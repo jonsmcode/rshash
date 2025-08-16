@@ -24,7 +24,7 @@ static inline constexpr uint64_t compute_mask(uint64_t const size)
 RSIndexComp::RSIndexComp() {}
 
 RSIndexComp::RSIndexComp(uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3,
-    uint8_t const m_thres1, uint8_t const m_thres2, uint8_t const m_thres3)
+    uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3)
 {
     this->k = k;
     this->m1 = m1;
@@ -361,8 +361,8 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
 
     std::cout << "count minimizers3...\n";
     size_t c3tmp = r3tmp_rank(M3);
-    uint8_t* count3tmp = new uint8_t[c3tmp];
-    std::memset(count3tmp, 0, c3tmp*sizeof(uint8_t));
+    uint16_t* count3tmp = new uint16_t[c3tmp];
+    std::memset(count3tmp, 0, c3tmp*sizeof(uint16_t));
 
     for(auto & sequence : freq_skmers2) {
         for(auto && minimiser : sequence | view3) {
@@ -386,8 +386,8 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
 
     std::cout << "fill count 3...\n";
     size_t c3 = r3_rank(M3);
-    uint8_t* count3 = new uint8_t[c3];
-    std::memset(count3, 0, c3*sizeof(uint8_t));
+    uint16_t* count3 = new uint16_t[c3];
+    std::memset(count3, 0, c3*sizeof(uint16_t));
 
     for(auto & sequence : freq_skmers2) {
         for(auto && minimiser : sequence | view3) {
@@ -415,7 +415,7 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "filling offsets_3...\n";
     offsets3.width(offset_width);
     offsets3.resize(n3);
-    std::memset(count3, 0, c3*sizeof(uint8_t));
+    std::memset(count3, 0, c3*sizeof(uint16_t));
 
     skmer_idx = 0;
     for(auto & skmer : freq_skmers2) {
@@ -546,7 +546,7 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
 template<int level>
 inline void RSIndexComp::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q)
 {
-    for(uint64_t i = 0; i < q-p; i++) {
+    for(size_t i = 0; i < q-p; i++) {
         uint64_t hash = 0;
         size_t o;
         if constexpr (level == 1)
@@ -559,7 +559,7 @@ inline void RSIndexComp::fill_buffer(std::vector<uint64_t> &buffer, const uint64
         size_t e = o+k+span;
         if(e > next_endpoint)
             e = next_endpoint;
-        for (uint64_t j=o; j < o+k; j++) {
+        for (size_t j=o; j < o+k; j++) {
             uint64_t const new_rank = seqan3::to_rank(text[j]);
             hash <<= 2;
             hash |= new_rank;

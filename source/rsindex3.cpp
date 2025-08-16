@@ -24,7 +24,7 @@ static inline constexpr uint64_t compute_mask(uint64_t const size)
 RSIndex::RSIndex() {}
 
 RSIndex::RSIndex(uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3,
-    uint8_t const m_thres1, uint8_t const m_thres2, uint8_t const m_thres3)
+    uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3)
 {
     this->k = k;
     this->m1 = m1;
@@ -360,8 +360,8 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
 
     std::cout << "count minimizers3...\n";
     size_t c3tmp = r3tmp_rank(M3);
-    uint8_t* count3tmp = new uint8_t[c3tmp];
-    std::memset(count3tmp, 0, c3tmp*sizeof(uint8_t));
+    uint16_t* count3tmp = new uint16_t[c3tmp];
+    std::memset(count3tmp, 0, c3tmp*sizeof(uint16_t));
 
     for(auto & sequence : freq_skmers2) {
         for(auto && minimiser : sequence | view3) {
@@ -384,8 +384,8 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
 
     std::cout << "fill count 3...\n";
     size_t c3 = r3_rank(M3);
-    uint8_t* count3 = new uint8_t[c3];
-    std::memset(count3, 0, c3*sizeof(uint8_t));
+    uint16_t* count3 = new uint16_t[c3];
+    std::memset(count3, 0, c3*sizeof(uint16_t));
 
     for(auto & sequence : freq_skmers2) {
         for(auto && minimiser : sequence | view3) {
@@ -413,7 +413,7 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "filling offsets_3...\n";
     offsets3.width(offset_width);
     offsets3.resize(n3);
-    std::memset(count3, 0, c3*sizeof(uint8_t));
+    std::memset(count3, 0, c3*sizeof(uint16_t));
 
     skmer_idx = 0;
     for(auto & skmer : freq_skmers2) {

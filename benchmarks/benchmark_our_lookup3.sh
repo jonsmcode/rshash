@@ -6,7 +6,7 @@ today=$(date +%Y-%m-%d-%H-%M-%S)
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../../../datasets/unitigs" >/dev/null 2>&1 && pwd )"
 LOG="log.txt"
-CSV="lookup3-results-$today.csv"
+CSV="comp_lookup3-results-$today.csv"
 
 run()
 {
@@ -16,31 +16,40 @@ run()
   do
     BASENAME=$(echo "$f" | sed 's/\.fa.gz$//')
     k=$(echo "${BASENAME##*k}" | grep -o '[0-9]*')
-    length=$(python3 -c "import gzip; print(sum(len(line.strip()) for line in gzip.open('$f') if not line.startswith(b'>')))")
+    if [[ "$BASENAME" == *"bacterial"* || "$BASENAME" == *"human"* || "$BASENAME" == *"cod"* || "$BASENAME" == *"kestrel"* ]]; then
+      if [ "$k" -le 32 ]; then
+        length=$(python3 -c "import gzip; print(sum(len(line.strip()) for line in gzip.open('$f') if not line.startswith(b'>')))")
 
-    ms=()
-    for ((i=0; i<=0; i++)); do
-        m=$(echo "l($length)/l(4)+$i" | bc -l)
+        m=$(echo "l($length)/l(4)" | bc -l)
         m=$(printf "%.0f" "$m")
-        ms+=("$m")
-    done
 
-    for m in "${ms[@]}"; do
-      if [[ "$BASENAME" == *"bacterial"* || "$BASENAME" == *"human"* || "$BASENAME" == *"cod"* || "$BASENAME" == *"kestrel"* ]]; then
-          if [ "$k" -le 32 ]; then
-            if [ "$m" -le 32 ]; then
+        t1=20
+        t2=50
+        t3=1000
+
+        m1s=()
+        for ((i=-1; i>=-1; i--)); do
+            m1s+=($((m + i)))
+        done
+        m2s=()
+        for ((i=1; i<=1; i++)); do
+            m2s+=($((m + i)))
+        done
+        m3s=()
+        for ((i=2; i<=2; i++)); do
+            m3s+=($((m + i)))
+        done
+        for m1 in "${m1s[@]}"; do
+          for m2 in "${m2s[@]}"; do
+            for m3 in "${m3s[@]}"; do
               echo $BASENAME
-              m1=$((m - 2))
-              m2=$((m - 1))
-              m3=$m
               echo $m1
               echo $m2
               echo $m3
 
               echo $f >> $LOG
 
-              # /usr/bin/time -l -o time.txt $PROGRAM build -i "$f" -d "${BASENAME}.dict" -k $k -m $((m - 1)) -n $m > prog_out.txt 2>&1
-              /usr/bin/time -l -o time.txt $PROGRAM build -i "$f" -d "${BASENAME}.dict" -k $k -m $m1 -n $m2 -o $m3 > prog_out.txt 2>&1
+              /usr/bin/time -l -o time.txt $PROGRAM build -i "$f" -d "${BASENAME}.dict" -k $k -c --m1 $m1 --t1 $t1 --m2 $m2 --t2 $t2 --m3 $m3 --t3 $t3 > prog_out.txt 2>&1
 
               cat prog_out.txt >> $LOG
 
@@ -54,7 +63,8 @@ run()
               density_s1=$(awk '/density s1/ {print $3}' prog_out.txt | tr -d '%')
               density_s2=$(awk '/density s2/ {print $3}' prog_out.txt | tr -d '%')
               density_s3=$(awk '/density s3/ {print $3}' prog_out.txt | tr -d '%')
-              no_kmers=$(awk '/no kmers/ {print $3}' prog_out.txt)
+              density_ht=$(grep "no kmers HT:" prog_out.txt | awk '{print $(NF)}' | sed 's/%//')
+              no_kmers=$(awk '/text kmers/ {print $3}' prog_out.txt)
               no_minimiser1=$(awk '/no minimiser1/ {print $3}' prog_out.txt)
               no_minimiser2=$(awk '/no minimiser2/ {print $3}' prog_out.txt)
               no_minimiser3=$(awk '/no minimiser3/ {print $3}' prog_out.txt)
@@ -72,6 +82,7 @@ run()
               spaces2=$(grep '^S_2:' prog_out.txt | cut -d':' -f2 | xargs)
               spaces3=$(grep '^S_3:' prog_out.txt | cut -d':' -f2 | xargs)
               spacetotal=$(grep '^total:' prog_out.txt | cut -d':' -f2 | xargs)
+              spacetotalreal=$(echo "scale=2; $file_size/$no_kmers*8" | bc)
 
               parent_dir=$(dirname "$f")
               file_name=$(basename "$f")
@@ -93,7 +104,7 @@ run()
                   echo $f >> $LOG
                   echo $query >> $LOG
                   echo $query
-                  /usr/bin/time -l -o time.txt $PROGRAM query -d "${BASENAME}.dict" -q $query > prog_out.txt 2>&1
+                  /usr/bin/time -l -o time.txt $PROGRAM query -d "${BASENAME}.dict" -q $query  -c > prog_out.txt 2>&1
 
                   cat prog_out.txt >> $LOG
                   
@@ -101,10 +112,10 @@ run()
                   querymem=$(cat time.txt  | grep "maximum resident set size" | awk '{print $1}')
                   k_mers=$(grep "num_kmers" prog_out.txt | sed -E 's/.*num_kmers = ([0-9]+).*/\1/')
                   found=$(grep "num_positive_kmers" prog_out.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
-                  querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
+                  # querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
+                  querytimekmer=$(grep 'ns_per_kmer' prog_out.txt | awk -F'=' '{print $2}' | awk '{print $1}')
                   
-                  # echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$spaceoffsets1,$spaceoffsets2,$spacer1,$spacer2,$spaces1,$spaces2,$density_r1,$density_r2,$density_s1,$density_s2,$no_minimiser1,$no_minimiser2,$no_distinct_minimiser1,$no_distinct_minimiser2,$spacetotal,$querytimekmer,$querymem,$k_mers",$found" >> "$CSV"
-                  echo "$f,$query,$k,$m1,$m2,$m3,$buildtime,$buildmem",$file_size,$spaceoffsets1,$spaceoffsets2,$spaceoffsets3,$spaceht,$spacer1,$spacer2,$spacer3,$spaces1,$spaces2,$spaces3,$density_r1,$density_r2,$density_r3,$density_s1,$density_s2,$density_s3,$no_minimiser1,$no_minimiser2,$no_minimiser3,$no_distinct_minimiser1,$no_distinct_minimiser2,$no_distinct_minimiser3,$spacetotal,$querytimekmer,$querymem,$k_mers",$found" >> "$CSV"
+                  echo "$f,$query,$k,$m1,$m2,$m3,$t1,$t2,$t3,$buildtime,$buildmem",$file_size,$spaceoffsets1,$spaceoffsets2,$spaceoffsets3,$spaceht,$spacer1,$spacer2,$spacer3,$spaces1,$spaces2,$spaces3,$density_r1,$density_r2,$density_r3,$density_s1,$density_s2,$density_s3,$density_ht,$no_minimiser1,$no_minimiser2,$no_minimiser3,$no_distinct_minimiser1,$no_distinct_minimiser2,$no_distinct_minimiser3,$spacetotal,$spacetotalreal,$querytimekmer,$querymem,$k_mers",$found" >> "$CSV"
 
                   # rm -f time.txt
                   # rm -f prog_out.txt
@@ -127,7 +138,7 @@ run()
                   echo $f >> $LOG
                   echo $query >> $LOG
                   echo $query
-                  /usr/bin/time -l -o time.txt $PROGRAM query -d "${BASENAME}.dict" -q $query > prog_out.txt 2>&1
+                  /usr/bin/time -l -o time.txt $PROGRAM query -d "${BASENAME}.dict" -q $query  -c > prog_out.txt 2>&1
 
                   cat prog_out.txt >> $LOG
                   
@@ -135,18 +146,21 @@ run()
                   querymem=$(cat time.txt  | grep "maximum resident set size" | awk '{print $1}')
                   k_mers=$(grep "num_kmers" prog_out.txt | sed -E 's/.*num_kmers = ([0-9]+).*/\1/')
                   found=$(grep "num_positive_kmers" prog_out.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
-                  querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
+                  # querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
+                  querytimekmer=$(grep 'ns_per_kmer' prog_out.txt | awk -F'=' '{print $2}' | awk '{print $1}')
                   
-                  echo "$f,$query,$k,$m1,$m2,$m3,$buildtime,$buildmem",$file_size,$spaceoffsets1,$spaceoffsets2,$spaceoffsets3,$spaceht,$spacer1,$spacer2,$spacer3,$spaces1,$spaces2,$spaces3,$density_r1,$density_r2,$density_r3,$density_s1,$density_s2,$density_s3,$no_minimiser1,$no_minimiser2,$no_minimiser3,$no_distinct_minimiser1,$no_distinct_minimiser2,$no_distinct_minimiser3,$spacetotal,$querytimekmer,$querymem,$k_mers",$found" >> "$CSV"
+                  echo "$f,$query,$k,$m1,$m2,$m3,$t1,$t2,$t3,$buildtime,$buildmem",$file_size,$spaceoffsets1,$spaceoffsets2,$spaceoffsets3,$spaceht,$spacer1,$spacer2,$spacer3,$spaces1,$spaces2,$spaces3,$density_r1,$density_r2,$density_r3,$density_s1,$density_s2,$density_s3,$density_ht,$no_minimiser1,$no_minimiser2,$no_minimiser3,$no_distinct_minimiser1,$no_distinct_minimiser2,$no_distinct_minimiser3,$spacetotal,$spacetotalreal,$querytimekmer,$querymem,$k_mers",$found" >> "$CSV"
 
                   # rm -f time.txt
                   # rm -f prog_out.txt
               done
-            fi
-          fi
-      fi
-    done
+              
+          done
+        done
 
+        done
+      fi
+    fi
 
   done
 }
@@ -154,7 +168,6 @@ run()
 
 for data in $(find $DIR -mindepth 0 -maxdepth 0 -type d); do
   FILENAME=$(basename $data)
-  echo "textfile,queryfile,k,m1,m2,m3,buildtime [s],buildmem [B],indexsize [B],spaceoffsets1 [bits/kmer],spaceoffsets2 [bits/kmer],spaceoffsets3 [bits/kmer],spaceHT [bits/kmer],spaceR1 [bits/kmer],spaceR2 [bits/kmer],spaceR3 [bits/kmer],spaceS1 [bits/kmer],spaceS2 [bits/kmer],spaceS3 [bits/kmer],density_r1 [%],density_r2 [%],density_r3 [%],density_s1 [%],density_s2 [%],density_s3 [%],no minimizer1,no minimizer2,no minimizer3, no distinct minimizer1,no distinct minimizer2,no distinct minimizer3,spacetotal [bits/kmer],querytime [ns/kmer],querymem [B],kmers,found" > "$CSV"
-  # echo "textfile,queryfile,k,m,buildtime [s],buildmem [B],indexsize [B],spaceoffsets [bits/kmer],spaceR [bits/kmer],spaceS [bits/kmer],density_r [%],density_s [%], no minimizer, spacetotal [bits/kmer], querytime [ns/kmer],querymem [B],kmers,found" > "$CSV"
+  echo "textfile,queryfile,k,m1,m2,m3,t1,t2,t3,buildtime [s],buildmem [B],indexsize [B],spaceoffsets1 [bits/kmer],spaceoffsets2 [bits/kmer],spaceoffsets3 [bits/kmer],spaceHT [bits/kmer],spaceR1 [bits/kmer],spaceR2 [bits/kmer],spaceR3 [bits/kmer],spaceS1 [bits/kmer],spaceS2 [bits/kmer],spaceS3 [bits/kmer],density_r1 [%],density_r2 [%],density_r3 [%],density_s1 [%],density_s2 [%],density_s3 [%],kmers HT [%],no minimizer1,no minimizer2,no minimizer3, no distinct minimizer1,no distinct minimizer2,no distinct minimizer3,space theo [bits/kmer],space real [bits/kmer],querytime [ns/kmer],querymem [B],kmers,found" > "$CSV"
   run $data/
 done
