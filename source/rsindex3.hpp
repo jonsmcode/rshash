@@ -80,18 +80,25 @@ private:
     int_vector<0> offsets2;
     int_vector<0> offsets3;
     gtl::flat_hash_set<uint64_t> hashmap;
-    sd_vector<> endpoints;
-    rank_support_sd<> endpoints_rank;
-    select_support_sd<> endpoints_select;
+    sux::bits::EliasFano<sux::util::AllocType::MALLOC> endpoints;
+    bit_vector sequences;
+    // sd_vector<> sequences;
+    // rank_support_sd<> endpoints_rank;
+    // select_support_sd<> endpoints_select;
     seqan3::bitpacked_sequence<seqan3::dna4> text;
     template<int level>
     void fill_buffer(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
 
 
 public:
+    // RSIndexComp(std::filesystem::path const &index_path);
+    // RSIndexComp(std::filesystem::path const &text_path,
+    //     uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3,
+    //     uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3);
     RSIndexComp();
     RSIndexComp(uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3,
         uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3);
+
     uint8_t getk() { return k; }
     int build(const std::vector<std::vector<seqan3::dna4>>&);
     uint64_t streaming_query(const std::vector<seqan3::dna4>&);

@@ -85,6 +85,7 @@ int main(int argc, char** argv)
         std::cout << "loading text...\n";
         std::vector<std::vector<seqan3::dna4>> text;
         load_file(args.i, text);
+
         std::cout << "building dict...\n";
         if(args.c) {
             RSIndexComp index = RSIndexComp(args.k, args.m1, args.m2, args.m3, args.t1, args.t2, args.t3);
@@ -107,7 +108,7 @@ int main(int argc, char** argv)
         uint64_t found = 0;
         double ns_per_kmer;
         if(args.c) {
-            RSIndexComp index;
+            RSIndexComp index = RSIndexComp();
             index.load(args.d);
             std::cout << "querying...\n";
 

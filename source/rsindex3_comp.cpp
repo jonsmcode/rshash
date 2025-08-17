@@ -3,6 +3,7 @@
 #include <seqan3/core/debug_stream.hpp>
 #include <seqan3/alphabet/container/bitpacked_sequence.hpp>
 #include <cereal/archives/binary.hpp>
+#include <seqan3/io/sequence_file/all.hpp>
 
 #include "rsindex3.hpp"
 #include "io.hpp"
@@ -21,19 +22,46 @@ static inline constexpr uint64_t compute_mask(uint64_t const size)
 }
 
 
-RSIndexComp::RSIndexComp() {}
+// RSIndexComp::RSIndexComp(std::filesystem::path const &index_path)
+// {
+//     load(index_path);
+// }
 
-RSIndexComp::RSIndexComp(uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3,
+// RSIndexComp::RSIndexComp(std::filesystem::path const &text_path,
+//     uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3,
+//     uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3)
+// {
+//     this->k = k;
+//     this->m1 = m1;
+//     this->m2 = m2;
+//     this->m3 = m3;
+//     this->m_thres1 = m_thres1;
+//     this->m_thres2 = m_thres2;
+//     this->m_thres3 = m_thres3;
+
+//     std::cout << "loading text...\n";
+//     std::vector<std::vector<seqan3::dna4>> text;
+//     load_file(text_path, text);
+
+//     uint64_t position = 0;
+//     for(auto & record : text) {
+//         position += record.size();
+//         sequences.push_back(position);
+//     }
+//     endpoints = sux::bits::EliasFano<sux::util::AllocType::MALLOC>(sequences, position+1);
+
+//     build(text);
+// }
+
+RSIndexComp::RSIndexComp() : endpoints(std::vector<uint64_t>{}, 1) {}
+
+RSIndexComp::RSIndexComp(
+    uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3,
     uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3)
-{
-    this->k = k;
-    this->m1 = m1;
-    this->m2 = m2;
-    this->m3 = m3;
-    this->m_thres1 = m_thres1;
-    this->m_thres2 = m_thres2;
-    this->m_thres3 = m_thres3;
-}
+    : k(k), m1(m1), m2(m2), m3(m3),
+      m_thres1(m_thres1), m_thres2(m_thres2), m_thres3(m_thres3),
+      endpoints(std::vector<uint64_t>{}, 1)
+{}
 
 
 int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
@@ -61,16 +89,18 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
     rank_support_v<1> r1tmp_rank = rank_support_v<1>(&r1tmp);
 
     std::cout << "get sequences...\n";
-    bit_vector sequences = bit_vector(N+1, 0);
+    sequences = bit_vector(N+1, 0);
     size_t j = 0;
     sequences[0] = 1;
     for(uint64_t i=0; i < no_sequences; i++) {
         j += input[i].size();
         sequences[j] = 1;
     }
-    endpoints = seqan3::contrib::sdsl::sd_vector<>(sequences);
-    endpoints_rank = seqan3::contrib::sdsl::rank_support_sd<>(&endpoints);
-    endpoints_select = seqan3::contrib::sdsl::select_support_sd<>(&endpoints);
+    endpoints = sux::bits::EliasFano(reinterpret_cast<uint64_t*>(sequences.data()), N+1);
+    // endpoints = sux::bits::EliasFano<sux::util::AllocType::MALLOC>(sequences, N+1);
+    // endpoints_ = seqan3::contrib::sdsl::sd_vector<>(sequences_);
+    // endpoints_rank = seqan3::contrib::sdsl::rank_support_sd<>(&endpoints);
+    // endpoints_select = seqan3::contrib::sdsl::select_support_sd<>(&endpoints);
 
     std::cout << "count minimizers...\n";
     size_t c1tmp = r1tmp_rank(M1);
@@ -524,7 +554,7 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "density s3: " << (double) s3_select.bitCount()/(n3+1)*100 <<  "%\n";
     std::cout << "\nspace per kmer in bit:\n";
     std::cout << "text: " << (double) 2*N/kmers << "\n";
-    std::cout << "endpoints: " << (double) 8*size_in_bytes(endpoints)/kmers << "\n";
+    std::cout << "endpoints: " << (double) endpoints.bitCount()/kmers << "\n";
     std::cout << "offsets1: " << (double) n1*offset_width/kmers << "\n";
     std::cout << "offsets2: " << (double) n2*offset_width/kmers << "\n";
     std::cout << "offsets3: " << (double) n3*offset_width/kmers << "\n";
@@ -536,8 +566,7 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "S_2: " << (double) (n2+1)/kmers << "\n";
     std::cout << "S_3: " << (double) (n3+1)/kmers << "\n";
 
-    std::cout << "total: " << (double) (n1*offset_width+n2*offset_width+n3*offset_width+2*N+M1+8*size_in_bytes(r2)+8*size_in_bytes(r3)+n1+1+n2+1+n3+1+size_in_bytes(endpoints)*8+64*hashmap.size())/kmers << "\n";
-    // std::cout << "total: " << (double) (n1*offset_width+n2*offset_width+2*N+M1+M2+n1+1+n2+1+size_in_bytes(endpoints)/8+8*hashmap.size()/kmers)/kmers << "\n";
+    std::cout << "total: " << (double) (n1*offset_width+n2*offset_width+n3*offset_width+2*N+M1+8*size_in_bytes(r2)+8*size_in_bytes(r3)+n1+1+n2+1+n3+1+endpoints.bitCount()+64*hashmap.size())/kmers << "\n";
 
     return 0;
 }
@@ -555,7 +584,7 @@ inline void RSIndexComp::fill_buffer(std::vector<uint64_t> &buffer, const uint64
             o = offsets2[p+i];
         if constexpr (level == 3)
             o = offsets3[p+i];
-        size_t next_endpoint = endpoints_select(endpoints_rank(o+1)+1);
+        size_t next_endpoint = endpoints.select(endpoints.rank(o+1));
         size_t e = o+k+span;
         if(e > next_endpoint)
             e = next_endpoint;
@@ -673,7 +702,7 @@ int RSIndexComp::save(const std::filesystem::path &filepath) {
     seqan3::contrib::sdsl::serialize(this->offsets1, out);
     seqan3::contrib::sdsl::serialize(this->offsets2, out);
     seqan3::contrib::sdsl::serialize(this->offsets3, out);
-    seqan3::contrib::sdsl::serialize(this->endpoints, out);
+    seqan3::contrib::sdsl::serialize(this->sequences, out);
 
     cereal::BinaryOutputArchive archive(out);
     archive(this->text);
@@ -698,7 +727,7 @@ int RSIndexComp::load(const std::filesystem::path &filepath) {
     seqan3::contrib::sdsl::load(this->offsets1, in);
     seqan3::contrib::sdsl::load(this->offsets2, in);
     seqan3::contrib::sdsl::load(this->offsets3, in);
-    seqan3::contrib::sdsl::load(this->endpoints, in);
+    seqan3::contrib::sdsl::load(this->sequences, in);
 
     cereal::BinaryInputArchive archive(in);
     archive(this->text);
@@ -712,8 +741,8 @@ int RSIndexComp::load(const std::filesystem::path &filepath) {
     this->s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), s1.size(), 3);
     this->s2_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s2.data()), s2.size(), 3);
     this->s3_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s3.data()), s3.size(), 3);
-    endpoints_rank = rank_support_sd<>(&endpoints);
-    endpoints_select = seqan3::contrib::sdsl::select_support_sd<>(&endpoints);
+
+    endpoints = sux::bits::EliasFano(reinterpret_cast<uint64_t*>(sequences.data()), sequences.size());
     
     return 0;
 }
