@@ -1,11 +1,12 @@
 #include <filesystem>
+#include <immintrin.h>
 
 #include <seqan3/core/debug_stream.hpp>
 #include <seqan3/alphabet/container/bitpacked_sequence.hpp>
-#include <cereal/archives/binary.hpp>
 #include <seqan3/io/sequence_file/all.hpp>
+#include <cereal/archives/binary.hpp>
 
-#include "rsindex3.hpp"
+#include "rsindex3_simd.hpp"
 #include "io.hpp"
 #include "minimiser_rev_xor_views3.hpp"
 
@@ -541,6 +542,100 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
 
 
 template<int level>
+inline void RSIndexComp::fill_buffer_avx512(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q)
+{
+    size_t i = 0;
+    for (; i + 8 <= q - p; i += 8) {
+        __m512i hash = _mm512_setzero_si512();
+        size_t o[8];
+        size_t e[8];
+
+        // Compute offsets and endpoints for each lane
+        for (int lane = 0; lane < 8; ++lane) {
+            if constexpr (level == 1)
+                o[lane] = offsets1[p + i + lane];
+            if constexpr (level == 2)
+                o[lane] = offsets2[p + i + lane];
+            if constexpr (level == 3)
+                o[lane] = offsets3[p + i + lane];
+            size_t next_endpoint = endpoints.select(endpoints.rank(o+1));
+            size_t ee = o[lane] + k + span;
+            e[lane] = (ee > next_endpoint) ? next_endpoint : ee;
+        }
+
+        // Compute initial hashes for each lane
+        for (uint64_t j = 0; j < k; ++j) {
+            uint64_t new_rank[8];
+            for (int lane = 0; lane < 8; ++lane) {
+                new_rank[lane] = seqan3::to_rank(text[o[lane] + j]);
+            }
+            __m512i ranks = _mm512_loadu_si512(new_rank);
+            hash = _mm512_slli_epi64(hash, 2);
+            hash = _mm512_or_si512(hash, ranks);
+        }
+
+        // Store initial hashes
+        uint64_t hash_out[8];
+        _mm512_storeu_si512(hash_out, hash);
+        for (int lane = 0; lane < 8; ++lane) {
+            buffer.push_back(hash_out[lane]);
+        }
+
+        // Continue for j = o[x]+k to e[x]
+        __m512i mask_vec = _mm512_set1_epi64(mask);
+        for (uint64_t j = k; j < k + span; ++j) {
+            uint64_t new_rank[8];
+            for (int lane = 0; lane < 8; ++lane) {
+                if (o[lane] + j < e[lane])
+                    new_rank[lane] = seqan3::to_rank(text[o[lane] + j]);
+                else
+                    new_rank[lane] = 0; // or some neutral value
+            }
+            __m512i ranks = _mm512_loadu_si512(new_rank);
+            hash = _mm512_slli_epi64(hash, 2);
+            hash = _mm512_or_si512(hash, ranks);
+            hash = _mm512_and_si512(hash, mask_vec);
+
+            _mm512_storeu_si512(hash_out, hash);
+            for (int lane = 0; lane < 8; ++lane) {
+                if (o[lane] + j < e[lane])
+                    buffer.push_back(hash_out[lane]);
+            }
+        }
+    }
+
+    for (; i < q - p; ++i) {
+        uint64_t hash = 0;
+        size_t o;
+        if constexpr (level == 1)
+            o = offsets1[p + i];
+        if constexpr (level == 2)
+            o = offsets2[p + i];
+        if constexpr (level == 3)
+            o = offsets3[p + i];
+        size_t next_endpoint = endpoints.select(endpoints.rank(o+1));
+        size_t e = o + span + k;
+        if (e > next_endpoint)
+            e = next_endpoint;
+        for (uint64_t j = o; j < o + k; j++) {
+            uint64_t const new_rank = seqan3::to_rank(text[j]);
+            hash <<= 2;
+            hash |= new_rank;
+        }
+        buffer.push_back(hash);
+        for (size_t j = o + k; j < e; j++) {
+            uint64_t const new_rank = seqan3::to_rank(text[j]);
+            hash <<= 2;
+            hash |= new_rank;
+            hash &= mask;
+            buffer.push_back(hash);
+        }
+    }
+
+}
+
+
+template<int level>
 inline void RSIndexComp::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q)
 {
     for(size_t i = 0; i < q-p; i++) {
@@ -593,27 +688,72 @@ inline bool extend(std::vector<uint64_t> &array, uint64_t query, uint64_t queryr
 }
 
 
+inline bool lookup_avx512(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward)
+{
+    const size_t n = array.size();
+
+    __m512i qv = _mm512_set1_epi64(query);
+    __m512i qrv = _mm512_set1_epi64(queryrc);
+
+    size_t i = 0;
+    for (; i + 7 < n; i += 8) {
+        __m512i v = _mm512_loadu_si512((const void*)&array[i]);
+        __mmask8 mask1 = _mm512_cmpeq_epi64_mask(v, qv);
+        __mmask8 mask2 = _mm512_cmpeq_epi64_mask(v, qrv);
+        if(mask1) {
+            size_t last_found = i + static_cast<size_t>(__builtin_ctz(mask1));
+            forward = true;
+            return true;
+        }
+        if(mask2) {
+            size_t last_found = i + static_cast<size_t>(__builtin_ctz(mask2));
+            forward = false;
+            return true;
+        }
+    }
+    for (; i < n; ++i) {
+        if(array[i] == query) {
+            last_found = i;
+            forward = true;
+            return true;
+        }
+        if(array[i] == queryrc) {
+            last_found = i;
+            forward = false;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+
+inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward)
+{
+    for(size_t i=0; i < array.size(); i++) {
+        if(array[i] == query) {
+            last_found = i;
+            forward = true;
+            return true;
+        }
+        if(array[i] == queryrc) {
+            last_found = i;
+            forward = false;
+            return true;
+        }
+    }
+    return false;
+}
+
 inline bool lookup(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward, uint64_t &extensions)
 {
     if(extend(array, query, queryrc, last_found, forward)) {
         extensions++;
         return true;
     }
-    else {
-        for(size_t i=0; i < array.size(); i++) {
-            if(array[i] == query) {
-                last_found = i;
-                forward = true;
-                return true;
-            }
-            if(array[i] == queryrc) {
-                last_found = i;
-                forward = false;
-                return true;
-            }
-        }
-    }
-    return false;
+    else
+        // return lookup_serial(array, query, queryrc, last_found, forward);
+        return lookup_avx512(array, query, queryrc, last_found, forward);
 }
 
 
@@ -644,7 +784,8 @@ uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query, ui
             size_t q = s1_select.select(minimizer_id+1);
 
             buffer1.clear();
-            fill_buffer<1>(buffer1, mask, p, q);
+            // fill_buffer<1>(buffer1, mask, p, q);
+            fill_buffer_avx512<1>(buffer1, mask, p, q);
             last_found1 = 0;
             occurences += lookup(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1, forward, extensions);
             current_minimiser1 = minimisers.minimiser1_value;
@@ -657,7 +798,8 @@ uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query, ui
             size_t q = s2_select.select(minimizer_id+1);
 
             buffer2.clear();
-            fill_buffer<2>(buffer2, mask, p, q);
+            // fill_buffer<2>(buffer2, mask, p, q);
+            fill_buffer_avx512<2>(buffer2, mask, p, q);
             last_found2 = 0;
             occurences += lookup(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2, forward, extensions);
             current_minimiser2 = minimisers.minimiser2_value;
@@ -670,7 +812,8 @@ uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query, ui
             size_t q = s3_select.select(minimizer_id+1);
 
             buffer3.clear();
-            fill_buffer<3>(buffer3, mask, p, q);
+            // fill_buffer<3>(buffer3, mask, p, q);
+            fill_buffer_avx512<3>(buffer3, mask, p, q);
             last_found3 = 0;
             occurences += lookup(buffer3, minimisers.window_value, minimisers.window_value_rev, last_found3, forward, extensions);
             current_minimiser3 = minimisers.minimiser3_value;

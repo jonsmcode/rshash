@@ -55,3 +55,10 @@ add_executable (lookup3 lookup_rsindex3.cpp rsindex3.cpp rsindex3_comp.cpp)
 target_include_directories(lookup3 PRIVATE ${CMAKE_SOURCE_DIR}/sux)
 target_include_directories(lookup3 PRIVATE ${CMAKE_SOURCE_DIR}/gtl)
 target_link_libraries (lookup3 PRIVATE seqan3::seqan3 sharg::sharg)
+
+
+#add_executable (lookup3simd lookup_rsindex3_simd.cpp rsindex3_comp_simd.cpp)
+#target_compile_options(lookup3simd PRIVATE -mavx512f -mavx512bw -march=native)
+#target_include_directories(lookup3 PRIVATE ${CMAKE_SOURCE_DIR}/sux)
+#target_include_directories(lookup3 PRIVATE ${CMAKE_SOURCE_DIR}/gtl)
+#target_link_libraries (lookup3 PRIVATE seqan3::seqan3 sharg::sharg)
