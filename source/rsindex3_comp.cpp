@@ -22,37 +22,6 @@ static inline constexpr uint64_t compute_mask(uint64_t const size)
 }
 
 
-// RSIndexComp::RSIndexComp(std::filesystem::path const &index_path)
-// {
-//     load(index_path);
-// }
-
-// RSIndexComp::RSIndexComp(std::filesystem::path const &text_path,
-//     uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3,
-//     uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3)
-// {
-//     this->k = k;
-//     this->m1 = m1;
-//     this->m2 = m2;
-//     this->m3 = m3;
-//     this->m_thres1 = m_thres1;
-//     this->m_thres2 = m_thres2;
-//     this->m_thres3 = m_thres3;
-
-//     std::cout << "loading text...\n";
-//     std::vector<std::vector<seqan3::dna4>> text;
-//     load_file(text_path, text);
-
-//     uint64_t position = 0;
-//     for(auto & record : text) {
-//         position += record.size();
-//         sequences.push_back(position);
-//     }
-//     endpoints = sux::bits::EliasFano<sux::util::AllocType::MALLOC>(sequences, position+1);
-
-//     build(text);
-// }
-
 RSIndexComp::RSIndexComp() : endpoints(std::vector<uint64_t>{}, 1) {}
 
 RSIndexComp::RSIndexComp(
@@ -97,7 +66,6 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
         sequences[j] = 1;
     }
     endpoints = sux::bits::EliasFano(reinterpret_cast<uint64_t*>(sequences.data()), N+1);
-    // endpoints = sux::bits::EliasFano<sux::util::AllocType::MALLOC>(sequences, N+1);
     // endpoints_ = seqan3::contrib::sdsl::sd_vector<>(sequences_);
     // endpoints_rank = seqan3::contrib::sdsl::rank_support_sd<>(&endpoints);
     // endpoints_select = seqan3::contrib::sdsl::select_support_sd<>(&endpoints);
@@ -605,24 +573,52 @@ inline void RSIndexComp::fill_buffer(std::vector<uint64_t> &buffer, const uint64
 }
 
 
-inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found) {
-    for(size_t i=last_found+1; i < array.size(); i++) {
-        if(array[i] == query || array[i] == queryrc) {
-            last_found = i;
+inline bool extends(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward) {
+    if(forward) {
+        if(last_found == array.size()-1)
+            return false;
+        if(array[last_found+1] == query) {
+            last_found++;
             return true;
         }
     }
-    for(size_t i=0; i < last_found+1; i++) {
-        if(array[i] == query || array[i] == queryrc) {
-            last_found = i;
+    else {
+        if(last_found == 1)
+            return false;
+        if(array[last_found-1] == queryrc) {
+            last_found--;
             return true;
         }
     }
+}
+
+
+inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward, uint64_t &extensions)
+{
+    if(extends(array, query, queryrc, last_found, forward)) {
+        extensions++;
+        return true;
+    }
+    else {
+        for(size_t i=0; i < array.size(); i++) {
+            if(array[i] == query) {
+                last_found = i;
+                forward = true;
+                return true;
+            }
+            if(array[i] == queryrc) {
+                last_found = i;
+                forward = false;
+                return true;
+            }
+        }
+    }
+
     return false;
 }
 
 
-uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query)
+uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query, uint64_t &extensions)
 {
     auto view = srindex::views::three_minimisers_and_window_hash({.minimiser_size1 = m1, .minimiser_size2 = m2, .minimiser_size3 = m3, .window_size = k, .seed1=seed1, .seed2=seed2, .seed3=seed3});
 
@@ -637,11 +633,12 @@ uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query)
     size_t last_found1 = 0;
     size_t last_found2 = 0;
     size_t last_found3 = 0;
+    bool forward = true;
 
     for(auto && minimisers : query | view)
     {
         if(minimisers.minimiser1_value == current_minimiser1)
-            occurences += lookup_serial(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1);
+            occurences += lookup_serial(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1, forward, extensions);
         else if(r1[minimisers.minimiser1_value]) {
             size_t minimizer_id = r1_rank(minimisers.minimiser1_value);
             size_t p = s1_select.select(minimizer_id);
@@ -650,11 +647,11 @@ uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query)
             buffer1.clear();
             fill_buffer<1>(buffer1, mask, p, q);
             last_found1 = 0;
-            occurences += lookup_serial(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1);
+            occurences += lookup_serial(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1, forward, extensions);
             current_minimiser1 = minimisers.minimiser1_value;
         }
         else if(minimisers.minimiser2_value == current_minimiser2)
-            occurences += lookup_serial(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2);
+            occurences += lookup_serial(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2, forward, extensions);
         else if(r2[minimisers.minimiser2_value]) {
             size_t minimizer_id = r2_rank(minimisers.minimiser2_value);
             size_t p = s2_select.select(minimizer_id);
@@ -663,11 +660,11 @@ uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query)
             buffer2.clear();
             fill_buffer<2>(buffer2, mask, p, q);
             last_found2 = 0;
-            occurences += lookup_serial(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2);
+            occurences += lookup_serial(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2, forward, extensions);
             current_minimiser2 = minimisers.minimiser2_value;
         }
         else if(minimisers.minimiser3_value == current_minimiser3)
-            occurences += lookup_serial(buffer3, minimisers.window_value, minimisers.window_value_rev, last_found3);
+            occurences += lookup_serial(buffer3, minimisers.window_value, minimisers.window_value_rev, last_found3, forward, extensions);
         else if(r3[minimisers.minimiser3_value]) {
             size_t minimizer_id = r3_rank(minimisers.minimiser3_value);
             size_t p = s3_select.select(minimizer_id);
@@ -676,7 +673,7 @@ uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query)
             buffer3.clear();
             fill_buffer<3>(buffer3, mask, p, q);
             last_found3 = 0;
-            occurences += lookup_serial(buffer3, minimisers.window_value, minimisers.window_value_rev, last_found3);
+            occurences += lookup_serial(buffer3, minimisers.window_value, minimisers.window_value_rev, last_found3, forward, extensions);
             current_minimiser3 = minimisers.minimiser3_value;
         }
         else
