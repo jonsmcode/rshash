@@ -21,7 +21,7 @@ run()
     length=$(python3 -c "import gzip; print(sum(len(line.strip()) for line in gzip.open('$f') if not line.startswith(b'>')))")
 
     ms=()
-    for ((i=-1; i<=1; i++)); do
+    for ((i=-1; i<=2; i++)); do
         m=$(echo "l($length)/l(4)+$i" | bc -l)
         m=$(printf "%.0f" "$m")
         ms+=("$m")
@@ -74,9 +74,11 @@ run()
               querymem=$(cat time.txt  | grep "maximum resident set size" | awk '{print $1}')
               k_mers=$(grep "num_kmers" prog_out.txt | sed -E 's/.*num_kmers = ([0-9]+).*/\1/')
               found=$(grep "num_positive_kmers" prog_out.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
-              querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
+              # querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
+              querytimekmer=$(grep 'ns/kmer' prog_out.txt | awk -F'/' '{print $4}' | awk '{print $1}')
+              num_extensions=$(grep "num_extensions" prog_out.txt | sed -E 's/.*num_extensions = ([0-9]+).*/\1/')
               
-              echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$space,$space_o,$space_m,$bits_key,$num_super_kmers,$querytimekmer,$querymem,$k_mers",$found" >> "$CSV"
+              echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$space_o,$space_m,$bits_key,$num_super_kmers,$space,$querytimekmer,$querymem,$k_mers",$found",$num_extensions >> "$CSV"
 
           done
 
@@ -105,9 +107,11 @@ run()
               querymem=$(cat time.txt  | grep "maximum resident set size" | awk '{print $1}')
               k_mers=$(grep "num_kmers" prog_out.txt | sed -E 's/.*num_kmers = ([0-9]+).*/\1/')
               found=$(grep "num_positive_kmers" prog_out.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
-              querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
+              # querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
+              querytimekmer=$(grep 'ns/kmer' prog_out.txt | awk -F'/' '{print $4}' | awk '{print $1}')
+              num_extensions=$(grep "num_extensions" prog_out.txt | sed -E 's/.*num_extensions = ([0-9]+).*/\1/')
               
-              echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$space,$space_o,$space_m,$bits_key,$num_super_kmers,$querytimekmer,$querymem,$k_mers",$found" >> "$CSV"
+              echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$space_o,$space_m,$bits_key,$num_super_kmers,$space,$querytimekmer,$querymem,$k_mers",$found,$num_extensions" >> "$CSV"
 
           done
 
@@ -122,6 +126,6 @@ run()
 
 for data in $(find $DIR -mindepth 0 -maxdepth 0 -type d); do
   FILENAME=$(basename $data)
-  echo "textfile,queryfile,k,m,buildtime[s],buildmem[B],indexsize[B], space[bits/kmer], space offsets[bits/kmer], space minimizers[bits/kmer], bits/key, no super kmers, querytime[ns/kmer],querymem[B],kmers,found" > "$CSV"
+  echo "textfile,queryfile,k,m,buildtime[s],buildmem[B],indexsize[B], space offsets[bits/kmer], space minimizers[bits/kmer], bits/key, no super kmers, space[bits/kmer], querytime[ns/kmer],querymem[B],kmers,found,extensions" > "$CSV"
   run $data/
 done
