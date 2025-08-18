@@ -63,7 +63,7 @@ class RSIndexComp
 {
 private:
     uint8_t k, m1, m2, m3, m_thres1, m_thres2;
-    uint8_t m_thres3;
+    uint16_t m_thres3;
     bit_vector r1;
     rank_support_v<1> r1_rank;
     sd_vector<> r2;
