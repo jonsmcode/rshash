@@ -558,7 +558,7 @@ inline void RSIndexComp::fill_buffer_avx512(std::vector<uint64_t> &buffer, const
                 o[lane] = offsets2[p + i + lane];
             if constexpr (level == 3)
                 o[lane] = offsets3[p + i + lane];
-            size_t next_endpoint = endpoints.select(endpoints.rank(o+1));
+            size_t next_endpoint = endpoints.select(endpoints.rank(o[lane]+1));
             size_t ee = o[lane] + k + span;
             e[lane] = (ee > next_endpoint) ? next_endpoint : ee;
         }
