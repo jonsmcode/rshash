@@ -28,15 +28,15 @@ run()
         t3=512
 
         m1s=()
-        for ((i=-1; i>=-1; i--)); do
+        for ((i=0; i>=0; i--)); do
             m1s+=($((m + i)))
         done
         m2s=()
-        for ((i=1; i<=1; i++)); do
+        for ((i=2; i<=2; i++)); do
             m2s+=($((m + i)))
         done
         m3s=()
-        for ((i=2; i<=2; i++)); do
+        for ((i=3; i<=3; i++)); do
             m3s+=($((m + i)))
         done
         
