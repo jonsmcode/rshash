@@ -732,9 +732,15 @@ inline bool lookup(std::vector<uint64_t> &array, uint64_t query, uint64_t queryr
         extensions++;
         return true;
     }
-    else
-        // return lookup_serial(array, query, queryrc, last_found, forward);
-        return lookup_avx512(array, query, queryrc, last_found, forward);
+    else {
+        bool forwards;
+        size_t last_founds;
+        lookup_serial(array, query, queryrc, last_founds, forwards);
+        bool res = lookup_avx512(array, query, queryrc, last_found, forward);
+        if(last_founds != last_found || forwards != forward)
+            std::cout << last_founds << " " << forwards << " "<< last_found << " " << forward << std::endl;
+    }
+        
 }
 
 
