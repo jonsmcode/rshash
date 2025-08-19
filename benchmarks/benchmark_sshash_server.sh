@@ -22,7 +22,7 @@ run()
           length=$(python3 -c "import gzip; print(sum(len(line.strip()) for line in gzip.open('$f') if not line.startswith(b'>')))")
 
           ms=()
-          for ((i=0; i<=4; i++)); do
+          for ((i=1; i<=5; i++)); do
               m=$(echo "l($length)/l(4)+$i" | bc -l)
               m=$(printf "%.0f" "$m")
               ms+=("$m")
