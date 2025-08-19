@@ -559,7 +559,7 @@ inline void RSIndexComp::fill_buffer_avx512(std::vector<uint64_t> &buffer, const
                 o[lane] = offsets2[p + i + lane];
             if constexpr (level == 3)
                 o[lane] = offsets3[p + i + lane];
-            size_t next_endpoint = endpoints.select(endpoints.rank(o[lane]+1));
+            size_t next_endpoint = endpoints.select(endpoints.rank(o[lane] + 1));
             size_t ee = o[lane] + k + span;
             e[lane] = (ee > next_endpoint) ? next_endpoint : ee;
         }
@@ -584,14 +584,20 @@ inline void RSIndexComp::fill_buffer_avx512(std::vector<uint64_t> &buffer, const
 
         // Continue for j = o[x]+k to e[x]
         __m512i mask_vec = _mm512_set1_epi64(mask);
-        for (uint64_t j = k; j < k + span; ++j) {
+        // For each extension step, only process lanes that are still active
+        for (uint64_t ext = 0; ext < span; ++ext) {
             uint64_t new_rank[8];
+            bool any_active = false;
             for (int lane = 0; lane < 8; ++lane) {
-                if (o[lane] + j < e[lane])
-                    new_rank[lane] = seqan3::to_rank(text[o[lane] + j]);
-                else
-                    new_rank[lane] = 0; // or some neutral value
+                size_t pos = o[lane] + k + ext;
+                if (pos < e[lane]) {
+                    new_rank[lane] = seqan3::to_rank(text[pos]);
+                    any_active = true;
+                } else {
+                    new_rank[lane] = 0; // Will not be pushed
+                }
             }
+            if (!any_active) break; // All lanes done
             __m512i ranks = _mm512_loadu_si512(new_rank);
             hash = _mm512_slli_epi64(hash, 2);
             hash = _mm512_or_si512(hash, ranks);
@@ -599,12 +605,14 @@ inline void RSIndexComp::fill_buffer_avx512(std::vector<uint64_t> &buffer, const
 
             _mm512_storeu_si512(hash_out, hash);
             for (int lane = 0; lane < 8; ++lane) {
-                if (o[lane] + j < e[lane])
+                size_t pos = o[lane] + k + ext;
+                if (pos < e[lane])
                     buffer.push_back(hash_out[lane]);
             }
         }
     }
 
+    // Scalar fallback for remaining elements
     for (; i < q - p; ++i) {
         uint64_t hash = 0;
         size_t o;
@@ -614,8 +622,8 @@ inline void RSIndexComp::fill_buffer_avx512(std::vector<uint64_t> &buffer, const
             o = offsets2[p + i];
         if constexpr (level == 3)
             o = offsets3[p + i];
-        size_t next_endpoint = endpoints.select(endpoints.rank(o+1));
-        size_t e = o + span + k;
+        size_t next_endpoint = endpoints.select(endpoints.rank(o + 1));
+        size_t e = o + k + span;
         if (e > next_endpoint)
             e = next_endpoint;
         for (uint64_t j = o; j < o + k; j++) {
@@ -632,7 +640,6 @@ inline void RSIndexComp::fill_buffer_avx512(std::vector<uint64_t> &buffer, const
             buffer.push_back(hash);
         }
     }
-
 }
 
 
@@ -727,23 +734,6 @@ inline bool lookup_avx512(std::vector<uint64_t> &array, uint64_t query, uint64_t
 }
 
 
-inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward)
-{
-    for(size_t i=0; i < array.size(); i++) {
-        if(array[i] == query) {
-            last_found = i;
-            forward = true;
-            return true;
-        }
-        if(array[i] == queryrc) {
-            last_found = i;
-            forward = false;
-            return true;
-        }
-    }
-    return false;
-}
-
 inline bool lookup(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward, uint64_t &extensions)
 {
     if(extend(array, query, queryrc, last_found, forward)) {
@@ -752,7 +742,6 @@ inline bool lookup(std::vector<uint64_t> &array, uint64_t query, uint64_t queryr
     }
     else {
         return lookup_avx512(array, query, queryrc, last_found, forward);
-        // return lookup_serial(array, query, queryrc, last_found, forward);
     }
         
 }
@@ -785,8 +774,8 @@ uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query, ui
             size_t q = s1_select.select(minimizer_id+1);
 
             buffer1.clear();
-            fill_buffer<1>(buffer1, mask, p, q);
-            // fill_buffer_avx512<1>(buffer1, mask, p, q);
+            // fill_buffer<1>(buffer1, mask, p, q);
+            fill_buffer_avx512<1>(buffer1, mask, p, q);
             last_found1 = 0;
             occurences += lookup(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1, forward, extensions);
             current_minimiser1 = minimisers.minimiser1_value;
@@ -799,8 +788,8 @@ uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query, ui
             size_t q = s2_select.select(minimizer_id+1);
 
             buffer2.clear();
-            fill_buffer<2>(buffer2, mask, p, q);
-            // fill_buffer_avx512<2>(buffer2, mask, p, q);
+            // fill_buffer<2>(buffer2, mask, p, q);
+            fill_buffer_avx512<2>(buffer2, mask, p, q);
             last_found2 = 0;
             occurences += lookup(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2, forward, extensions);
             current_minimiser2 = minimisers.minimiser2_value;
@@ -813,8 +802,8 @@ uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query, ui
             size_t q = s3_select.select(minimizer_id+1);
 
             buffer3.clear();
-            fill_buffer<3>(buffer3, mask, p, q);
-            // fill_buffer_avx512<3>(buffer3, mask, p, q);
+            // fill_buffer<3>(buffer3, mask, p, q);
+            fill_buffer_avx512<3>(buffer3, mask, p, q);
             last_found3 = 0;
             occurences += lookup(buffer3, minimisers.window_value, minimisers.window_value_rev, last_found3, forward, extensions);
             current_minimiser3 = minimisers.minimiser3_value;
