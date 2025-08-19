@@ -636,6 +636,39 @@ inline void RSIndexComp::fill_buffer_avx512(std::vector<uint64_t> &buffer, const
 }
 
 
+template<int level>
+inline void RSIndexComp::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q)
+{
+    for(uint64_t i = 0; i < q-p; i++) {
+        uint64_t hash = 0;
+        size_t o;
+        if constexpr (level == 1)
+            o = offsets1[p+i];
+        if constexpr (level == 2)
+            o = offsets2[p+i];
+        if constexpr (level == 3)
+            o = offsets3[p+i];
+        size_t next_endpoint = endpoints.select(endpoints.rank(o+1));
+        size_t e = o+k+span;
+        if(e > next_endpoint)
+            e = next_endpoint;
+        for (uint64_t j=o; j < o+k; j++) {
+            uint64_t const new_rank = seqan3::to_rank(text[j]);
+            hash <<= 2;
+            hash |= new_rank;
+        }
+        buffer.push_back(hash);
+        for(size_t j=o+k; j < e; j++) {
+            uint64_t const new_rank = seqan3::to_rank(text[j]);
+            hash <<= 2;
+            hash |= new_rank;
+            hash &= mask;
+            buffer.push_back(hash);
+        }
+    }
+}
+
+
 inline bool extend(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool forward) {
     if(forward) {
         if(last_found == array.size()-1)
