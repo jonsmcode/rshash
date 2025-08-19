@@ -52,7 +52,7 @@ public:
         uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3);
     uint8_t getk() { return k; }
     int build(const std::vector<std::vector<seqan3::dna4>>&);
-    uint64_t streaming_query(const std::vector<seqan3::dna4>&);
+    uint64_t streaming_query(const std::vector<seqan3::dna4>&, uint64_t&);
     uint64_t streaming_query(const std::vector<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
     int save(const std::filesystem::path&);
     int load(const std::filesystem::path&);
