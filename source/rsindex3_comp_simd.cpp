@@ -701,26 +701,11 @@ inline bool lookup_avx512(std::vector<uint64_t> &array, uint64_t query, uint64_t
         __m512i v = _mm512_loadu_si512((const void*)&array[i]);
         __mmask8 mask1 = _mm512_cmpeq_epi64_mask(v, qv);
         __mmask8 mask2 = _mm512_cmpeq_epi64_mask(v, qrv);
-        if(mask1) {
-            size_t last_found = i + static_cast<size_t>(__builtin_clz(mask1));
-            size_t last_found2;
-            for(int j=0; j < 8; ++j)
-                if(mask1 & (1 << j)) {
-                    last_found2 = i + j;
-            if(last_found != last_found2)
-                std::cout << "intr: " << last_found << " serial: " << last_found2 << std::endl;
-            forward = true;
-            return true;
-        }
-        if(mask2) {
-            size_t last_found = i + static_cast<size_t>(__builtin_clz(mask2));
-            size_t last_found2;
-            for(int j=0; j < 8; ++j)
-                if(mask2 & (1 << j)) {
-                    last_found2 = i + j;
-            if(last_found != last_found2)
-                std::cout << "intr: " << last_found << " serial: " << last_found2 << std::endl;
-            forward = false;
+        __mmask8 mask = mask1 | mask2;
+        if(mask) {
+            size_t idx = static_cast<size_t>(__builtin_ctz(mask));
+            forward = (mask1 & (1 << idx)) != 0;
+            last_found = i + idx;
             return true;
         }
     }
