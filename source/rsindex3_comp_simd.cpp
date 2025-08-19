@@ -636,7 +636,7 @@ inline void RSIndexComp::fill_buffer_avx512(std::vector<uint64_t> &buffer, const
 }
 
 
-inline bool extend(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward) {
+inline bool extend(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool forward) {
     if(forward) {
         if(last_found == array.size()-1)
             return false;
@@ -669,26 +669,11 @@ inline bool lookup_avx512(std::vector<uint64_t> &array, uint64_t query, uint64_t
         __m512i v = _mm512_loadu_si512((const void*)&array[i]);
         __mmask8 mask1 = _mm512_cmpeq_epi64_mask(v, qv);
         __mmask8 mask2 = _mm512_cmpeq_epi64_mask(v, qrcv);
-        // if(mask1) {
-        //     last_found = i + __builtin_ctz(mask1);
-        //     forward = true;
-        //     return true;
-        // }
-        // if(mask2) {
-        //     last_found = i + __builtin_ctz(mask2);
-        //     forward = false;
-        //     return true;
-        // }
         __mmask8 mask = mask1 | mask2;
         if(mask) {
             int idx = __builtin_ctz(mask);
             forward = (mask1 & (1 << idx)) != 0;
             last_found = i + idx;
-            // std::cout << "mask1: " << std::bitset<8>(mask1)
-            //   << " mask2: " << std::bitset<8>(mask2)
-            //   << " mask: " << std::bitset<8>(mask)
-            //   << " idx: " << idx 
-            //   << " forward: " << forward << std::endl;
             return true;
         }
     }
@@ -733,17 +718,18 @@ inline bool lookup(std::vector<uint64_t> &array, uint64_t query, uint64_t queryr
         return true;
     }
     else {
-        bool forwards;
-        size_t last_founds;
-        bool ress = lookup_serial(array, query, queryrc, last_founds, forwards);
-        bool res = lookup_avx512(array, query, queryrc, last_found, forward);
+        // bool forwards;
+        // size_t last_founds;
+        // bool ress = lookup_serial(array, query, queryrc, last_founds, forwards);
+        // bool res = lookup_avx512(array, query, queryrc, last_found, forward);
 
-        if (ress != res) {
-            std::cout << "error! Return values differ\n";
-        } else if (ress && (last_founds != last_found || forwards != forward)) {
-            std::cout << last_founds << " " << forwards << " " << last_found << " " << forward << std::endl;
-        }
-        return res;
+        // if (ress != res) {
+        //     std::cout << "error! Return values differ\n";
+        // } else if (ress && (last_founds != last_found || forwards != forward)) {
+        //     std::cout << last_founds << " " << forwards << " " << last_found << " " << forward << std::endl;
+        // }
+        // return res;
+        return lookup_avx512(array, query, queryrc, last_found, forward);
     }
         
 }
