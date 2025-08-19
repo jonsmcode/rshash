@@ -729,7 +729,8 @@ inline bool lookup(std::vector<uint64_t> &array, uint64_t query, uint64_t queryr
         //     std::cout << last_founds << " " << forwards << " " << last_found << " " << forward << std::endl;
         // }
         // return res;
-        return lookup_avx512(array, query, queryrc, last_found, forward);
+        // return lookup_avx512(array, query, queryrc, last_found, forward);
+        return lookup_serial(array, query, queryrc, last_found, forward);
     }
         
 }
