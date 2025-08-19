@@ -705,7 +705,7 @@ inline bool lookup_avx512(std::vector<uint64_t> &array, uint64_t query, uint64_t
             size_t last_found = i + static_cast<size_t>(__builtin_clz(mask1));
             size_t last_found2;
             for(int j=0; j < 8; ++j)
-                if(mask1[j] == 1)
+                if(mask1 & (1 << j)) {
                     last_found2 = i + j;
             if(last_found != last_found2)
                 std::cout << "intr: " << last_found << " serial: " << last_found2 << std::endl;
@@ -716,7 +716,7 @@ inline bool lookup_avx512(std::vector<uint64_t> &array, uint64_t query, uint64_t
             size_t last_found = i + static_cast<size_t>(__builtin_clz(mask2));
             size_t last_found2;
             for(int j=0; j < 8; ++j)
-                if(mask2[j] == 1)
+                if(mask2 & (1 << j)) {
                     last_found2 = i + j;
             if(last_found != last_found2)
                 std::cout << "intr: " << last_found << " serial: " << last_found2 << std::endl;
