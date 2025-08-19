@@ -574,24 +574,51 @@ inline void RSIndex::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t m
 }
 
 
-inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found) {
-    for(size_t i=last_found+1; i < array.size(); i++) {
-        if(array[i] == query || array[i] == queryrc) {
-            last_found = i;
+inline bool extend(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward) {
+    if(forward) {
+        if(last_found == array.size()-1)
+            return false;
+        if(array[last_found+1] == query) {
+            last_found++;
             return true;
         }
     }
-    for(size_t i=0; i < last_found+1; i++) {
-        if(array[i] == query || array[i] == queryrc) {
-            last_found = i;
+    else {
+        if(last_found == 1)
+            return false;
+        if(array[last_found-1] == queryrc) {
+            last_found--;
             return true;
+        }
+    }
+}
+
+
+inline bool lookup(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward, uint64_t &extensions)
+{
+    if(extend(array, query, queryrc, last_found, forward)) {
+        extensions++;
+        return true;
+    }
+    else {
+        for(size_t i=0; i < array.size(); i++) {
+            if(array[i] == query) {
+                last_found = i;
+                forward = true;
+                return true;
+            }
+            if(array[i] == queryrc) {
+                last_found = i;
+                forward = false;
+                return true;
+            }
         }
     }
     return false;
 }
 
 
-uint64_t RSIndex::streaming_query(const std::vector<seqan3::dna4> &query)
+uint64_t RSIndex::streaming_query(const std::vector<seqan3::dna4> &query, uint64_t &extensions)
 {
     auto view = srindex::views::three_minimisers_and_window_hash({.minimiser_size1 = m1, .minimiser_size2 = m2, .minimiser_size3 = m3, .window_size = k, .seed1=seed1, .seed2=seed2, .seed3=seed3});
 
@@ -606,11 +633,12 @@ uint64_t RSIndex::streaming_query(const std::vector<seqan3::dna4> &query)
     size_t last_found1 = 0;
     size_t last_found2 = 0;
     size_t last_found3 = 0;
+    bool forward = true;
 
     for(auto && minimisers : query | view)
     {
         if(minimisers.minimiser1_value == current_minimiser1)
-            occurences += lookup_serial(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1);
+            occurences += lookup(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1, forward, extensions);
         else if(r1[minimisers.minimiser1_value]) {
             size_t minimizer_id = r1_rank(minimisers.minimiser1_value);
             size_t p = s1_select.select(minimizer_id);
@@ -619,11 +647,11 @@ uint64_t RSIndex::streaming_query(const std::vector<seqan3::dna4> &query)
             buffer1.clear();
             fill_buffer<1>(buffer1, mask, p, q);
             last_found1 = 0;
-            occurences += lookup_serial(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1);
+            occurences += lookup(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1, forward, extensions);
             current_minimiser1 = minimisers.minimiser1_value;
         }
         else if(minimisers.minimiser2_value == current_minimiser2)
-            occurences += lookup_serial(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2);
+            occurences += lookup(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2, forward, extensions);
         else if(r2[minimisers.minimiser2_value]) {
             size_t minimizer_id = r2_rank(minimisers.minimiser2_value);
             size_t p = s2_select.select(minimizer_id);
@@ -632,11 +660,11 @@ uint64_t RSIndex::streaming_query(const std::vector<seqan3::dna4> &query)
             buffer2.clear();
             fill_buffer<2>(buffer2, mask, p, q);
             last_found2 = 0;
-            occurences += lookup_serial(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2);
+            occurences += lookup(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2, forward, extensions);
             current_minimiser2 = minimisers.minimiser2_value;
         }
         else if(minimisers.minimiser3_value == current_minimiser3)
-            occurences += lookup_serial(buffer3, minimisers.window_value, minimisers.window_value_rev, last_found3);
+            occurences += lookup(buffer3, minimisers.window_value, minimisers.window_value_rev, last_found3, forward, extensions);
         else if(r3[minimisers.minimiser3_value]) {
             size_t minimizer_id = r3_rank(minimisers.minimiser3_value);
             size_t p = s3_select.select(minimizer_id);
@@ -645,7 +673,7 @@ uint64_t RSIndex::streaming_query(const std::vector<seqan3::dna4> &query)
             buffer3.clear();
             fill_buffer<3>(buffer3, mask, p, q);
             last_found3 = 0;
-            occurences += lookup_serial(buffer3, minimisers.window_value, minimisers.window_value_rev, last_found3);
+            occurences += lookup(buffer3, minimisers.window_value, minimisers.window_value_rev, last_found3, forward, extensions);
             current_minimiser3 = minimisers.minimiser3_value;
         }
         else
