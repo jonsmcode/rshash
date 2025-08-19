@@ -735,10 +735,14 @@ inline bool lookup(std::vector<uint64_t> &array, uint64_t query, uint64_t queryr
     else {
         bool forwards;
         size_t last_founds;
-        lookup_serial(array, query, queryrc, last_founds, forwards);
+        bool ress = lookup_serial(array, query, queryrc, last_founds, forwards);
         bool res = lookup_avx512(array, query, queryrc, last_found, forward);
-        if(last_founds != last_found || forwards != forward)
-            std::cout << last_founds << " " << forwards << " "<< last_found << " " << forward << std::endl;
+
+        if (ress != res) {
+            std::cout << "error! Return values differ\n";
+        } else if (ress && (last_founds != last_found || forwards != forward)) {
+            std::cout << last_founds << " " << forwards << " " << last_found << " " << forward << std::endl;
+        }
     }
         
 }
