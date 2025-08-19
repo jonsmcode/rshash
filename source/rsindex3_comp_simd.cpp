@@ -714,6 +714,7 @@ inline bool lookup_avx512(std::vector<uint64_t> &array, uint64_t query, uint64_t
         }
         if(mask2) {
             size_t last_found = i + static_cast<size_t>(__builtin_clz(mask2));
+            size_t last_found2;
             for(int j=0; j < 8; ++j)
                 if(mask1[j] == 1)
                     last_found2 = i + j;
