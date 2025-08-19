@@ -702,12 +702,12 @@ inline bool lookup_avx512(std::vector<uint64_t> &array, uint64_t query, uint64_t
         __mmask8 mask1 = _mm512_cmpeq_epi64_mask(v, qv);
         __mmask8 mask2 = _mm512_cmpeq_epi64_mask(v, qrv);
         if(mask1) {
-            size_t last_found = i + static_cast<size_t>(__builtin_ctz(mask1));
+            size_t last_found = i + static_cast<size_t>(__builtin_clz(mask1));
             forward = true;
             return true;
         }
         if(mask2) {
-            size_t last_found = i + static_cast<size_t>(__builtin_ctz(mask2));
+            size_t last_found = i + static_cast<size_t>(__builtin_clz(mask2));
             forward = false;
             return true;
         }
