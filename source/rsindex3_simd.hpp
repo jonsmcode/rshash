@@ -17,19 +17,6 @@ const uint64_t seed3 = 0xE5'9A'38'5F'03'76'C9'F6;
 const size_t span = 31;
 
 
-public:
-    RSIndex();
-    RSIndex(uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3,
-        uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3);
-    uint8_t getk() { return k; }
-    int build(const std::vector<std::vector<seqan3::dna4>>&);
-    uint64_t streaming_query(const std::vector<seqan3::dna4>&);
-    uint64_t streaming_query(const std::vector<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
-    int save(const std::filesystem::path&);
-    int load(const std::filesystem::path&);
-};
-
-
 class RSIndexComp
 {
 private:
