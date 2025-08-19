@@ -1,5 +1,6 @@
 #include <filesystem>
 #include <immintrin.h>
+#include <bitset>
 
 #include <seqan3/core/debug_stream.hpp>
 #include <seqan3/alphabet/container/bitpacked_sequence.hpp>
