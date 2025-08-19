@@ -687,7 +687,7 @@ inline bool lookup_avx512(std::vector<uint64_t> &array, uint64_t query, uint64_t
             std::cout << "mask1: " << std::bitset<8>(mask1)
               << " mask2: " << std::bitset<8>(mask2)
               << " mask: " << std::bitset<8>(mask)
-              << " idx: " << idx << 
+              << " idx: " << idx 
               << " forward: " << forward << std::endl;
             return true;
         }
