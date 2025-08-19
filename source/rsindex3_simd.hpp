@@ -17,35 +17,6 @@ const uint64_t seed3 = 0xE5'9A'38'5F'03'76'C9'F6;
 const size_t span = 31;
 
 
-class RSIndex
-{
-private:
-    uint8_t k, m1, m2, m3, m_thres1, m_thres2;
-    uint16_t m_thres3;
-    bit_vector r1;
-    rank_support_v<1> r1_rank;
-    bit_vector r2;
-    rank_support_v<1> r2_rank;
-    bit_vector r3;
-    rank_support_v<1> r3_rank;
-    bit_vector s1;
-    sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s1_select;
-    bit_vector s2;
-    sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s2_select;
-    bit_vector s3;
-    sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s3_select;
-    int_vector<0> offsets1;
-    int_vector<0> offsets2;
-    int_vector<0> offsets3;
-    gtl::flat_hash_set<uint64_t> hashmap;
-    sd_vector<> endpoints;
-    rank_support_sd<> endpoints_rank;
-    select_support_sd<> endpoints_select;
-    seqan3::bitpacked_sequence<seqan3::dna4> text;
-    template<int level>
-    void fill_buffer(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
-
-
 public:
     RSIndex();
     RSIndex(uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3,
@@ -82,12 +53,7 @@ private:
     gtl::flat_hash_set<uint64_t> hashmap;
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> endpoints;
     bit_vector sequences;
-    // sd_vector<> sequences;
-    // rank_support_sd<> endpoints_rank;
-    // select_support_sd<> endpoints_select;
     seqan3::bitpacked_sequence<seqan3::dna4> text;
-    template<int level>
-    void fill_buffer(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
     template<int level>
     void fill_buffer_avx512(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
 
