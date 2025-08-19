@@ -743,6 +743,7 @@ inline bool lookup(std::vector<uint64_t> &array, uint64_t query, uint64_t queryr
         } else if (ress && (last_founds != last_found || forwards != forward)) {
             std::cout << last_founds << " " << forwards << " " << last_found << " " << forward << std::endl;
         }
+        return res;
     }
         
 }
