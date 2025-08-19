@@ -635,39 +635,6 @@ inline void RSIndexComp::fill_buffer_avx512(std::vector<uint64_t> &buffer, const
 }
 
 
-template<int level>
-inline void RSIndexComp::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q)
-{
-    for(size_t i = 0; i < q-p; i++) {
-        uint64_t hash = 0;
-        size_t o;
-        if constexpr (level == 1)
-            o = offsets1[p+i];
-        if constexpr (level == 2)
-            o = offsets2[p+i];
-        if constexpr (level == 3)
-            o = offsets3[p+i];
-        size_t next_endpoint = endpoints.select(endpoints.rank(o+1));
-        size_t e = o+k+span;
-        if(e > next_endpoint)
-            e = next_endpoint;
-        for (size_t j=o; j < o+k; j++) {
-            uint64_t const new_rank = seqan3::to_rank(text[j]);
-            hash <<= 2;
-            hash |= new_rank;
-        }
-        buffer.push_back(hash);
-        for(size_t j=o+k; j < e; j++) {
-            uint64_t const new_rank = seqan3::to_rank(text[j]);
-            hash <<= 2;
-            hash |= new_rank;
-            hash &= mask;
-            buffer.push_back(hash);
-        }
-    }
-}
-
-
 inline bool extend(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward) {
     if(forward) {
         if(last_found == array.size()-1)
@@ -694,20 +661,20 @@ inline bool lookup_avx512(std::vector<uint64_t> &array, uint64_t query, uint64_t
     const size_t n = array.size();
 
     __m512i qv = _mm512_set1_epi64(query);
-    __m512i qrv = _mm512_set1_epi64(queryrc);
+    __m512i qrcv = _mm512_set1_epi64(queryrc);
 
     size_t i = 0;
     for (; i + 7 < n; i += 8) {
         __m512i v = _mm512_loadu_si512((const void*)&array[i]);
         __mmask8 mask1 = _mm512_cmpeq_epi64_mask(v, qv);
-        __mmask8 mask2 = _mm512_cmpeq_epi64_mask(v, qrv);
+        __mmask8 mask2 = _mm512_cmpeq_epi64_mask(v, qrcv);
         if(mask1) {
-            last_found = i + __builtin_ctz(mask1);
+            last_found = i + __builtin_clz(mask1);
             forward = true;
             return true;
         }
         if(mask2) {
-            last_found = i + __builtin_ctz(mask2);
+            last_found = i + __builtin_clz(mask2);
             forward = false;
             return true;
         }
