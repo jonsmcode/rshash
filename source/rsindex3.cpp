@@ -591,6 +591,7 @@ inline bool extend(std::vector<uint64_t> &array, uint64_t query, uint64_t queryr
             return true;
         }
     }
+    return false;
 }
 
 
