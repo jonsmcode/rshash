@@ -684,11 +684,11 @@ inline bool lookup_avx512(std::vector<uint64_t> &array, uint64_t query, uint64_t
             int idx = __builtin_ctz(mask);
             forward = (mask1 & (1 << idx)) != 0;
             last_found = i + idx;
-            std::cout << "mask1: " << std::bitset<8>(mask1)
-              << " mask2: " << std::bitset<8>(mask2)
-              << " mask: " << std::bitset<8>(mask)
-              << " idx: " << idx 
-              << " forward: " << forward << std::endl;
+            // std::cout << "mask1: " << std::bitset<8>(mask1)
+            //   << " mask2: " << std::bitset<8>(mask2)
+            //   << " mask: " << std::bitset<8>(mask)
+            //   << " idx: " << idx 
+            //   << " forward: " << forward << std::endl;
             return true;
         }
     }
