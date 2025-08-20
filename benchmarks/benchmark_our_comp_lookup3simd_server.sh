@@ -45,10 +45,10 @@ run()
                   t1=${triples[i]}
                   t2=${triples[i+1]}
                   t3=${triples[i+2]}
-
                   echo $BASENAME
 
                   echo $f >> $LOG
+                  echo $m1 $m2 $m3 $t1 $t2 $t3 >> $LOG
 
                   /usr/bin/time -v -o time.txt $PROGRAM build -i "$f" -d "${BASENAME}.dict" -k $k --m1 $m1 --t1 $t1 --m2 $m2 --t2 $t2 --m3 $m3 --t3 $t3 > prog_out.txt 2>&1
 
@@ -157,8 +157,6 @@ run()
                       # rm -f time.txt
                       # rm -f prog_out.txt
                   done
-
-
 
               done
             done
