@@ -33,13 +33,13 @@ run()
 
                 echo $f >> $LOG
 
-                /usr/bin/time -v -o time.txt $PROGRAM build -i "$f" -o "${BASENAME}.index" -k $k -m $m --canonical-parsing > sshash_out.txt 2>&1
+                /usr/bin/time -v -o timess.txt $PROGRAM build -i "$f" -o "${BASENAME}.index" -k $k -m $m --canonical-parsing > sshash_out.txt 2>&1
 
                 cat sshash_out.txt >> $LOG
 
                 file_size=$(stat -c%z "${BASENAME}.index")
-                buildtime=$(grep "User time" time.txt | awk -F': ' '{print $2}')
-                buildmem=$(grep "Maximum resident set size" time.txt | awk -F': ' '{print $2}')
+                buildtime=$(grep "User time" timess.txt | awk -F': ' '{print $2}')
+                buildmem=$(grep "Maximum resident set size" timess.txt | awk -F': ' '{print $2}')
                 num_super_kmers=$(grep "^num_super_kmers" sshash_out.txt | awk '{print $2}')
                 space=$(grep "total:" sshash_out.txt | sed -E 's/^ *total: *([0-9.eE+-]+).*/\1/')
                 space_o=$(grep "offsets:" sshash_out.txt | sed -E 's/^ *offsets: *([0-9.eE+-]+).*/\1/')
@@ -65,12 +65,12 @@ run()
                     echo $f >> $LOG
                     echo $query >> $LOG
                     echo $query
-                    /usr/bin/time -v -o time.txt $PROGRAM query -i "${BASENAME}.index" -q $query > sshash_out.txt 2>&1
+                    /usr/bin/time -v -o timess.txt $PROGRAM query -i "${BASENAME}.index" -q $query > sshash_out.txt 2>&1
 
                     cat sshash_out.txt >> $LOG
                     
-                    querytime=$(grep "User time" time.txt | awk -F': ' '{print $2}')
-                    querymem=$(grep "Maximum resident set size" time.txt | awk -F': ' '{print $2}')
+                    querytime=$(grep "User time" timess.txt | awk -F': ' '{print $2}')
+                    querymem=$(grep "Maximum resident set size" timess.txt | awk -F': ' '{print $2}')
                     k_mers=$(grep "num_kmers" sshash_out.txt | sed -E 's/.*num_kmers = ([0-9]+).*/\1/')
                     found=$(grep "num_positive_kmers" sshash_out.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
                     # querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
@@ -98,12 +98,12 @@ run()
                     echo $f >> $LOG
                     echo $query >> $LOG
                     echo $query
-                    /usr/bin/time -v -o time.txt $PROGRAM query -i "${BASENAME}.index" -q $query > sshash_out.txt 2>&1
+                    /usr/bin/time -v -o timess.txt $PROGRAM query -i "${BASENAME}.index" -q $query > sshash_out.txt 2>&1
 
                     cat sshash_out.txt >> $LOG
                     
-                    querytime=$(grep "User time" time.txt | awk -F': ' '{print $2}')
-                    querymem=$(grep "Maximum resident set size" time.txt | awk -F': ' '{print $2}')
+                    querytime=$(grep "User time" timess.txt | awk -F': ' '{print $2}')
+                    querymem=$(grep "Maximum resident set size" timess.txt | awk -F': ' '{print $2}')
                     k_mers=$(grep "num_kmers" sshash_out.txt | sed -E 's/.*num_kmers = ([0-9]+).*/\1/')
                     found=$(grep "num_positive_kmers" sshash_out.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
                     # querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
