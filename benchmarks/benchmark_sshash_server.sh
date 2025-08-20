@@ -5,7 +5,7 @@ PROGRAM="../../../sshash/build/sshash"
 today=$(date +%Y-%m-%d-%H-%M-%S)
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../../../datasets" >/dev/null 2>&1 && pwd )"
-LOG="log.txt"
+LOG="logsshash.txt"
 CSV="sshash-results-$today.csv"
 
 run()
@@ -33,18 +33,18 @@ run()
 
                 echo $f >> $LOG
 
-                /usr/bin/time -v -o time.txt $PROGRAM build -i "$f" -o "${BASENAME}.index" -k $k -m $m > prog_out.txt 2>&1
+                /usr/bin/time -v -o time.txt $PROGRAM build -i "$f" -o "${BASENAME}.index" -k $k -m $m --canonical-parsing > sshash_out.txt 2>&1
 
-                cat prog_out.txt >> $LOG
+                cat sshash_out.txt >> $LOG
 
                 file_size=$(stat -c%z "${BASENAME}.index")
                 buildtime=$(grep "User time" time.txt | awk -F': ' '{print $2}')
                 buildmem=$(grep "Maximum resident set size" time.txt | awk -F': ' '{print $2}')
-                num_super_kmers=$(grep "^num_super_kmers" prog_out.txt | awk '{print $2}')
-                space=$(grep "total:" prog_out.txt | sed -E 's/^ *total: *([0-9.eE+-]+).*/\1/')
-                space_o=$(grep "offsets:" prog_out.txt | sed -E 's/^ *offsets: *([0-9.eE+-]+).*/\1/')
-                space_m=$(grep "minimizers:" prog_out.txt | sed -E 's/^ *minimizers: *([0-9.eE+-]+).*/\1/')
-                bits_key=$(awk '/minimizers:/ {for(i=1;i<=NF;i++) if($i ~ /\[bits\/key\]/) print $(i-1)}' prog_out.txt | tr -d '(')
+                num_super_kmers=$(grep "^num_super_kmers" sshash_out.txt | awk '{print $2}')
+                space=$(grep "total:" sshash_out.txt | sed -E 's/^ *total: *([0-9.eE+-]+).*/\1/')
+                space_o=$(grep "offsets:" sshash_out.txt | sed -E 's/^ *offsets: *([0-9.eE+-]+).*/\1/')
+                space_m=$(grep "minimizers:" sshash_out.txt | sed -E 's/^ *minimizers: *([0-9.eE+-]+).*/\1/')
+                bits_key=$(awk '/minimizers:/ {for(i=1;i<=NF;i++) if($i ~ /\[bits\/key\]/) print $(i-1)}' sshash_out.txt | tr -d '(')
 
                 parent_dir=$(dirname "$f")
                 file_name=$(basename "$f")
@@ -65,17 +65,17 @@ run()
                     echo $f >> $LOG
                     echo $query >> $LOG
                     echo $query
-                    /usr/bin/time -v -o time.txt $PROGRAM query -i "${BASENAME}.index" -q $query > prog_out.txt 2>&1
+                    /usr/bin/time -v -o time.txt $PROGRAM query -i "${BASENAME}.index" -q $query > sshash_out.txt 2>&1
 
-                    cat prog_out.txt >> $LOG
+                    cat sshash_out.txt >> $LOG
                     
                     querytime=$(grep "User time" time.txt | awk -F': ' '{print $2}')
                     querymem=$(grep "Maximum resident set size" time.txt | awk -F': ' '{print $2}')
-                    k_mers=$(grep "num_kmers" prog_out.txt | sed -E 's/.*num_kmers = ([0-9]+).*/\1/')
-                    found=$(grep "num_positive_kmers" prog_out.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
+                    k_mers=$(grep "num_kmers" sshash_out.txt | sed -E 's/.*num_kmers = ([0-9]+).*/\1/')
+                    found=$(grep "num_positive_kmers" sshash_out.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
                     # querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
-                    querytimekmer=$(grep 'ns/kmer' prog_out.txt | awk -F'/' '{print $4}' | awk '{print $1}')
-                    num_extensions=$(grep "num_extensions" prog_out.txt | sed -E 's/.*num_extensions = ([0-9]+).*/\1/')
+                    querytimekmer=$(grep 'ns/kmer' sshash_out.txt | awk -F'/' '{print $4}' | awk '{print $1}')
+                    num_extensions=$(grep "num_extensions" sshash_out.txt | sed -E 's/.*num_extensions = ([0-9]+).*/\1/')
                     
                     echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$space_o,$space_m,$bits_key,$num_super_kmers,$space,$querytimekmer,$querymem,$k_mers",$found",$num_extensions >> "$CSV"
 
@@ -98,17 +98,17 @@ run()
                     echo $f >> $LOG
                     echo $query >> $LOG
                     echo $query
-                    /usr/bin/time -v -o time.txt $PROGRAM query -i "${BASENAME}.index" -q $query > prog_out.txt 2>&1
+                    /usr/bin/time -v -o time.txt $PROGRAM query -i "${BASENAME}.index" -q $query > sshash_out.txt 2>&1
 
-                    cat prog_out.txt >> $LOG
+                    cat sshash_out.txt >> $LOG
                     
                     querytime=$(grep "User time" time.txt | awk -F': ' '{print $2}')
                     querymem=$(grep "Maximum resident set size" time.txt | awk -F': ' '{print $2}')
-                    k_mers=$(grep "num_kmers" prog_out.txt | sed -E 's/.*num_kmers = ([0-9]+).*/\1/')
-                    found=$(grep "num_positive_kmers" prog_out.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
+                    k_mers=$(grep "num_kmers" sshash_out.txt | sed -E 's/.*num_kmers = ([0-9]+).*/\1/')
+                    found=$(grep "num_positive_kmers" sshash_out.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
                     # querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
-                    querytimekmer=$(grep 'ns/kmer' prog_out.txt | awk -F'/' '{print $4}' | awk '{print $1}')
-                    num_extensions=$(grep "num_extensions" prog_out.txt | sed -E 's/.*num_extensions = ([0-9]+).*/\1/')
+                    querytimekmer=$(grep 'ns/kmer' sshash_out.txt | awk -F'/' '{print $4}' | awk '{print $1}')
+                    num_extensions=$(grep "num_extensions" sshash_out.txt | sed -E 's/.*num_extensions = ([0-9]+).*/\1/')
                     
                     echo "$f,$query,$k,$m,$buildtime,$buildmem",$file_size,$space_o,$space_m,$bits_key,$num_super_kmers,$space,$querytimekmer,$querymem,$k_mers",$found,$num_extensions" >> "$CSV"
 
