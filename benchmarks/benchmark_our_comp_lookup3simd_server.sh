@@ -4,7 +4,7 @@ PROGRAM="../build/source/lookup3simd"
 
 today=$(date +%Y-%m-%d-%H-%M-%S)
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../../../datasets/unitigs" >/dev/null 2>&1 && pwd )"
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../../../datasets" >/dev/null 2>&1 && pwd )"
 LOG="log.txt"
 CSV="comp_lookup3simd-results-$today.csv"
 
