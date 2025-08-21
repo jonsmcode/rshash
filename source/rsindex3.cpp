@@ -24,7 +24,7 @@ static inline constexpr uint64_t compute_mask(uint64_t const size)
 RSIndex::RSIndex() {}
 
 RSIndex::RSIndex(uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3,
-    uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3)
+    uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3, size_t const span)
 {
     this->k = k;
     this->m1 = m1;
@@ -33,6 +33,7 @@ RSIndex::RSIndex(uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t co
     this->m_thres1 = m_thres1;
     this->m_thres2 = m_thres2;
     this->m_thres3 = m_thres3;
+    this->span = span;
 }
 
 

@@ -28,9 +28,9 @@ RSIndexComp::RSIndexComp() : endpoints(std::vector<uint64_t>{}, 1) {}
 
 RSIndexComp::RSIndexComp(
     uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3,
-    uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3)
+    uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3, size_t const span)
     : k(k), m1(m1), m2(m2), m3(m3),
-      m_thres1(m_thres1), m_thres2(m_thres2), m_thres3(m_thres3),
+      m_thres1(m_thres1), m_thres2(m_thres2), m_thres3(m_thres3), span(span),
       endpoints(std::vector<uint64_t>{}, 1)
 {}
 
@@ -68,9 +68,6 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
         sequences[j] = 1;
     }
     endpoints = sux::bits::EliasFano(reinterpret_cast<uint64_t*>(sequences.data()), N+1);
-    // endpoints_ = seqan3::contrib::sdsl::sd_vector<>(sequences_);
-    // endpoints_rank = seqan3::contrib::sdsl::rank_support_sd<>(&endpoints);
-    // endpoints_select = seqan3::contrib::sdsl::select_support_sd<>(&endpoints);
 
     std::cout << "count minimizers...\n";
     size_t c1tmp = r1tmp_rank(M1);
