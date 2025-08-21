@@ -4,3 +4,6 @@
 [submodule "sux"]
 	path = sux
 	url = https://github.com/vigna/sux.git
+[submodule "pthash"]
+	path = pthash
+	url = https://github.com/jermp/pthash.git

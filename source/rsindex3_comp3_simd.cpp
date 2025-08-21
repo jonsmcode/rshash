@@ -1,11 +1,13 @@
 #include <filesystem>
+#include <immintrin.h>
+#include <bitset>
 
 #include <seqan3/core/debug_stream.hpp>
 #include <seqan3/alphabet/container/bitpacked_sequence.hpp>
-#include <cereal/archives/binary.hpp>
 #include <seqan3/io/sequence_file/all.hpp>
+#include <cereal/archives/binary.hpp>
 
-#include "rsindex3.hpp"
+#include "rsindex3_simd.hpp"
 #include "io.hpp"
 #include "minimiser_rev_xor_views3.hpp"
 
@@ -22,9 +24,9 @@ static inline constexpr uint64_t compute_mask(uint64_t const size)
 }
 
 
-RSIndexComp::RSIndexComp() : endpoints(std::vector<uint64_t>{}, 1) {}
+RSIndexComp3::RSIndexComp3() : endpoints(std::vector<uint64_t>{}, 1) {}
 
-RSIndexComp::RSIndexComp(
+RSIndexComp3::RSIndexComp3(
     uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3,
     uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3)
     : k(k), m1(m1), m2(m2), m3(m3),
@@ -33,7 +35,7 @@ RSIndexComp::RSIndexComp(
 {}
 
 
-int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
+int RSIndexComp3::build(const std::vector<std::vector<seqan3::dna4>> &input)
 {
     auto view1 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
 
@@ -66,9 +68,6 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
         sequences[j] = 1;
     }
     endpoints = sux::bits::EliasFano(reinterpret_cast<uint64_t*>(sequences.data()), N+1);
-    // endpoints_ = seqan3::contrib::sdsl::sd_vector<>(sequences_);
-    // endpoints_rank = seqan3::contrib::sdsl::rank_support_sd<>(&endpoints);
-    // endpoints_select = seqan3::contrib::sdsl::select_support_sd<>(&endpoints);
 
     std::cout << "count minimizers...\n";
     size_t c1tmp = r1tmp_rank(M1);
@@ -91,14 +90,15 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
     }
 
     std::cout << "filling R_1...\n";
-    r1 = bit_vector(M1, 0);
+    bit_vector r1_ = bit_vector(M1, 0);
     for(auto & sequence : input) {
         for(auto && minimisers : sequence | view1) {
             if(count1tmp[r1tmp_rank(minimisers.minimiser_value)] < m_thres1)
-                r1[minimisers.minimiser_value] = 1;
+                r1_[minimisers.minimiser_value] = 1;
         }
     }
-    r1_rank = seqan3::contrib::sdsl::rank_support_v<1>(&r1);
+    r1 = sd_vector<>(r1_);
+    r1_rank = rank_support_sd<>(&r1);
 
     delete[] count1tmp;
 
@@ -488,22 +488,6 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
             hashmap.insert(std::min<uint64_t>(minimiser.window_value, minimiser.window_value_rev));
         }
     }
-    // auto view4 = srindex::views::xor_minimiser_and_window({.minimiser_size = m1, .window_size = k, .seed=seed1});
-    // std::vector<uint64_t> fkmers;
-    // for(auto & sequence : freq_skmers3) {
-    //     for(auto && minimiser : sequence | view4) {
-    //         fkmers.push_back(std::min<uint64_t>(minimiser.window_value, minimiser.window_value_rev));
-    //     }
-    // }
-    // pthash::build_configuration config;
-    // config.seed = 1234567890;
-    // config.lambda = 5;
-    // config.alpha = 0.97;
-    // config.verbose = false;
-    // config.avg_partition_size = 2000;
-    // config.num_threads = 1;
-    // config.dense_partitioning = true;
-    // pthash.build_in_internal_memory(fkmers.begin(), fkmers.size(), config);
 
     std::cout << "copy text...\n";
     for(auto & record : input) {
@@ -543,7 +527,6 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "offsets2: " << (double) n2*offset_width/kmers << "\n";
     std::cout << "offsets3: " << (double) n3*offset_width/kmers << "\n";
     std::cout << "Hashtable: " << (double) 64*hashmap.size()/kmers << "\n";
-    // std::cout << "Hashtable: " << (double) (pthash.num_bits()/pthash.num_keys() + 32)*fkmers.size()/kmers << "\n";
     std::cout << "R_1: " << (double) M1/kmers << "\n";
     std::cout << "R_2: " << (double) 8*size_in_bytes(r2)/kmers << "\n";
     std::cout << "R_3: " << (double) 8*size_in_bytes(r3)/kmers << "\n";
@@ -551,7 +534,6 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "S_2: " << (double) (n2+1)/kmers << "\n";
     std::cout << "S_3: " << (double) (n3+1)/kmers << "\n";
 
-    // std::cout << "total: " << (double) (n1*offset_width+n2*offset_width+n3*offset_width+2*N+M1+8*size_in_bytes(r2)+8*size_in_bytes(r3)+n1+1+n2+1+n3+1+endpoints.bitCount()+(pthash.num_bits()/pthash.num_keys() + 32)*fkmers.size())/kmers << "\n";
     std::cout << "total: " << (double) (n1*offset_width+n2*offset_width+n3*offset_width+2*N+M1+8*size_in_bytes(r2)+8*size_in_bytes(r3)+n1+1+n2+1+n3+1+endpoints.bitCount()+64*hashmap.size())/kmers << "\n";
 
     return 0;
@@ -559,9 +541,110 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
 
 
 template<int level>
+inline void RSIndexComp::fill_buffer_avx512(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q)
+{
+    size_t i = 0;
+    for (; i + 8 <= q - p; i += 8) {
+        __m512i hash = _mm512_setzero_si512();
+        size_t o[8];
+        size_t e[8];
+
+        // Compute offsets and endpoints for each lane
+        for (int lane = 0; lane < 8; ++lane) {
+            if constexpr (level == 1)
+                o[lane] = offsets1[p + i + lane];
+            if constexpr (level == 2)
+                o[lane] = offsets2[p + i + lane];
+            if constexpr (level == 3)
+                o[lane] = offsets3[p + i + lane];
+            size_t next_endpoint = endpoints.select(endpoints.rank(o[lane] + 1));
+            size_t ee = o[lane] + k + span;
+            e[lane] = (ee > next_endpoint) ? next_endpoint : ee;
+        }
+
+        // Compute initial hashes for each lane
+        for (uint64_t j = 0; j < k; ++j) {
+            uint64_t new_rank[8];
+            for (int lane = 0; lane < 8; ++lane) {
+                new_rank[lane] = seqan3::to_rank(text[o[lane] + j]);
+            }
+            __m512i ranks = _mm512_loadu_si512(new_rank);
+            hash = _mm512_slli_epi64(hash, 2);
+            hash = _mm512_or_si512(hash, ranks);
+        }
+
+        // Store initial hashes
+        uint64_t hash_out[8];
+        _mm512_storeu_si512(hash_out, hash);
+        for (int lane = 0; lane < 8; ++lane) {
+            buffer.push_back(hash_out[lane]);
+        }
+
+        // Continue for j = o[x]+k to e[x]
+        __m512i mask_vec = _mm512_set1_epi64(mask);
+        // For each extension step, only process lanes that are still active
+        for (uint64_t ext = 0; ext < span; ++ext) {
+            uint64_t new_rank[8];
+            bool any_active = false;
+            for (int lane = 0; lane < 8; ++lane) {
+                size_t pos = o[lane] + k + ext;
+                if (pos < e[lane]) {
+                    new_rank[lane] = seqan3::to_rank(text[pos]);
+                    any_active = true;
+                } else {
+                    new_rank[lane] = 0; // Will not be pushed
+                }
+            }
+            if (!any_active) break; // All lanes done
+            __m512i ranks = _mm512_loadu_si512(new_rank);
+            hash = _mm512_slli_epi64(hash, 2);
+            hash = _mm512_or_si512(hash, ranks);
+            hash = _mm512_and_si512(hash, mask_vec);
+
+            _mm512_storeu_si512(hash_out, hash);
+            for (int lane = 0; lane < 8; ++lane) {
+                size_t pos = o[lane] + k + ext;
+                if (pos < e[lane])
+                    buffer.push_back(hash_out[lane]);
+            }
+        }
+    }
+
+    // Scalar fallback for remaining elements
+    for (; i < q - p; ++i) {
+        uint64_t hash = 0;
+        size_t o;
+        if constexpr (level == 1)
+            o = offsets1[p + i];
+        if constexpr (level == 2)
+            o = offsets2[p + i];
+        if constexpr (level == 3)
+            o = offsets3[p + i];
+        size_t next_endpoint = endpoints.select(endpoints.rank(o + 1));
+        size_t e = o + k + span;
+        if (e > next_endpoint)
+            e = next_endpoint;
+        for (uint64_t j = o; j < o + k; j++) {
+            uint64_t const new_rank = seqan3::to_rank(text[j]);
+            hash <<= 2;
+            hash |= new_rank;
+        }
+        buffer.push_back(hash);
+        for (size_t j = o + k; j < e; j++) {
+            uint64_t const new_rank = seqan3::to_rank(text[j]);
+            hash <<= 2;
+            hash |= new_rank;
+            hash &= mask;
+            buffer.push_back(hash);
+        }
+    }
+}
+
+
+template<int level>
 inline void RSIndexComp::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q)
 {
-    for(size_t i = 0; i < q-p; i++) {
+    for(uint64_t i = 0; i < q-p; i++) {
         uint64_t hash = 0;
         size_t o;
         if constexpr (level == 1)
@@ -574,7 +657,7 @@ inline void RSIndexComp::fill_buffer(std::vector<uint64_t> &buffer, const uint64
         size_t e = o+k+span;
         if(e > next_endpoint)
             e = next_endpoint;
-        for (size_t j=o; j < o+k; j++) {
+        for (uint64_t j=o; j < o+k; j++) {
             uint64_t const new_rank = seqan3::to_rank(text[j]);
             hash <<= 2;
             hash |= new_rank;
@@ -591,7 +674,7 @@ inline void RSIndexComp::fill_buffer(std::vector<uint64_t> &buffer, const uint64
 }
 
 
-inline bool extend(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward) {
+inline bool extend(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool forward) {
     if(forward) {
         if(last_found == array.size()-1)
             return false;
@@ -612,6 +695,43 @@ inline bool extend(std::vector<uint64_t> &array, uint64_t query, uint64_t queryr
 }
 
 
+inline bool lookup_avx512(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward)
+{
+    const size_t n = array.size();
+
+    __m512i qv = _mm512_set1_epi64(query);
+    __m512i qrcv = _mm512_set1_epi64(queryrc);
+
+    size_t i = 0;
+    for (; i + 7 < n; i += 8) {
+        __m512i v = _mm512_loadu_si512((const void*)&array[i]);
+        __mmask8 mask1 = _mm512_cmpeq_epi64_mask(v, qv);
+        __mmask8 mask2 = _mm512_cmpeq_epi64_mask(v, qrcv);
+        __mmask8 mask = mask1 | mask2;
+        if(mask) {
+            int idx = __builtin_ctz(mask);
+            forward = (mask1 & (1 << idx)) != 0;
+            last_found = i + idx;
+            return true;
+        }
+    }
+    for (; i < n; ++i) {
+        if(array[i] == query) {
+            last_found = i;
+            forward = true;
+            return true;
+        }
+        if(array[i] == queryrc) {
+            last_found = i;
+            forward = false;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+
 inline bool lookup(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward, uint64_t &extensions)
 {
     if(extend(array, query, queryrc, last_found, forward)) {
@@ -619,20 +739,9 @@ inline bool lookup(std::vector<uint64_t> &array, uint64_t query, uint64_t queryr
         return true;
     }
     else {
-        for(size_t i=0; i < array.size(); i++) {
-            if(array[i] == query) {
-                last_found = i;
-                forward = true;
-                return true;
-            }
-            if(array[i] == queryrc) {
-                last_found = i;
-                forward = false;
-                return true;
-            }
-        }
+        return lookup_avx512(array, query, queryrc, last_found, forward);
     }
-    return false;
+        
 }
 
 
@@ -664,6 +773,7 @@ uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query, ui
 
             buffer1.clear();
             fill_buffer<1>(buffer1, mask, p, q);
+            // fill_buffer_avx512<1>(buffer1, mask, p, q);
             last_found1 = 0;
             occurences += lookup(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1, forward, extensions);
             current_minimiser1 = minimisers.minimiser1_value;
@@ -677,6 +787,7 @@ uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query, ui
 
             buffer2.clear();
             fill_buffer<2>(buffer2, mask, p, q);
+            // fill_buffer_avx512<2>(buffer2, mask, p, q);
             last_found2 = 0;
             occurences += lookup(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2, forward, extensions);
             current_minimiser2 = minimisers.minimiser2_value;
@@ -690,6 +801,7 @@ uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query, ui
 
             buffer3.clear();
             fill_buffer<3>(buffer3, mask, p, q);
+            // fill_buffer_avx512<3>(buffer3, mask, p, q);
             last_found3 = 0;
             occurences += lookup(buffer3, minimisers.window_value, minimisers.window_value_rev, last_found3, forward, extensions);
             current_minimiser3 = minimisers.minimiser3_value;
@@ -722,7 +834,6 @@ int RSIndexComp::save(const std::filesystem::path &filepath) {
     cereal::BinaryOutputArchive archive(out);
     archive(this->text);
     archive(this->hashmap);
-    // essentials::save(pthash, filepath.c_str());
 
     out.close();
     return 0;
@@ -744,12 +855,10 @@ int RSIndexComp::load(const std::filesystem::path &filepath) {
     seqan3::contrib::sdsl::load(this->offsets2, in);
     seqan3::contrib::sdsl::load(this->offsets3, in);
     seqan3::contrib::sdsl::load(this->sequences, in);
-    
 
     cereal::BinaryInputArchive archive(in);
     archive(this->text);
     archive(this->hashmap);
-    // essentials::load(pthash, filepath.c_str());
 
     in.close();
 

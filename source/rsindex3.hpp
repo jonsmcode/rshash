@@ -4,6 +4,8 @@
 #include <sux/bits/SimpleSelect.hpp>
 #include <sux/bits/EliasFano.hpp>
 #include <gtl/phmap.hpp>
+// #include <pthash.hpp>
+
 
 using namespace seqan3::literals;
 using namespace seqan3::contrib::sdsl;
@@ -80,11 +82,9 @@ private:
     int_vector<0> offsets2;
     int_vector<0> offsets3;
     gtl::flat_hash_set<uint64_t> hashmap;
+    // pthash::phobic<pthash::xxhash128> pthash;
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> endpoints;
     bit_vector sequences;
-    // sd_vector<> sequences;
-    // rank_support_sd<> endpoints_rank;
-    // select_support_sd<> endpoints_select;
     seqan3::bitpacked_sequence<seqan3::dna4> text;
     template<int level>
     void fill_buffer(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
