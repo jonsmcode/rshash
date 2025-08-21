@@ -541,7 +541,7 @@ int RSIndexComp3::build(const std::vector<std::vector<seqan3::dna4>> &input)
 
 
 template<int level>
-inline void RSIndexComp::fill_buffer_avx512(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q)
+inline void RSIndexComp3::fill_buffer_avx512(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q)
 {
     size_t i = 0;
     for (; i + 8 <= q - p; i += 8) {
@@ -642,7 +642,7 @@ inline void RSIndexComp::fill_buffer_avx512(std::vector<uint64_t> &buffer, const
 
 
 template<int level>
-inline void RSIndexComp::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q)
+inline void RSIndexComp3::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q)
 {
     for(uint64_t i = 0; i < q-p; i++) {
         uint64_t hash = 0;
@@ -745,7 +745,7 @@ inline bool lookup(std::vector<uint64_t> &array, uint64_t query, uint64_t queryr
 }
 
 
-uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query, uint64_t &extensions)
+uint64_t RSIndexComp3::streaming_query(const std::vector<seqan3::dna4> &query, uint64_t &extensions)
 {
     auto view = srindex::views::three_minimisers_and_window_hash({.minimiser_size1 = m1, .minimiser_size2 = m2, .minimiser_size3 = m3, .window_size = k, .seed1=seed1, .seed2=seed2, .seed3=seed3});
 
@@ -814,7 +814,7 @@ uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query, ui
 }
 
 
-int RSIndexComp::save(const std::filesystem::path &filepath) {
+int RSIndexComp3::save(const std::filesystem::path &filepath) {
     std::ofstream out(filepath, std::ios::binary);
     seqan3::contrib::sdsl::serialize(this->k, out);
     seqan3::contrib::sdsl::serialize(this->m1, out);
@@ -839,7 +839,7 @@ int RSIndexComp::save(const std::filesystem::path &filepath) {
     return 0;
 }
 
-int RSIndexComp::load(const std::filesystem::path &filepath) {
+int RSIndexComp3::load(const std::filesystem::path &filepath) {
     std::ifstream in(filepath, std::ios::binary);
     seqan3::contrib::sdsl::load(this->k, in);
     seqan3::contrib::sdsl::load(this->m1, in);
