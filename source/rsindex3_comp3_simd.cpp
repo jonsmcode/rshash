@@ -527,14 +527,14 @@ int RSIndexComp3::build(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "offsets2: " << (double) n2*offset_width/kmers << "\n";
     std::cout << "offsets3: " << (double) n3*offset_width/kmers << "\n";
     std::cout << "Hashtable: " << (double) 64*hashmap.size()/kmers << "\n";
-    std::cout << "R_1: " << (double) M1/kmers << "\n";
+    std::cout << "R_1: " << (double) 8*size_in_bytes(r1)/kmers << "\n";
     std::cout << "R_2: " << (double) 8*size_in_bytes(r2)/kmers << "\n";
     std::cout << "R_3: " << (double) 8*size_in_bytes(r3)/kmers << "\n";
     std::cout << "S_1: " << (double) (n1+1)/kmers << "\n";
     std::cout << "S_2: " << (double) (n2+1)/kmers << "\n";
     std::cout << "S_3: " << (double) (n3+1)/kmers << "\n";
 
-    std::cout << "total: " << (double) (n1*offset_width+n2*offset_width+n3*offset_width+2*N+M1+8*size_in_bytes(r2)+8*size_in_bytes(r3)+n1+1+n2+1+n3+1+endpoints.bitCount()+64*hashmap.size())/kmers << "\n";
+    std::cout << "total: " << (double) (n1*offset_width+n2*offset_width+n3*offset_width+2*N+8*size_in_bytes(r1)+8*size_in_bytes(r2)+8*size_in_bytes(r3)+n1+1+n2+1+n3+1+endpoints.bitCount()+64*hashmap.size())/kmers << "\n";
 
     return 0;
 }
@@ -862,7 +862,7 @@ int RSIndexComp::load(const std::filesystem::path &filepath) {
 
     in.close();
 
-    r1_rank = rank_support_v<1>(&r1);
+    r1_rank = rank_support_sd<>(&r1);
     r2_rank = rank_support_sd<>(&r2);
     r3_rank = rank_support_sd<>(&r3);
     this->s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), s1.size(), 3);
