@@ -44,7 +44,7 @@ run()
               echo $f >> $LOG
               echo $m1 $m2 $m3 $t1 $t2 $t3 >> $LOG
 
-              /usr/bin/time -v -o time.txt $PROGRAM build -i "$f" -d "${BASENAME}.dict" -k $k --m1 $m1 --t1 $t1 --m2 $m2 --t2 $t2 --m3 $m3 --t3 $t3 -s $span > prog_out.txt 2>&1
+              /usr/bin/time -v -o time.txt $PROGRAM build -i "$f" -d "${BASENAME}.lookup3.dict" -k $k --m1 $m1 --t1 $t1 --m2 $m2 --t2 $t2 --m3 $m3 --t3 $t3 -s $span > prog_out.txt 2>&1
 
               cat prog_out.txt >> $LOG
 
@@ -99,7 +99,7 @@ run()
                   echo $f >> $LOG
                   echo $query >> $LOG
                   echo $query
-                  /usr/bin/time -v -o time.txt $PROGRAM query -d "${BASENAME}.dict" -q $query > prog_out.txt 2>&1
+                  /usr/bin/time -v -o time.txt $PROGRAM query -d "${BASENAME}.lookup3.dict" -q $query > prog_out.txt 2>&1
 
                   cat prog_out.txt >> $LOG
                   
@@ -134,7 +134,7 @@ run()
                   echo $f >> $LOG
                   echo $query >> $LOG
                   echo $query
-                  /usr/bin/time -v -o time.txt $PROGRAM query -d "${BASENAME}.dict" -q $query > prog_out.txt 2>&1
+                  /usr/bin/time -v -o time.txt $PROGRAM query -d "${BASENAME}.lookup3.dict" -q $query > prog_out.txt 2>&1
 
                   cat prog_out.txt >> $LOG
                   
