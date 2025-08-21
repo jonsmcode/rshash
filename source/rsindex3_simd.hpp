@@ -51,7 +51,7 @@ private:
 public:
     RSIndexComp();
     RSIndexComp(uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3,
-        uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3, uint8_t const span);
+        uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3, size_t const span);
     uint8_t getk() { return k; }
     int build(const std::vector<std::vector<seqan3::dna4>>&);
     uint64_t streaming_query(const std::vector<seqan3::dna4>&, uint64_t&);
@@ -95,7 +95,7 @@ private:
 public:
     RSIndexComp3();
     RSIndexComp3(uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3,
-        uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3, uint8_t const span);
+        uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3, size_t const span);
     uint8_t getk() { return k; }
     int build(const std::vector<std::vector<seqan3::dna4>>&);
     uint64_t streaming_query(const std::vector<seqan3::dna4>&, uint64_t&);
