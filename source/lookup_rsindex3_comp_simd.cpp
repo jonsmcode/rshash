@@ -17,6 +17,7 @@ struct cmd_arguments {
     uint8_t t1{32};
     uint8_t t2{64};
     uint16_t t3{256};
+    size_t s{31};
 };
 
 void initialise_argument_parser(sharg::parser &parser, cmd_arguments &args) {
@@ -31,6 +32,7 @@ void initialise_argument_parser(sharg::parser &parser, cmd_arguments &args) {
     parser.add_option(args.t1, sharg::config{.long_id = "t1", .description = "threshold1"});
     parser.add_option(args.t2, sharg::config{.long_id = "t2", .description = "threshold2"});
     parser.add_option(args.t3, sharg::config{.long_id = "t3", .description = "threshold3"});
+    parser.add_option(args.s, sharg::config{.short_id = 's', .long_id = "span", .description = "span"});
 }
 
 int check_arguments(sharg::parser &parser, cmd_arguments &args) {
@@ -85,7 +87,7 @@ int main(int argc, char** argv)
         load_file(args.i, text);
 
         std::cout << "building dict...\n";
-        RSIndexComp3 index = RSIndexComp3(args.k, args.m1, args.m2, args.m3, args.t1, args.t2, args.t3);
+        RSIndexComp3 index = RSIndexComp3(args.k, args.m1, args.m2, args.m3, args.t1, args.t2, args.t3, args.s);
         index.build(text);
         index.save(args.d);
     }
