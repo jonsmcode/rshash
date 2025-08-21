@@ -48,7 +48,7 @@ run()
 
               cat prog_out.txt >> $LOG
 
-              file_size=$(stat -c%s "${BASENAME}.dict")
+              file_size=$(stat -c%s "${BASENAME}.lookup3.dict")
               buildtime=$(grep "User time" time.txt | awk -F': ' '{print $2}')
               buildmem=$(grep "Maximum resident set size" time.txt | awk -F': ' '{print $2}')
               textlength=$(grep "text length: " prog_out.txt | sed -E 's/.*text length: ([0-9]+).*/\1/')
