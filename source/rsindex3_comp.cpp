@@ -37,7 +37,7 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
 {
     auto view1 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
 
-    std::cout << +m1 << " " << +m2 << " " << +m3 << "\n";
+    std::cout << +m1 << " " << +m2 << " " << +m3 << " " << +span << "\n";
 
     const uint64_t M1 = 1ULL << (m1+m1);
     const uint64_t M2 = 1ULL << (m2+m2);
@@ -66,9 +66,6 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
         sequences[j] = 1;
     }
     endpoints = sux::bits::EliasFano(reinterpret_cast<uint64_t*>(sequences.data()), N+1);
-    // endpoints_ = seqan3::contrib::sdsl::sd_vector<>(sequences_);
-    // endpoints_rank = seqan3::contrib::sdsl::rank_support_sd<>(&endpoints);
-    // endpoints_select = seqan3::contrib::sdsl::select_support_sd<>(&endpoints);
 
     std::cout << "count minimizers...\n";
     size_t c1tmp = r1tmp_rank(M1);
@@ -142,7 +139,7 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
                 size_t i = r1_rank(minimiser.minimiser_value);
                 size_t s = s1_select.select(i);
                 size_t o = minimiser.occurrences;
-                uint64_t j = 0;
+                size_t j = 0;
                 while(o > span) {
                     offsets1[s + count1[i]] = length + minimiser.range_position + j*span;
                     count1[i]++;
@@ -281,7 +278,7 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
                 size_t i = r2_rank(minimiser.minimiser_value);
                 size_t s = s2_select.select(i);
                 size_t o = minimiser.occurrences;
-                uint64_t j = 0;
+                size_t j = 0;
                 while(o > span) {
                     offsets2[s + count2[i]] = skmer_positions[skmer_idx] + minimiser.range_position + j*span;
                     count2[i]++;
@@ -422,7 +419,7 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
                 size_t i = r3_rank(minimiser.minimiser_value);
                 size_t s = s3_select.select(i);
                 size_t o = minimiser.occurrences;
-                uint64_t j = 0;
+                size_t j = 0;
                 while(o > span) {
                     offsets3[s + count3[i]] = skmer_positions2[skmer_idx] + minimiser.range_position + j*span;
                     count3[i]++;
@@ -708,6 +705,7 @@ int RSIndexComp::save(const std::filesystem::path &filepath) {
     seqan3::contrib::sdsl::serialize(this->m1, out);
     seqan3::contrib::sdsl::serialize(this->m2, out);
     seqan3::contrib::sdsl::serialize(this->m3, out);
+    seqan3::contrib::sdsl::serialize(this->span, out);
     seqan3::contrib::sdsl::serialize(r1, out);
     seqan3::contrib::sdsl::serialize(r2, out);
     seqan3::contrib::sdsl::serialize(r3, out);
@@ -734,6 +732,7 @@ int RSIndexComp::load(const std::filesystem::path &filepath) {
     seqan3::contrib::sdsl::load(this->m1, in);
     seqan3::contrib::sdsl::load(this->m2, in);
     seqan3::contrib::sdsl::load(this->m3, in);
+    seqan3::contrib::sdsl::load(this->span, in);
     seqan3::contrib::sdsl::load(r1, in);
     seqan3::contrib::sdsl::load(r2, in);
     seqan3::contrib::sdsl::load(r3, in);

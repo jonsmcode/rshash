@@ -4,7 +4,6 @@
 #include <sux/bits/SimpleSelect.hpp>
 #include <sux/bits/EliasFano.hpp>
 #include <gtl/phmap.hpp>
-// #include <pthash.hpp>
 
 
 using namespace seqan3::literals;
@@ -16,7 +15,7 @@ const uint64_t seed1 = 0x8F'3F'73'B5'CF'1C'9A'DE;
 const uint64_t seed2 = 0x29'6D'BD'33'32'56'8C'64;
 const uint64_t seed3 = 0xE5'9A'38'5F'03'76'C9'F6;
 
-// const size_t span = 31;
+// const size_t span = 16;
 
 
 class RSIndex

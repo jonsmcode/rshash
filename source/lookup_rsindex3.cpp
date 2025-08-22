@@ -17,7 +17,7 @@ struct cmd_arguments {
     uint8_t t1{10};
     uint8_t t2{20};
     uint16_t t3{30};
-    size_t s{31};
+    size_t s{20};
     bool c{0};
 };
 

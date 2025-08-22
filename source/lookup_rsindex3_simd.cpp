@@ -11,13 +11,13 @@ struct cmd_arguments {
     std::filesystem::path q{};
     std::filesystem::path d{};
     uint8_t k{};
-    uint8_t m1{14};
+    uint8_t m1{15};
     uint8_t m2{16};
     uint8_t m3{17};
-    uint8_t t1{64};
+    uint8_t t1{32};
     uint8_t t2{128};
     uint16_t t3{512};
-    size_t s{31};
+    size_t s{20};
 };
 
 void initialise_argument_parser(sharg::parser &parser, cmd_arguments &args) {
