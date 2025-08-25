@@ -1007,43 +1007,25 @@ private:
 
     bool next_minimiser_is_new()
     {
-        // assert(minimiser1_position != minimiser2_position);
-
-        // If we reached the end of the range, we are done.
         if (range_position + 1 == range_size)
-            return ++range_position; // Return true, but also increment range_position
+            return ++range_position;
 
         next_window<pop_first::yes>();
 
-        bool new_min1 = false;
-        bool new_min2 = false;
-
-        if (minimiser1_position == 0) {
+        if (minimiser1_position-- == 0)
             find_minimiser1_in_window();
-            new_min1 = true;
-        }
-
-        if (minimiser2_position == 0) {
+        if (minimiser2_position-- == 0)
             find_minimiser2_in_window();
-            new_min2 = true;
-        }
 
         if (uint64_t new_kmer_value = kmer_values1_in_window.back(); new_kmer_value < current.minimiser1_value) {
             current.minimiser1_value = new_kmer_value;
             minimiser1_position = minimisers_in_window;
-            new_min1 = true;
         }
 
         if (uint64_t new_kmer_value = kmer_values2_in_window.back(); new_kmer_value < current.minimiser2_value) {
             current.minimiser2_value = new_kmer_value;
             minimiser2_position = minimisers_in_window;
-            new_min2 = true;
         }
-
-        if(!new_min1)
-            --minimiser1_position;
-        if(!new_min2)
-            --minimiser2_position;
 
         return true;
     }

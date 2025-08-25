@@ -1,5 +1,5 @@
 #include <seqan3/core/debug_stream.hpp>
-#include <seqan3/argument_parser/all.hpp>
+#include <sharg/all.hpp>
 #include <seqan3/io/sequence_file/all.hpp>
 
 #include "rsindex2.hpp"
@@ -11,44 +11,44 @@ struct cmd_arguments {
     std::filesystem::path q{};
     std::filesystem::path d{};
     uint8_t k{};
-    uint8_t m{};
-    uint8_t n{};
-    uint8_t t{100};
+    uint8_t m1{14};
+    uint8_t m2{15};
+    uint8_t t1{10};
+    uint8_t t2{20};
+    size_t s{20};
     bool c{0};
 };
 
-void initialise_argument_parser(seqan3::argument_parser &parser, cmd_arguments &args) {
-    parser.add_positional_option(args.cmd, "command options: build, query");
-    parser.add_option(args.i, 'i', "input", "provide input file");
-    parser.add_option(args.q, 'q', "query", "provide query file");
-    parser.add_option(args.d, 'd', "dict", "provide dict file");
-    parser.add_option(args.k, 'k', "k-mer", "k-mer length");
-    parser.add_option(args.m, 'm', "minimiser1", "minimiser1 length");
-    parser.add_option(args.n, 'n', "minimiser2", "minimiser2 length");
-    parser.add_option(args.t, 't', "thres", "threshold");
-    parser.add_flag(args.c, 'c', "comp", "compress level 2");
+
+void initialise_argument_parser(sharg::parser &parser, cmd_arguments &args) {
+    parser.add_positional_option(args.cmd, sharg::config{.description = "command options: build, query"});
+    parser.add_option(args.i, sharg::config{.short_id = 'i', .long_id = "input", .description = "provide input file"});
+    parser.add_option(args.q, sharg::config{.short_id = 'q', .long_id = "query", .description = "provide query file"});
+    parser.add_option(args.d, sharg::config{.short_id = 'd', .long_id = "dict", .description = "provide dict file"});
+    parser.add_option(args.k, sharg::config{.short_id = 'k', .long_id = "k-mer", .description = "k-mer length"});
+    parser.add_option(args.m1, sharg::config{.long_id = "m1", .description = "minimiser1 length"});
+    parser.add_option(args.m2, sharg::config{.long_id = "m2", .description = "minimiser2 length"});
+    parser.add_option(args.t1, sharg::config{.long_id = "t1", .description = "threshold1"});
+    parser.add_option(args.t2, sharg::config{.long_id = "t2", .description = "threshold2"});
+    parser.add_option(args.s, sharg::config{.short_id = 's', .long_id = "span", .description = "span"});
+    parser.add_flag(args.c, sharg::config{.short_id = 'c', .long_id = "comp", .description = "compress level 2"});
 }
 
-int check_arguments(seqan3::argument_parser &parser, cmd_arguments &args) {
+int check_arguments(sharg::parser &parser, cmd_arguments &args) {
     if(!parser.is_option_set('d'))
-            throw seqan3::user_input_error("provide dict file.");
+        throw sharg::user_input_error("provide index file.");
     if(args.cmd == "build") {
         if(!parser.is_option_set('i'))
-            throw seqan3::user_input_error("provide input file.");
+            throw sharg::user_input_error("provide input file.");
         if(!parser.is_option_set('k'))
-            throw seqan3::user_input_error("specify k");
-        if(!parser.is_option_set('m'))
-            throw seqan3::user_input_error("specify minimiser1");
-        if(!parser.is_option_set('n'))
-            throw seqan3::user_input_error("specify minimiser2");
+            throw sharg::user_input_error("specify k");
     }
     else if(args.cmd == "query") {
         if(!parser.is_option_set('q'))
-            throw seqan3::user_input_error("provide query file.");
+            throw sharg::user_input_error("provide query file.");
     }
     else
-        throw seqan3::user_input_error("illegal command");
-
+        throw sharg::user_input_error("illegal command");
     return 0;
 }
 
@@ -69,14 +69,14 @@ void load_file(const std::filesystem::path &filepath, std::vector<std::vector<se
 
 int main(int argc, char** argv)
 {
-    seqan3::argument_parser parser{"kmerdict", argc, argv};
+    sharg::parser parser{"kmerdict", argc, argv};
     cmd_arguments args{};
     initialise_argument_parser(parser, args);
     try {
         parser.parse();
         check_arguments(parser, args);
     }
-    catch (seqan3::argument_parser_error const &ext) {
+    catch (sharg::parser_error const &ext) {
         return -1;
     }
 
@@ -87,12 +87,12 @@ int main(int argc, char** argv)
 
         std::cout << "building dict...\n";
         if(args.c) {
-            RSIndexComp index = RSIndexComp(args.k, args.m, args.n, args.t);
+            RSIndexComp index = RSIndexComp(args.k, args.m1, args.m2, args.t1, args.t2, args.s);
             index.build(text);
             index.save(args.d);
         }
         else {
-            RSIndex index = RSIndex(args.k, args.m, args.n, args.t);
+            RSIndex index = RSIndex(args.k, args.m1, args.m2, args.t1, args.t2, args.s);
             index.build(text);
             index.save(args.d);
         }
@@ -106,28 +106,42 @@ int main(int argc, char** argv)
         std::cout << "loading dict...\n";
         uint64_t kmers = 0;
         uint64_t found = 0;
+        uint64_t extensions = 0;
+        double ns_per_kmer;
         if(args.c) {
-            RSIndexComp index;
+            RSIndexComp index = RSIndexComp();
             index.load(args.d);
             std::cout << "querying...\n";
+
+            std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
             for (auto query : queries) {
-                found += index.streaming_query(query);
+                found += index.streaming_query(query, extensions);
                 kmers += query.size() - index.getk() + 1;
             }
+            std::chrono::high_resolution_clock::time_point t_stop = std::chrono::high_resolution_clock::now();
+            std::chrono::nanoseconds elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
+            ns_per_kmer = (double) elapsed.count() / kmers;
         }
         else {
-            RSIndex index;
+            RSIndex index = RSIndex();
             index.load(args.d);
             std::cout << "querying...\n";
+
+            std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
             for (auto query : queries) {
-                found += index.streaming_query(query);
+                found += index.streaming_query(query, extensions);
                 kmers += query.size() - index.getk() + 1;
             }
+            std::chrono::high_resolution_clock::time_point t_stop = std::chrono::high_resolution_clock::now();
+            std::chrono::nanoseconds elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
+            ns_per_kmer = (double) elapsed.count() / kmers;
         }
         
         std::cout << "==== query report:\n";
         std::cout << "num_kmers = " << kmers << '\n';
         std::cout << "num_positive_kmers = " << found << " (" << (double) found/kmers*100 << "%)\n";
+        std::cout << "time_per_kmer = " << ns_per_kmer << '\n';
+        std::cout << "num extensions = " << extensions << '\n';
     }
  
     return 0;

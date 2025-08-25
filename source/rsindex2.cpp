@@ -20,15 +20,15 @@ static inline constexpr uint64_t compute_mask(uint64_t const size)
         return (uint64_t{1u} << size) - 1u;
 }
 
+RSIndex::RSIndex() : endpoints(std::vector<uint64_t>{}, 1) {}
 
-RSIndex::RSIndex() {}
-
-RSIndex::RSIndex(uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m_thres) {
-    this->k = k;
-    this->m1 = m1;
-    this->m2 = m2;
-    this->m_thres = m_thres;
-}
+RSIndex::RSIndex(
+    uint8_t const k, uint8_t const m1, uint8_t const m2,
+    uint8_t const m_thres1, uint8_t const m_thres2, size_t const span)
+    : k(k), m1(m1), m2(m2),
+      m_thres1(m_thres1), m_thres2(m_thres2), span(span),
+      endpoints(std::vector<uint64_t>{}, 1)
+{}
 
 
 int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
@@ -54,16 +54,14 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     rank_support_v<1> r1tmp_rank = rank_support_v<1>(&r1tmp);
 
     std::cout << "get sequences...\n";
-    bit_vector sequences = bit_vector(N+1, 0);
+    sequences = bit_vector(N+1, 0);
     size_t j = 0;
     sequences[0] = 1;
     for(uint64_t i=0; i < no_sequences; i++) {
         j += input[i].size();
         sequences[j] = 1;
     }
-    endpoints = seqan3::contrib::sdsl::sd_vector<>(sequences);
-    endpoints_rank = seqan3::contrib::sdsl::rank_support_sd<>(&endpoints);
-    endpoints_select = seqan3::contrib::sdsl::select_support_sd<>(&endpoints);
+    endpoints = sux::bits::EliasFano(reinterpret_cast<uint64_t*>(sequences.data()), N+1);
 
     std::cout << "count minimizers...\n";
     size_t c1tmp = r1tmp_rank(M1);
@@ -78,8 +76,8 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
             size_t o = minimiser.occurrences;
             size_t w = o/span + 1;
             count1tmp[i] += w;
-            if(count1tmp[i] > m_thres)
-                count1tmp[i] = m_thres;
+            if(count1tmp[i] > m_thres1)
+                count1tmp[i] = m_thres1;
             kmers += o;
             n += w;
         }
@@ -89,7 +87,7 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     r1 = bit_vector(M1, 0);
     for(auto & sequence : input) {
         for(auto && minimisers : sequence | view1) {
-            if(count1tmp[r1tmp_rank(minimisers.minimiser_value)] < m_thres)
+            if(count1tmp[r1tmp_rank(minimisers.minimiser_value)] < m_thres1)
                 r1[minimisers.minimiser_value] = 1;
         }
     }
@@ -220,8 +218,8 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
         for(auto && minimiser : sequence | view2) {
             size_t i = r2tmp_rank(minimiser.minimiser_value);
             count2tmp[i] += minimiser.occurrences/span + 1;
-            if(count2tmp[i] > m_thres)
-                count2tmp[i] = m_thres;
+            if(count2tmp[i] > m_thres2)
+                count2tmp[i] = m_thres2;
         }
     }
 
@@ -229,7 +227,7 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     r2 = bit_vector(M2, 0);
     for(auto & sequence : freq_skmers1) {
         for(auto && minimiser : sequence | view2) {
-            if(count2tmp[r2tmp_rank(minimiser.minimiser_value)] < m_thres)
+            if(count2tmp[r2tmp_rank(minimiser.minimiser_value)] < m_thres2)
                 r2[minimiser.minimiser_value] = 1;
         }
     }
@@ -368,7 +366,7 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "density s2: " << (double) s2_select.bitCount()/(n2+1)*100 <<  "%\n";
     std::cout << "\nspace per kmer in bit:\n";
     std::cout << "text: " << (double) 2*N/kmers << "\n";
-    std::cout << "endpoints: " << (double) 8*size_in_bytes(endpoints)/kmers << "\n";
+    std::cout << "endpoints: " << (double) 8*endpoints.bitCount()/kmers << "\n";
     std::cout << "offsets1: " << (double) n1*offset_width/kmers << "\n";
     std::cout << "offsets2: " << (double) n2*offset_width/kmers << "\n";
     std::cout << "Hashtable: " << (double) 64*hashmap.size()/kmers << "\n";
@@ -377,7 +375,7 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "S_1: " << (double) (n1+1)/kmers << "\n";
     std::cout << "S_2: " << (double) (n2+1)/kmers << "\n";
 
-    std::cout << "total: " << (double) (n1*offset_width+n2*offset_width+2*N+M1+M2+n1+1+n2+1+8*size_in_bytes(endpoints)+64*hashmap.size())/kmers << "\n";
+    std::cout << "total: " << (double) (n1*offset_width+n2*offset_width+2*N+M1+M2+n1+1+n2+1+8*endpoints.bitCount()+64*hashmap.size())/kmers << "\n";
 
     return 0;
 }
@@ -393,7 +391,7 @@ inline void RSIndex::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t m
             o = offsets1[p+i];
         if constexpr (level == 2)
             o = offsets2[p+i];
-        size_t next_endpoint = endpoints_select(endpoints_rank(o+1)+1);
+        size_t next_endpoint = endpoints.select(endpoints.rank(o+1));
         size_t e = o+k+span;
         if(e > next_endpoint)
             e = next_endpoint;
@@ -414,24 +412,55 @@ inline void RSIndex::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t m
 }
 
 
-inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found) {
-    for(size_t i=last_found+1; i < array.size(); i++) {
-        if(array[i] == query || array[i] == queryrc) {
-            last_found = i;
+inline bool extend(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward) {
+    if(forward) {
+        if(last_found == array.size()-1)
+            return false;
+        if(array[last_found+1] == query) {
+            last_found++;
             return true;
         }
     }
-    for(size_t i=0; i < last_found+1; i++) {
-        if(array[i] == query || array[i] == queryrc) {
-            last_found = i;
+    else {
+        if(last_found == 1)
+            return false;
+        if(array[last_found-1] == queryrc) {
+            last_found--;
             return true;
         }
     }
     return false;
 }
 
+inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward)
+{
+    for(size_t i=0; i < array.size(); i++) {
+        if(array[i] == query) {
+            last_found = i;
+            forward = true;
+            return true;
+        }
+        if(array[i] == queryrc) {
+            last_found = i;
+            forward = false;
+            return true;
+        }
+    }
+    return false;
+}
 
-uint64_t RSIndex::streaming_query(const std::vector<seqan3::dna4> &query)
+inline bool lookup(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward, uint64_t &extensions)
+{
+    if(extend(array, query, queryrc, last_found, forward)) {
+        extensions++;
+        return true;
+    }
+    else
+        return lookup_serial(array, query, queryrc, last_found, forward);
+}
+
+
+uint64_t RSIndex::streaming_query(const std::vector<seqan3::dna4> &query, uint64_t &extensions)
 {
     auto view = srindex::views::two_minimisers_and_window_hash({.minimiser_size1 = m1, .minimiser_size2 = m2, .window_size = k, .seed1=seed1, .seed2=seed2});
 
@@ -443,11 +472,12 @@ uint64_t RSIndex::streaming_query(const std::vector<seqan3::dna4> &query)
     std::vector<uint64_t> buffer2;
     size_t last_found1 = 0;
     size_t last_found2 = 0;
+    bool forward = true;
 
     for(auto && minimisers : query | view)
     {
         if(minimisers.minimiser1_value == current_minimiser1)
-            occurences += lookup_serial(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1);
+            occurences += lookup(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1, forward, extensions);
         else if(r1[minimisers.minimiser1_value]) {
             size_t minimizer_id = r1_rank(minimisers.minimiser1_value);
             size_t p = s1_select.select(minimizer_id);
@@ -455,12 +485,12 @@ uint64_t RSIndex::streaming_query(const std::vector<seqan3::dna4> &query)
 
             buffer1.clear();
             fill_buffer<1>(buffer1, mask, p, q);
-            last_found1 = 0;
-            occurences += lookup_serial(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1);
+            // last_found1 = 0;
+            occurences += lookup_serial(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1, forward);
             current_minimiser1 = minimisers.minimiser1_value;
         }
         else if(minimisers.minimiser2_value == current_minimiser2)
-            occurences += lookup_serial(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2);
+            occurences += lookup(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2, forward, extensions);
         else if(r2[minimisers.minimiser2_value]) {
             size_t minimizer_id = r2_rank(minimisers.minimiser2_value);
             size_t p = s2_select.select(minimizer_id);
@@ -468,8 +498,8 @@ uint64_t RSIndex::streaming_query(const std::vector<seqan3::dna4> &query)
 
             buffer2.clear();
             fill_buffer<2>(buffer2, mask, p, q);
-            last_found2 = 0;
-            occurences += lookup_serial(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2);
+            // last_found2 = 0;
+            occurences += lookup_serial(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2, forward);
             current_minimiser2 = minimisers.minimiser2_value;
         }
         else
@@ -485,13 +515,14 @@ int RSIndex::save(const std::filesystem::path &filepath) {
     seqan3::contrib::sdsl::serialize(this->k, out);
     seqan3::contrib::sdsl::serialize(this->m1, out);
     seqan3::contrib::sdsl::serialize(this->m2, out);
+    seqan3::contrib::sdsl::serialize(this->span, out);
     seqan3::contrib::sdsl::serialize(r1, out);
     seqan3::contrib::sdsl::serialize(r2, out);
     seqan3::contrib::sdsl::serialize(s1, out);
     seqan3::contrib::sdsl::serialize(s2, out);
     seqan3::contrib::sdsl::serialize(this->offsets1, out);
     seqan3::contrib::sdsl::serialize(this->offsets2, out);
-    seqan3::contrib::sdsl::serialize(this->endpoints, out);
+    seqan3::contrib::sdsl::serialize(this->sequences, out);
 
     cereal::BinaryOutputArchive archive(out);
     archive(this->text);
@@ -506,13 +537,14 @@ int RSIndex::load(const std::filesystem::path &filepath) {
     seqan3::contrib::sdsl::load(this->k, in);
     seqan3::contrib::sdsl::load(this->m1, in);
     seqan3::contrib::sdsl::load(this->m2, in);
+    seqan3::contrib::sdsl::load(this->span, in);
     seqan3::contrib::sdsl::load(r1, in);
     seqan3::contrib::sdsl::load(r2, in);
     seqan3::contrib::sdsl::load(s1, in);
     seqan3::contrib::sdsl::load(s2, in);
     seqan3::contrib::sdsl::load(this->offsets1, in);
     seqan3::contrib::sdsl::load(this->offsets2, in);
-    seqan3::contrib::sdsl::load(this->endpoints, in);
+    seqan3::contrib::sdsl::load(this->sequences, in);
 
     cereal::BinaryInputArchive archive(in);
     archive(this->text);
@@ -524,8 +556,7 @@ int RSIndex::load(const std::filesystem::path &filepath) {
     r2_rank = rank_support_v<1>(&r2);
     this->s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), s1.size(), 3);
     this->s2_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s2.data()), s2.size(), 3);
-    endpoints_rank = rank_support_sd<>(&endpoints);
-    endpoints_select = seqan3::contrib::sdsl::select_support_sd<>(&endpoints);
+    endpoints = sux::bits::EliasFano(reinterpret_cast<uint64_t*>(sequences.data()), sequences.size());
     
     return 0;
 }
