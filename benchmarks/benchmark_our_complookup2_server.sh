@@ -1,12 +1,12 @@
 #!/bin/bash
 
-PROGRAM="../build/source/complookup2simd"
+PROGRAM="../build/source/lookup2compsimd"
 
 today=$(date +%Y-%m-%d-%H-%M-%S)
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../../../datasets/" >/dev/null 2>&1 && pwd )"
 LOG="complog2.txt"
-CSV="complookup2simd-results-$today.csv"
+CSV="lookup2compsimd-results-$today.csv"
 
 run()
 {
