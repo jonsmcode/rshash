@@ -23,7 +23,7 @@ run()
         m=$(echo "l($length)/l(4)" | bc -l)
         m=$(printf "%.0f" "$m")
 
-        minimisers=( $((m)) $((m)) )
+        minimisers=( $((m + 1)) $((m + 2))  $((m + 1)) $((m + 3))  $((m + 2)) $((m + 3)) )
         thresholds=( 8 32  16 64  32 128 )
         spans=( $((k - m + 1)) )
 
