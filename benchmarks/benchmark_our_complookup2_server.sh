@@ -41,7 +41,7 @@ run()
               echo $f >> $LOG
               echo $m1 $t1 $m2 $t2 >> $LOG
 
-              /usr/bin/time -v -o time2.txt $PROGRAM build -i "$f" -d "${BASENAME}.complookup2.dict" -k $k --m1 $m1 --t1 $t1 --m2 $m2 --t2 $t2 -s $span -c > comp_out2.txt 2>&1
+              /usr/bin/time -v -o time2.txt $PROGRAM build -i "$f" -d "${BASENAME}.complookup2.dict" -k $k --m1 $m1 --t1 $t1 --m2 $m2 --t2 $t2 -s $span > comp_out2.txt 2>&1
 
               cat comp_out2.txt >> $LOG
 
@@ -89,7 +89,7 @@ run()
                   echo $f >> $LOG
                   echo $query >> $LOG
                   echo $query
-                  /usr/bin/time -v -o time2.txt $PROGRAM query -d "${BASENAME}.complookup2.dict" -q $query -c > comp_out2.txt 2>&1
+                  /usr/bin/time -v -o time2.txt $PROGRAM query -d "${BASENAME}.complookup2.dict" -q $query > comp_out2.txt 2>&1
 
                   cat comp_out2.txt >> $LOG
                   
@@ -124,7 +124,7 @@ run()
                   echo $f >> $LOG
                   echo $query >> $LOG
                   echo $query
-                  /usr/bin/time -v -o time2.txt $PROGRAM query -d "${BASENAME}.complookup2.dict" -q $query -c > comp_out2.txt 2>&1
+                  /usr/bin/time -v -o time2.txt $PROGRAM query -d "${BASENAME}.complookup2.dict" -q $query > comp_out2.txt 2>&1
 
                   cat comp_out2.txt >> $LOG
                   
