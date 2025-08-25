@@ -773,8 +773,8 @@ uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query, ui
             buffer1.clear();
             fill_buffer<1>(buffer1, mask, p, q);
             // fill_buffer_avx512<1>(buffer1, mask, p, q);
-            last_found1 = 0;
-            occurences += lookup(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1, forward, extensions);
+            // last_found1 = 0;
+            occurences += lookup_avx512(array, query, queryrc, last_found, forward)(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1, forward);
             current_minimiser1 = minimisers.minimiser1_value;
         }
         else if(minimisers.minimiser2_value == current_minimiser2)
@@ -787,8 +787,8 @@ uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query, ui
             buffer2.clear();
             fill_buffer<2>(buffer2, mask, p, q);
             // fill_buffer_avx512<2>(buffer2, mask, p, q);
-            last_found2 = 0;
-            occurences += lookup(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2, forward, extensions);
+            // last_found2 = 0;
+            occurences += lookup_avx512(array, query, queryrc, last_found, forward)(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2, forward);
             current_minimiser2 = minimisers.minimiser2_value;
         }
         else if(minimisers.minimiser3_value == current_minimiser3)
@@ -801,8 +801,8 @@ uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query, ui
             buffer3.clear();
             fill_buffer<3>(buffer3, mask, p, q);
             // fill_buffer_avx512<3>(buffer3, mask, p, q);
-            last_found3 = 0;
-            occurences += lookup(buffer3, minimisers.window_value, minimisers.window_value_rev, last_found3, forward, extensions);
+            // last_found3 = 0;
+            occurences += lookup_avx512(array, query, queryrc, last_found, forward)(buffer3, minimisers.window_value, minimisers.window_value_rev, last_found3, forward);
             current_minimiser3 = minimisers.minimiser3_value;
         }
         else

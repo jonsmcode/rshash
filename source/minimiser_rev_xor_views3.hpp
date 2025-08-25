@@ -1070,15 +1070,12 @@ private:
 
         next_window<pop_first::yes>();
 
-        if (minimiser1_position-- == 0) {
+        if (minimiser1_position-- == 0)
             find_minimiser1_in_window();
-        }
-        if (minimiser2_position-- == 0) {
+        if (minimiser2_position-- == 0)
             find_minimiser2_in_window();
-        }
-        if (minimiser3_position-- == 0) {
+        if (minimiser3_position-- == 0)
             find_minimiser3_in_window();
-        }
 
         if (uint64_t new_kmer_value = kmer_values1_in_window.back(); new_kmer_value < current.minimiser1_value) {
             current.minimiser1_value = new_kmer_value;

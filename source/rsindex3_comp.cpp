@@ -485,22 +485,6 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
             hashmap.insert(std::min<uint64_t>(minimiser.window_value, minimiser.window_value_rev));
         }
     }
-    // auto view4 = srindex::views::xor_minimiser_and_window({.minimiser_size = m1, .window_size = k, .seed=seed1});
-    // std::vector<uint64_t> fkmers;
-    // for(auto & sequence : freq_skmers3) {
-    //     for(auto && minimiser : sequence | view4) {
-    //         fkmers.push_back(std::min<uint64_t>(minimiser.window_value, minimiser.window_value_rev));
-    //     }
-    // }
-    // pthash::build_configuration config;
-    // config.seed = 1234567890;
-    // config.lambda = 5;
-    // config.alpha = 0.97;
-    // config.verbose = false;
-    // config.avg_partition_size = 2000;
-    // config.num_threads = 1;
-    // config.dense_partitioning = true;
-    // pthash.build_in_internal_memory(fkmers.begin(), fkmers.size(), config);
 
     std::cout << "copy text...\n";
     for(auto & record : input) {
@@ -609,27 +593,32 @@ inline bool extend(std::vector<uint64_t> &array, uint64_t query, uint64_t queryr
 }
 
 
+inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward)
+{
+    for(size_t i=0; i < array.size(); i++) {
+        if(array[i] == query) {
+            last_found = i;
+            forward = true;
+            return true;
+        }
+        if(array[i] == queryrc) {
+            last_found = i;
+            forward = false;
+            return true;
+        }
+    }
+    return false;
+}
+
+
 inline bool lookup(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward, uint64_t &extensions)
 {
     if(extend(array, query, queryrc, last_found, forward)) {
         extensions++;
         return true;
     }
-    else {
-        for(size_t i=0; i < array.size(); i++) {
-            if(array[i] == query) {
-                last_found = i;
-                forward = true;
-                return true;
-            }
-            if(array[i] == queryrc) {
-                last_found = i;
-                forward = false;
-                return true;
-            }
-        }
-    }
-    return false;
+    else
+        return lookup_serial(array, query, queryrc, last_found, forward);
 }
 
 
@@ -661,8 +650,9 @@ uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query, ui
 
             buffer1.clear();
             fill_buffer<1>(buffer1, mask, p, q);
-            last_found1 = 0;
-            occurences += lookup(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1, forward, extensions);
+            // last_found1 = 0;
+            // forward = true;
+            occurences += lookup_serial(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1, forward);
             current_minimiser1 = minimisers.minimiser1_value;
         }
         else if(minimisers.minimiser2_value == current_minimiser2)
@@ -674,8 +664,9 @@ uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query, ui
 
             buffer2.clear();
             fill_buffer<2>(buffer2, mask, p, q);
-            last_found2 = 0;
-            occurences += lookup(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2, forward, extensions);
+            // last_found2 = 0;
+            // forward = true;
+            occurences += lookup_serial(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2, forward);
             current_minimiser2 = minimisers.minimiser2_value;
         }
         else if(minimisers.minimiser3_value == current_minimiser3)
@@ -687,8 +678,9 @@ uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query, ui
 
             buffer3.clear();
             fill_buffer<3>(buffer3, mask, p, q);
-            last_found3 = 0;
-            occurences += lookup(buffer3, minimisers.window_value, minimisers.window_value_rev, last_found3, forward, extensions);
+            // last_found3 = 0;
+            // forward = true;
+            occurences += lookup_serial(buffer3, minimisers.window_value, minimisers.window_value_rev, last_found3, forward);
             current_minimiser3 = minimisers.minimiser3_value;
         }
         else
