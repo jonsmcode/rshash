@@ -23,7 +23,7 @@ run()
         m=$(echo "l($length)/l(4)" | bc -l)
         m=$(printf "%.0f" "$m")
 
-        minimisers=( $((m + 1)) $((m + 2))  $((m + 1)) $((m + 3))  $((m + 2)) $((m + 3)) )
+        minimisers=( $((m + 1)) $((m + 2))  $((m + 1)) $((m + 2))  $((m + 2)) $((m + 3))  $((m + 2)) $((m + 3)) )
         thresholds=( 8 32  16 64  32 128 )
         spans=( $((k - m + 1)) )
 
@@ -41,13 +41,13 @@ run()
               echo $f >> $LOG
               echo $m1 $t1 $m2 $t2 >> $LOG
 
-              /usr/bin/time -v -o time.txt $PROGRAM build -i "$f" -d "${BASENAME}.lookup2.dict" -k $k --m1 $m1 --t1 $t1 --m2 $m2 --t2 $t2 -s $span -c > prog_out2.txt 2>&1
+              /usr/bin/time -v -o time2.txt $PROGRAM build -i "$f" -d "${BASENAME}.lookup2.dict" -k $k --m1 $m1 --t1 $t1 --m2 $m2 --t2 $t2 -s $span -c > prog_out2.txt 2>&1
 
               cat prog_out2.txt >> $LOG
 
               file_size=$(stat -c%s "${BASENAME}.lookup2.dict")
-              buildtime=$(grep "User time" time.txt | awk -F': ' '{print $2}')
-              buildmem=$(grep "Maximum resident set size" time.txt | awk -F': ' '{print $2}')
+              buildtime=$(grep "User time" time2.txt | awk -F': ' '{print $2}')
+              buildmem=$(grep "Maximum resident set size" time2.txt | awk -F': ' '{print $2}')
               textlength=$(grep "text length: " prog_out2.txt | sed -E 's/.*text length: ([0-9]+).*/\1/')
               density_r1=$(awk '/density r1/ {print $3}' prog_out2.txt | tr -d '%')
               density_r2=$(awk '/density r2/ {print $3}' prog_out2.txt | tr -d '%')
@@ -89,12 +89,12 @@ run()
                   echo $f >> $LOG
                   echo $query >> $LOG
                   echo $query
-                  /usr/bin/time -v -o time.txt $PROGRAM query -d "${BASENAME}.lookup2.dict" -q $query -c > prog_out2.txt 2>&1
+                  /usr/bin/time -v -o time2.txt $PROGRAM query -d "${BASENAME}.lookup2.dict" -q $query -c > prog_out2.txt 2>&1
 
                   cat prog_out2.txt >> $LOG
                   
-                  querytime=$(grep "User time" time.txt | awk -F': ' '{print $2}')
-                  querymem=$(grep "Maximum resident set size" time.txt | awk -F': ' '{print $2}')
+                  querytime=$(grep "User time" time2.txt | awk -F': ' '{print $2}')
+                  querymem=$(grep "Maximum resident set size" time2.txt | awk -F': ' '{print $2}')
                   k_mers=$(grep "num_kmers" prog_out2.txt | sed -E 's/.*num_kmers = ([0-9]+).*/\1/')
                   found=$(grep "num_positive_kmers" prog_out2.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
                   # querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
@@ -103,7 +103,7 @@ run()
                   
                   echo "$f,$query,$k,$m1,$m2,$t1,$t2,$span,$buildtime,$buildmem",$file_size,$spaceoffsets1,$spaceoffsets2,$spaceht,$spacer1,$spacer2,$spaces1,$spaces2,$density_r1,$density_r2,$density_s1,$density_s2,$density_ht,$no_minimiser1,$no_minimiser2,$no_distinct_minimiser1,$no_distinct_minimiser2,$spacetotal,$spacetotalreal,$querytimekmer,$querymem,$extensions,$k_mers",$found" >> "$CSV"
 
-                  # rm -f time.txt
+                  # rm -f time2.txt
                   # rm -f prog_out2.txt
               done
 
@@ -124,12 +124,12 @@ run()
                   echo $f >> $LOG
                   echo $query >> $LOG
                   echo $query
-                  /usr/bin/time -v -o time.txt $PROGRAM query -d "${BASENAME}.lookup2.dict" -q $query -c > prog_out2.txt 2>&1
+                  /usr/bin/time -v -o time2.txt $PROGRAM query -d "${BASENAME}.lookup2.dict" -q $query -c > prog_out2.txt 2>&1
 
                   cat prog_out2.txt >> $LOG
                   
-                  querytime=$(grep "User time" time.txt | awk -F': ' '{print $2}')
-                  querymem=$(grep "Maximum resident set size" time.txt | awk -F': ' '{print $2}')
+                  querytime=$(grep "User time" time2.txt | awk -F': ' '{print $2}')
+                  querymem=$(grep "Maximum resident set size" time2.txt | awk -F': ' '{print $2}')
                   k_mers=$(grep "num_kmers" prog_out2.txt | sed -E 's/.*num_kmers = ([0-9]+).*/\1/')
                   found=$(grep "num_positive_kmers" prog_out2.txt | sed -E 's/.*num_positive_kmers = ([0-9]+).*/\1/')
                   # querytimekmer=$(echo "scale=10; $querytime / $k_mers * 1000000000" | bc)
@@ -138,7 +138,7 @@ run()
                   
                   echo "$f,$query,$k,$m1,$m2,$t1,$t2,$span,$buildtime,$buildmem",$file_size,$spaceoffsets1,$spaceoffsets2,$spaceht,$spacer1,$spacer2,$spaces1,$spaces2,$density_r1,$density_r2,$density_s1,$density_s2,$density_ht,$no_minimiser1,$no_minimiser2,$no_distinct_minimiser1,$no_distinct_minimiser2,$spacetotal,$spacetotalreal,$querytimekmer,$querymem,$extensions,$k_mers",$found" >> "$CSV"
 
-                  # rm -f time.txt
+                  # rm -f time2.txt
                   # rm -f prog_out2.txt
               done
               
