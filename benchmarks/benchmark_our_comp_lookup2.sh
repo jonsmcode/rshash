@@ -1,6 +1,6 @@
 #!/bin/bash
 
-PROGRAM="../build/source/lookup2"
+PROGRAM="../build/source/lookup2compsimd"
 
 today=$(date +%Y-%m-%d-%H-%M-%S)
 
@@ -23,9 +23,8 @@ run()
         m=$(echo "l($length)/l(4)" | bc -l)
         m=$(printf "%.0f" "$m")
 
-        # minimisers=( $((m)) $((m))  $((m + 1)) $((m + 3))  $((m + 2)) $((m + 3)) )
-        minimisers=( $((m)) $((m+2)) )
-        thresholds=( 8 32  16 64  32 128 )
+        minimisers=( $((m + 1)) $((m + 2))  $((m + 1)) $((m + 3))  $((m + 2)) $((m + 3))  $((m + 2)) $((m + 4)) )
+        thresholds=( 8 16  16 64  32 128 )
         spans=( $((k - m + 1)) )
         
         for ((i=0; i<${#minimisers[@]}; i+=2)); do
@@ -42,7 +41,7 @@ run()
               echo $f >> $LOG
               echo $m1 $t1 $m2 $t2 >> $LOG
 
-              /usr/bin/time -l -o time.txt $PROGRAM build -i "$f" -d "${BASENAME}.complookup2.dict" -k $k --m1 $m1 --t1 $t1 --m2 $m2 --t2 $t2 -s $span -c > comp2_out.txt 2>&1
+              /usr/bin/time -l -o time.txt $PROGRAM build -i "$f" -d "${BASENAME}.complookup2.dict" -k $k --m1 $m1 --t1 $t1 --m2 $m2 --t2 $t2 -s $span > comp2_out.txt 2>&1
 
               cat comp2_out.txt >> $LOG
 
@@ -90,7 +89,7 @@ run()
                   echo $f >> $LOG
                   echo $query >> $LOG
                   echo $query
-                  /usr/bin/time -l -o time.txt $PROGRAM query -d "${BASENAME}.complookup2.dict" -q $query -c > comp2_out.txt 2>&1
+                  /usr/bin/time -l -o time.txt $PROGRAM query -d "${BASENAME}.complookup2.dict" -q $query > comp2_out.txt 2>&1
 
                   cat comp2_out.txt >> $LOG
                   
@@ -125,7 +124,7 @@ run()
                   echo $f >> $LOG
                   echo $query >> $LOG
                   echo $query
-                  /usr/bin/time -l -o time.txt $PROGRAM query -d "${BASENAME}.complookup2.dict" -q $query -c > comp2_out.txt 2>&1
+                  /usr/bin/time -l -o time.txt $PROGRAM query -d "${BASENAME}.complookup2.dict" -q $query > comp2_out.txt 2>&1
 
                   cat comp2_out.txt >> $LOG
                   
