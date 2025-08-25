@@ -16,6 +16,12 @@ target_link_libraries (lookup2 PRIVATE seqan3::seqan3 sharg::sharg)
 #target_include_directories(lookup2simd PRIVATE ${CMAKE_SOURCE_DIR}/gtl)
 #target_link_libraries (lookup2simd PRIVATE seqan3::seqan3 sharg::sharg)
 
+#add_executable (lookup2compsimd lookup_rsindex2_comp_simd.cpp rsindex2_comp2_simd.cpp)
+#target_compile_options(lookup2compsimd PRIVATE -mavx512f -mavx512bw -march=native)
+#target_include_directories(lookup2compsimd PRIVATE ${CMAKE_SOURCE_DIR}/sux)
+#target_include_directories(lookup2compsimd PRIVATE ${CMAKE_SOURCE_DIR}/gtl)
+#target_link_libraries (lookup2compsimd PRIVATE seqan3::seqan3 sharg::sharg)
+
 add_executable (lookup3 lookup_rsindex3.cpp rsindex3.cpp rsindex3_comp.cpp)
 target_include_directories(lookup3 PRIVATE ${CMAKE_SOURCE_DIR}/sux)
 target_include_directories(lookup3 PRIVATE ${CMAKE_SOURCE_DIR}/gtl)
