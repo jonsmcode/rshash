@@ -24,7 +24,7 @@ run()
         m=$(printf "%.0f" "$m")
 
         minimisers=( $((m + 2)) $((m + 4)) $((m + 4))  $((m + 3)) $((m + 4)) $((m + 4))  $((m + 4)) $((m + 4)) $((m + 4)) )
-        thresholds=( 8 16 64  16 32 128  32 64 512 )
+        thresholds=( 5 20 100  10 50 200  10 100 1000 )
         spans=( $((k - m + 1)) )
 
         for ((i=0; i<${#minimisers[@]}; i+=3)); do
