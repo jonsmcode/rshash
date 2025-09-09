@@ -71,7 +71,7 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
     uint8_t* count1tmp = new uint8_t[c1tmp];
     std::memset(count1tmp, 0, c1tmp*sizeof(uint8_t));
 
-    uint64_t kmers = 0;
+    kmers = 0;
     uint64_t n = 0;
     for(auto & sequence : input) {
         for(auto && minimiser : sequence | view1) {
@@ -537,6 +537,136 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
     return 0;
 }
 
+size_t RSIndexComp::kmerid_to_offset(const size_t kmer_id)
+{
+    // todo: BS
+    // todo: check uint64_t select(const uint64_t rank, uint64_t *const next)
+    size_t endpoint = 0;
+    size_t next_endpoint = endpoints.select(endpoints.rank(1));
+    size_t kmers_unitig = next_endpoint - k + 1;
+    size_t kmer_counter = kmers_unitig;
+    size_t offset_unitig = kmer_id;
+
+    while(kmer_counter <= kmer_id) {
+        offset_unitig -= kmers_unitig;
+        endpoint = next_endpoint;
+        next_endpoint = endpoints.select(endpoints.rank(next_endpoint+1));
+        kmers_unitig = next_endpoint - endpoint - k + 1;
+        kmer_counter += kmers_unitig;
+    }
+
+    // std::cout << kmer_id << ' '  << kmer_counter << ' ' << kmer_counter - kmer_id << ' ' << endpoint << ' ' << next_endpoint-endpoint << "\n";
+    // std::cout << endpoint + offset_unitig << '\n';
+
+    return endpoint + offset_unitig;
+}
+
+
+uint64_t RSIndexComp::access(const size_t kmer_id)
+{
+    size_t offset = kmerid_to_offset(kmer_id);
+
+    uint64_t kmer = 0;
+    for (size_t i=offset; i < offset+k; i++) {
+        uint64_t const new_rank = seqan3::to_rank(text[i]);
+        kmer <<= 2;
+        kmer |= new_rank;
+    }
+
+    return kmer;
+}
+
+uint64_t RSIndexComp::access(const uint64_t unitig_id, const size_t offset)
+{
+    size_t offset_text = endpoints.select(unitig_id) + offset;
+
+    uint64_t kmer = 0;
+    for (size_t i=offset_text; i < offset_text+k; i++) {
+        uint64_t const new_rank = seqan3::to_rank(text[i]);
+        kmer <<= 2;
+        kmer |= new_rank;
+    }
+
+    return kmer;
+}
+
+
+template<int level>
+bool inline RSIndexComp::check(const size_t p, const size_t q, const uint64_t mask,
+    const uint64_t kmer, const uint64_t kmer_rc)
+{
+    for(size_t i = 0; i < q-p; i++) {
+        uint64_t hash = 0;
+        size_t o;
+        if constexpr (level == 1)
+            o = offsets1[p+i];
+        if constexpr (level == 2)
+            o = offsets2[p+i];
+        if constexpr (level == 3)
+            o = offsets3[p+i];
+        for (size_t j=o; j < o+k; j++) {
+            uint64_t const new_rank = seqan3::to_rank(text[j]);
+            hash <<= 2;
+            hash |= new_rank;
+        }
+        if(hash == kmer || hash == kmer_rc)
+            return true;
+        size_t next_endpoint = endpoints.select(endpoints.rank(o+1));
+        size_t e = o+k+span;
+        if(e > next_endpoint)
+            e = next_endpoint;
+        for(size_t j=o+k; j < e; j++) {
+            uint64_t const new_rank = seqan3::to_rank(text[j]);
+            hash <<= 2;
+            hash |= new_rank;
+            hash &= mask;
+            if(hash == kmer || hash == kmer_rc)
+                return true;
+        }
+    }
+
+    return false;
+}
+
+
+uint64_t RSIndexComp::lookup(const std::vector<uint64_t> &kmers)
+{
+    const uint64_t mask = compute_mask(2u * k);
+    srindex::minimizers::Three_minimisers_hash minimisers = srindex::minimizers::Three_minimisers_hash(k, m1, m2, m3, seed1, seed2, seed3);
+    uint64_t occurences = 0;
+
+    for(uint64_t kmer : kmers)
+    {
+        minimisers.compute(kmer);
+
+        if(r1[minimisers.minimiser1]) {
+            size_t minimizer_id = r1_rank(minimisers.minimiser1);
+            size_t p = s1_select.select(minimizer_id);
+            size_t q = s1_select.select(minimizer_id+1);
+
+            occurences += check<1>(p, q, mask, minimisers.window, minimisers.window_rev);
+        }
+        else if(r2[minimisers.minimiser2]) {
+            size_t minimizer_id = r2_rank(minimisers.minimiser2);
+            size_t p = s2_select.select(minimizer_id);
+            size_t q = s2_select.select(minimizer_id+1);
+
+            occurences += check<2>(p, q, mask, minimisers.window, minimisers.window_rev);
+        }
+        else if(r3[minimisers.minimiser3]) {
+            size_t minimizer_id = r3_rank(minimisers.minimiser3);
+            size_t p = s3_select.select(minimizer_id);
+            size_t q = s3_select.select(minimizer_id+1);
+
+            occurences += check<3>(p, q, mask, minimisers.window, minimisers.window_rev);
+        }
+        else
+            occurences += hashmap.contains(std::min<uint64_t>(minimisers.window, minimisers.window_rev));
+    }
+
+    return occurences;
+}
+
 
 template<int level>
 inline void RSIndexComp::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q)
@@ -610,7 +740,7 @@ inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query, uint64_t
 }
 
 
-inline bool lookup(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward, uint64_t &extensions)
+inline bool streaming_lookup(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward, uint64_t &extensions)
 {
     if(extend(array, query, queryrc, last_found, forward)) {
         extensions++;
@@ -619,7 +749,6 @@ inline bool lookup(std::vector<uint64_t> &array, uint64_t query, uint64_t queryr
     else
         return lookup_serial(array, query, queryrc, last_found, forward);
 }
-
 
 uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query, uint64_t &extensions)
 {
@@ -641,7 +770,7 @@ uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query, ui
     for(auto && minimisers : query | view)
     {
         if(minimisers.minimiser1_value == current_minimiser1)
-            occurences += lookup(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1, forward, extensions);
+            occurences += streaming_lookup(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1, forward, extensions);
         else if(r1[minimisers.minimiser1_value]) {
             size_t minimizer_id = r1_rank(minimisers.minimiser1_value);
             size_t p = s1_select.select(minimizer_id);
@@ -655,7 +784,7 @@ uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query, ui
             current_minimiser1 = minimisers.minimiser1_value;
         }
         else if(minimisers.minimiser2_value == current_minimiser2)
-            occurences += lookup(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2, forward, extensions);
+            occurences += streaming_lookup(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2, forward, extensions);
         else if(r2[minimisers.minimiser2_value]) {
             size_t minimizer_id = r2_rank(minimisers.minimiser2_value);
             size_t p = s2_select.select(minimizer_id);
@@ -669,7 +798,7 @@ uint64_t RSIndexComp::streaming_query(const std::vector<seqan3::dna4> &query, ui
             current_minimiser2 = minimisers.minimiser2_value;
         }
         else if(minimisers.minimiser3_value == current_minimiser3)
-            occurences += lookup(buffer3, minimisers.window_value, minimisers.window_value_rev, last_found3, forward, extensions);
+            occurences += streaming_lookup(buffer3, minimisers.window_value, minimisers.window_value_rev, last_found3, forward, extensions);
         else if(r3[minimisers.minimiser3_value]) {
             size_t minimizer_id = r3_rank(minimisers.minimiser3_value);
             size_t p = s3_select.select(minimizer_id);
@@ -697,6 +826,7 @@ int RSIndexComp::save(const std::filesystem::path &filepath) {
     seqan3::contrib::sdsl::serialize(this->m2, out);
     seqan3::contrib::sdsl::serialize(this->m3, out);
     seqan3::contrib::sdsl::serialize(this->span, out);
+    seqan3::contrib::sdsl::serialize(this->kmers, out);
     seqan3::contrib::sdsl::serialize(r1, out);
     seqan3::contrib::sdsl::serialize(r2, out);
     seqan3::contrib::sdsl::serialize(r3, out);
@@ -711,7 +841,6 @@ int RSIndexComp::save(const std::filesystem::path &filepath) {
     cereal::BinaryOutputArchive archive(out);
     archive(this->text);
     archive(this->hashmap);
-    // essentials::save(pthash, filepath.c_str());
 
     out.close();
     return 0;
@@ -724,6 +853,7 @@ int RSIndexComp::load(const std::filesystem::path &filepath) {
     seqan3::contrib::sdsl::load(this->m2, in);
     seqan3::contrib::sdsl::load(this->m3, in);
     seqan3::contrib::sdsl::load(this->span, in);
+    seqan3::contrib::sdsl::load(this->kmers, in);
     seqan3::contrib::sdsl::load(r1, in);
     seqan3::contrib::sdsl::load(r2, in);
     seqan3::contrib::sdsl::load(r3, in);
@@ -739,7 +869,6 @@ int RSIndexComp::load(const std::filesystem::path &filepath) {
     cereal::BinaryInputArchive archive(in);
     archive(this->text);
     archive(this->hashmap);
-    // essentials::load(pthash, filepath.c_str());
 
     in.close();
 

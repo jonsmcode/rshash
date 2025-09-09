@@ -15,8 +15,6 @@ const uint64_t seed1 = 0x8F'3F'73'B5'CF'1C'9A'DE;
 const uint64_t seed2 = 0x29'6D'BD'33'32'56'8C'64;
 const uint64_t seed3 = 0xE5'9A'38'5F'03'76'C9'F6;
 
-// const size_t span = 16;
-
 
 class RSIndex
 {
@@ -67,6 +65,7 @@ private:
     uint8_t k, m1, m2, m3, m_thres1, m_thres2;
     uint16_t m_thres3;
     size_t span;
+    size_t kmers;
     bit_vector r1;
     rank_support_v<1> r1_rank;
     sd_vector<> r2;
@@ -83,10 +82,12 @@ private:
     int_vector<0> offsets2;
     int_vector<0> offsets3;
     gtl::flat_hash_set<uint64_t> hashmap;
-    // pthash::phobic<pthash::xxhash128> pthash;
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> endpoints;
     bit_vector sequences;
     seqan3::bitpacked_sequence<seqan3::dna4> text;
+    size_t kmerid_to_offset(const size_t);
+    template<int level>
+    bool inline check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t);
     template<int level>
     void fill_buffer(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
 
@@ -96,7 +97,14 @@ public:
     RSIndexComp(uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3,
         uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3, size_t const span);
     uint8_t getk() { return k; }
+    size_t getkmers() { return kmers; }
+    size_t gettextlength() { return text.size(); }
+    uint64_t number_unitigs() { return endpoints.rank(endpoints.size()); }
+    size_t unitig_size(uint64_t unitig_id) { return endpoints.select(unitig_id+1) - endpoints.select(unitig_id) - k + 1; }
     int build(const std::vector<std::vector<seqan3::dna4>>&);
+    uint64_t access(const size_t);
+    uint64_t access(const uint64_t, const size_t);
+    uint64_t lookup(const std::vector<uint64_t>&);
     uint64_t streaming_query(const std::vector<seqan3::dna4>&, uint64_t&);
     uint64_t streaming_query(const std::vector<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
     int save(const std::filesystem::path&);
