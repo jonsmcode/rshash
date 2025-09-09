@@ -22,7 +22,7 @@ run()
           length=$(python3 -c "import gzip; print(sum(len(line.strip()) for line in gzip.open('$f') if not line.startswith(b'>')))")
 
           ms=()
-          for ((i=3; i>=0; i--)); do
+          for ((i=4; i>=1; i--)); do
               m=$(echo "l($length)/l(4)+$i" | bc -l)
               m=$(printf "%.0f" "$m")
               ms+=("$m")
@@ -56,7 +56,7 @@ run()
                 poslookuptime=$(grep '^avg_nanosec_per_positive_lookup ' sshash_out.txt | cut -d' ' -f2)
                 neglookuptime=$(grep '^avg_nanosec_per_negative_lookup ' sshash_out.txt | cut -d' ' -f2)
                     
-                echo $f,$k,$m,$buildtime,$buildmem,$file_size,$space_o,$space_m,$bits_key,$num_super_kmers,$space,$neglookuptime,$poslookuptime >> "$CSV"
+                echo "$f,$k,$m,$buildtime,$buildmem,$file_size",$space_o,$space_m,$bits_key,$num_super_kmers,$space,$neglookuptime,$poslookuptime >> "$CSV"
 
 
                 echo $BASENAME
@@ -86,7 +86,7 @@ run()
                 poslookuptime=$(grep '^avg_nanosec_per_positive_lookup ' sshash_out.txt | cut -d' ' -f2)
                 neglookuptime=$(grep '^avg_nanosec_per_negative_lookup ' sshash_out.txt | cut -d' ' -f2)
                     
-                echo $f,$k,$m,$buildtime,$buildmem,$file_size,$space_o,$space_m,$bits_key,$num_super_kmers,$space,$neglookuptime,$poslookuptime >> "$CSV"
+                echo "$f,$k,$m,$buildtime,$buildmem",$file_size,$space_o,$space_m,$bits_key,$num_super_kmers,$space,$neglookuptime,$poslookuptime >> "$CSV"
 
           done
 
