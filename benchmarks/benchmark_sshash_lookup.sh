@@ -83,8 +83,11 @@ run()
 
                 cat sshash_out.txt >> $LOG
 
-                poslookuptime=$(grep 'avg_nanosec_per_positive_lookup' sshash_out.txt | awk -F'/' '{print $4}' | awk '{print $1}')
-                neglookuptime=$(grep 'avg_nanosec_per_negative_lookup' sshash_out.txt | awk -F'/' '{print $4}' | awk '{print $1}')
+                poslookuptime=$(grep '^avg_nanosec_per_positive_lookup ' sshash_out.txt | cut -d' ' -f2)
+                neglookuptime=$(grep '^avg_nanosec_per_negative_lookup ' sshash_out.txt | cut -d' ' -f2)
+
+                # poslookuptime=$(grep 'avg_nanosec_per_positive_lookup' sshash_out.txt | awk -F'/' '{print $4}' | awk '{print $1}')
+                # neglookuptime=$(grep 'avg_nanosec_per_negative_lookup' sshash_out.txt | awk -F'/' '{print $4}' | awk '{print $1}')
                     
                 echo "$f,$k,$m,$buildtime,$buildmem",$file_size,$space_o,$space_m,$bits_key,$num_super_kmers,$space,$neglookuptime,$poslookuptime >> "$CSV"
 
