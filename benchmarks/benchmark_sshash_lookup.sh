@@ -67,6 +67,15 @@ run()
 
                 cat sshash_out.txt >> $LOG
 
+                file_size=$(stat -c%z "${BASENAME}.index")
+                buildtime=$(grep "User time" timess.txt | awk -F': ' '{print $2}')
+                buildmem=$(grep "Maximum resident set size" timess.txt | awk -F': ' '{print $2}')
+                num_super_kmers=$(grep "^num_super_kmers" sshash_out.txt | awk '{print $2}')
+                space=$(grep "total:" sshash_out.txt | sed -E 's/^ *total: *([0-9.eE+-]+).*/\1/')
+                space_o=$(grep "offsets:" sshash_out.txt | sed -E 's/^ *offsets: *([0-9.eE+-]+).*/\1/')
+                space_m=$(grep "minimizers:" sshash_out.txt | sed -E 's/^ *minimizers: *([0-9.eE+-]+).*/\1/')
+                bits_key=$(awk '/minimizers:/ {for(i=1;i<=NF;i++) if($i ~ /\[bits\/key\]/) print $(i-1)}' sshash_out.txt | tr -d '(')
+
                 parent_dir=$(dirname "$f")
                 file_name=$(basename "$f")
 
@@ -76,9 +85,6 @@ run()
 
                 poslookuptime=$(grep '^avg_nanosec_per_positive_lookup ' sshash_out.txt | cut -d' ' -f2)
                 neglookuptime=$(grep '^avg_nanosec_per_negative_lookup ' sshash_out.txt | cut -d' ' -f2)
-
-                # poslookuptime=$(grep 'avg_nanosec_per_positive_lookup' sshash_out.txt | awk -F'/' '{print $4}' | awk '{print $1}')
-                # neglookuptime=$(grep 'avg_nanosec_per_negative_lookup' sshash_out.txt | awk -F'/' '{print $4}' | awk '{print $1}')
                     
                 echo $f,$k,$m,$buildtime,$buildmem,$file_size,$space_o,$space_m,$bits_key,$num_super_kmers,$space,$neglookuptime,$poslookuptime >> "$CSV"
 
@@ -93,6 +99,6 @@ run()
 
 for data in $(find $DIR -mindepth 0 -maxdepth 0 -type d); do
   FILENAME=$(basename $data)
-  echo "textfile,k,m,buildtime[s],buildmem[B],indexsize[B], space offsets[bits/kmer], space minimizers[bits/kmer], bits/key, no super kmers, space[bits/kmer], neglookuptime[ns/kmer],poslookuptime[ns/kmer]" > "$CSV"
+  echo "textfile,k,m,buildtime[s],buildmem[B],indexsize[B], space offsets[bits/kmer], space minimizers[bits/kmer], bits/key, no super kmers, space[bits/kmer], neglookuptime[ns/kmer], poslookuptime[ns/kmer]" > "$CSV"
   run $data/
 done
