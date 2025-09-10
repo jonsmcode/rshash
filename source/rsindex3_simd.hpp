@@ -101,6 +101,7 @@ public:
     size_t unitig_size(uint64_t unitig_id) { return endpoints.select(unitig_id+1) - endpoints.select(unitig_id) - k + 1; }
     std::vector<uint64_t> rand_text_kmers(const uint64_t);
     uint64_t access(const uint64_t, const size_t);
+    uint64_t lookup(const std::vector<uint64_t>&);
     int build(const std::vector<std::vector<seqan3::dna4>>&);
     uint64_t streaming_query(const std::vector<seqan3::dna4>&, uint64_t&);
     uint64_t streaming_query(const std::vector<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
