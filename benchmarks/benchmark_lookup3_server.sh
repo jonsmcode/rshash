@@ -39,7 +39,7 @@ run()
           echo $f
           echo $m1 $m2 $m3 $t1 $t2 $t3 $span
 
-          /usr/bin/time -l -o time.txt $RSHASH build -i "$f" -d "${BASENAME}.dict" -k $k --m1 $m1 --t1 $t1 --m2 $m2 --t2 $t2 --m3 $m3 --t3 $t3 -s $span -c > out.txt 2>&1
+          /usr/bin/time -v -o time.txt $RSHASH build -i "$f" -d "${BASENAME}.dict" -k $k --m1 $m1 --t1 $t1 --m2 $m2 --t2 $t2 --m3 $m3 --t3 $t3 -s $span -c > out.txt 2>&1
 
           cat out.txt >> $LOG
 
@@ -77,7 +77,7 @@ run()
           parent_dir=$(dirname "$f")
           file_name=$(basename "$f")
 
-          /usr/bin/time -l -o time.txt $RSHASH lookup -d "${BASENAME}.dict" -c > out.txt 2>&1
+          /usr/bin/time -v -o time.txt $RSHASH lookup -d "${BASENAME}.dict" -c > out.txt 2>&1
 
           cat out.txt >> $LOG
           
