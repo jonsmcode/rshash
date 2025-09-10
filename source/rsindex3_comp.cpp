@@ -628,6 +628,16 @@ bool inline RSIndexComp::check(const size_t p, const size_t q, const uint64_t ma
     return false;
 }
 
+seqan3::dna4_vector kmer_to_string(uint64_t kmer, size_t const kmer_size)
+    {
+        seqan3::dna4_vector result(kmer_size);
+        for (size_t i = 0; i < kmer_size; ++i)
+        {
+            result[kmer_size - 1 - i].assign_rank(kmer & 0b11);
+            kmer >>= 2;
+        }
+        return result;
+    }
 
 uint64_t RSIndexComp::lookup(const std::vector<uint64_t> &kmers)
 {
@@ -671,6 +681,7 @@ uint64_t RSIndexComp::lookup(const std::vector<uint64_t> &kmers)
 template<int level>
 inline void RSIndexComp::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q)
 {
+    // todo: reserve buffer for (q-p)*span uint64_t
     for(size_t i = 0; i < q-p; i++) {
         uint64_t hash = 0;
         size_t o;

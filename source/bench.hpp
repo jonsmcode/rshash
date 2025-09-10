@@ -33,12 +33,8 @@ std::vector<uint64_t> text_kmers(RSIndexComp &index) {
     for (uint64_t i = 0; i < n; ++i) {
         const uint64_t unitig_id = distr(m_rand) % no_unitigs;
         const uint64_t offset = distr(m_rand) % index.unitig_size(unitig_id);
-        // const uint64_t offset = 0;
-        // std::cout << "endpoint: " << endpoint << " next endpoint: " << next_endpoint << " unitig_size: " << next_endpoint-endpoint-index.getk()+1 << " offset: " << offset << '\n';
-        // std::cout << "unitig_id: " << unitig_id << " unitig_size: " << index.unitig_size(unitig_id) << " offset: " << offset << '\n';
         const uint64_t kmer = index.access(unitig_id, offset);
 
-        /* transform 50% of the kmers into their reverse complements */
         if ((i & 1) == 0)
             kmers.push_back(crc(kmer, k));
         else

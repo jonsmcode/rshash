@@ -1249,7 +1249,7 @@ class Three_minimisers_hash
             }
 
             minimiser2 = std::min<uint64_t>(window & kmer_mask2, window_rev >> 2*(window_size - minimiser_size2)) ^ seed2;
-            for (uint8_t i = 1; i < window_size-minimiser_size2; ++i) {
+            for (uint8_t i = 1; i < window_size-minimiser_size2+1; ++i) {
                 const uint64_t kmer_value2 = (window >> 2*i) & kmer_mask2;
                 const uint64_t kmer_value_rev2 = (window_rev >> 2*(window_size - minimiser_size2 - i)) & kmer_mask2;
                 const uint64_t canonical_kmer2 = std::min<uint64_t>(kmer_value2, kmer_value_rev2);
@@ -1258,7 +1258,7 @@ class Three_minimisers_hash
             }
 
             minimiser3 = std::min<uint64_t>(window & kmer_mask3, window_rev >> 2*(window_size - minimiser_size3)) ^ seed3;
-            for (uint8_t i = 1; i < window_size-minimiser_size3; ++i) {
+            for (uint8_t i = 1; i < window_size-minimiser_size3+1; ++i) {
                 const uint64_t kmer_value3 = (window >> 2*i) & kmer_mask3;
                 const uint64_t kmer_value_rev3 = (window_rev >> 2*(window_size - minimiser_size3 - i)) & kmer_mask3;
                 const uint64_t canonical_kmer3 = std::min<uint64_t>(kmer_value3, kmer_value_rev3);
