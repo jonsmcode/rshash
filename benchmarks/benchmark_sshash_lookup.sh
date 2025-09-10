@@ -16,8 +16,8 @@ run()
   do
     BASENAME=$(echo "$f" | sed 's/\.fa.gz$//')
     k=$(echo "${BASENAME##*k}" | grep -o '[0-9]*')
-    # if [[ "$BASENAME" == *"bacterial"* || "$BASENAME" == *"human"* || "$BASENAME" == *"cod"* || "$BASENAME" == *"kestrel"* ]]; then
-    if [[ "$BASENAME" == *"bacterial"* ]]; then
+    if [[ "$BASENAME" == *"human"* || "$BASENAME" == *"cod"* || "$BASENAME" == *"kestrel"* ]]; then
+    # if [[ "$BASENAME" == *"bacterial"* ]]; then
         if [ "$k" -le 32 ]; then
 
           length=$(python3 -c "import gzip; print(sum(len(line.strip()) for line in gzip.open('$f') if not line.startswith(b'>')))")
