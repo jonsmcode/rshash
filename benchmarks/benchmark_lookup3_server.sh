@@ -1,6 +1,6 @@
 #!/bin/bash
 
-RSHASH="../build/source/lookup3"
+RSHASH="../build/source/lookup3compsimd"
 
 today=$(date +%Y-%m-%d-%H-%M-%S)
 
@@ -27,7 +27,7 @@ run()
         m=$((m + 1))
 
         params=( $((m)) $((m + 2)) $((m + 3)) 64 128 256  $((m + 1)) $((m + 3)) $((m + 3)) 16 32 64 )
-        span=$((k - m + 1))
+        span=$((k - m + 2))
         
         for ((i=0; i<${#params[@]}; i+=6)); do
           m1=${params[i]}
