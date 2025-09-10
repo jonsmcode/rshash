@@ -767,7 +767,7 @@ inline bool lookup_avx512(std::vector<uint64_t> &array, uint64_t query, uint64_t
 }
 
 
-inline bool lookup(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward, uint64_t &extensions)
+inline bool streaming_lookup(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward, uint64_t &extensions)
 {
     if(extend(array, query, queryrc, last_found, forward)) {
         extensions++;
@@ -800,7 +800,7 @@ uint64_t RSIndexComp3::streaming_query(const std::vector<seqan3::dna4> &query, u
     for(auto && minimisers : query | view)
     {
         if(minimisers.minimiser1_value == current_minimiser1)
-            occurences += lookup(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1, forward, extensions);
+            occurences += streaming_lookup(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1, forward, extensions);
         else if(r1[minimisers.minimiser1_value]) {
             size_t minimizer_id = r1_rank(minimisers.minimiser1_value);
             size_t p = s1_select.select(minimizer_id);
@@ -814,7 +814,7 @@ uint64_t RSIndexComp3::streaming_query(const std::vector<seqan3::dna4> &query, u
             current_minimiser1 = minimisers.minimiser1_value;
         }
         else if(minimisers.minimiser2_value == current_minimiser2)
-            occurences += lookup(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2, forward, extensions);
+            occurences += streaming_lookup(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2, forward, extensions);
         else if(r2[minimisers.minimiser2_value]) {
             size_t minimizer_id = r2_rank(minimisers.minimiser2_value);
             size_t p = s2_select.select(minimizer_id);
@@ -828,7 +828,7 @@ uint64_t RSIndexComp3::streaming_query(const std::vector<seqan3::dna4> &query, u
             current_minimiser2 = minimisers.minimiser2_value;
         }
         else if(minimisers.minimiser3_value == current_minimiser3)
-            occurences += lookup(buffer3, minimisers.window_value, minimisers.window_value_rev, last_found3, forward, extensions);
+            occurences += streaming_lookup(buffer3, minimisers.window_value, minimisers.window_value_rev, last_found3, forward, extensions);
         else if(r3[minimisers.minimiser3_value]) {
             size_t minimizer_id = r3_rank(minimisers.minimiser3_value);
             size_t p = s3_select.select(minimizer_id);
