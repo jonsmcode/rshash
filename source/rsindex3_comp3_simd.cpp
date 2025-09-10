@@ -540,104 +540,96 @@ int RSIndexComp3::build(const std::vector<std::vector<seqan3::dna4>> &input)
 }
 
 
-template<int level>
-inline void RSIndexComp3::fill_buffer_avx512(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q)
+
+uint64_t RSIndexComp3::access(const uint64_t unitig_id, const size_t offset)
 {
-    size_t i = 0;
-    for (; i + 8 <= q - p; i += 8) {
-        __m512i hash = _mm512_setzero_si512();
-        size_t o[8];
-        size_t e[8];
+    size_t offset_text = endpoints.select(unitig_id) + offset;
 
-        // Compute offsets and endpoints for each lane
-        for (int lane = 0; lane < 8; ++lane) {
-            if constexpr (level == 1)
-                o[lane] = offsets1[p + i + lane];
-            if constexpr (level == 2)
-                o[lane] = offsets2[p + i + lane];
-            if constexpr (level == 3)
-                o[lane] = offsets3[p + i + lane];
-            size_t next_endpoint = endpoints.select(endpoints.rank(o[lane] + 1));
-            size_t ee = o[lane] + k + span;
-            e[lane] = (ee > next_endpoint) ? next_endpoint : ee;
-        }
-
-        // Compute initial hashes for each lane
-        for (uint64_t j = 0; j < k; ++j) {
-            uint64_t new_rank[8];
-            for (int lane = 0; lane < 8; ++lane) {
-                new_rank[lane] = seqan3::to_rank(text[o[lane] + j]);
-            }
-            __m512i ranks = _mm512_loadu_si512(new_rank);
-            hash = _mm512_slli_epi64(hash, 2);
-            hash = _mm512_or_si512(hash, ranks);
-        }
-
-        // Store initial hashes
-        uint64_t hash_out[8];
-        _mm512_storeu_si512(hash_out, hash);
-        for (int lane = 0; lane < 8; ++lane) {
-            buffer.push_back(hash_out[lane]);
-        }
-
-        // Continue for j = o[x]+k to e[x]
-        __m512i mask_vec = _mm512_set1_epi64(mask);
-        // For each extension step, only process lanes that are still active
-        for (uint64_t ext = 0; ext < span; ++ext) {
-            uint64_t new_rank[8];
-            bool any_active = false;
-            for (int lane = 0; lane < 8; ++lane) {
-                size_t pos = o[lane] + k + ext;
-                if (pos < e[lane]) {
-                    new_rank[lane] = seqan3::to_rank(text[pos]);
-                    any_active = true;
-                } else {
-                    new_rank[lane] = 0; // Will not be pushed
-                }
-            }
-            if (!any_active) break; // All lanes done
-            __m512i ranks = _mm512_loadu_si512(new_rank);
-            hash = _mm512_slli_epi64(hash, 2);
-            hash = _mm512_or_si512(hash, ranks);
-            hash = _mm512_and_si512(hash, mask_vec);
-
-            _mm512_storeu_si512(hash_out, hash);
-            for (int lane = 0; lane < 8; ++lane) {
-                size_t pos = o[lane] + k + ext;
-                if (pos < e[lane])
-                    buffer.push_back(hash_out[lane]);
-            }
-        }
+    uint64_t kmer = 0;
+    for (size_t i=offset_text; i < offset_text+k; i++) {
+        uint64_t const new_rank = seqan3::to_rank(text[i]);
+        kmer <<= 2;
+        kmer |= new_rank;
     }
 
-    // Scalar fallback for remaining elements
-    for (; i < q - p; ++i) {
+    return kmer;
+}
+
+
+template<int level>
+inline bool RSIndexComp3::check(const size_t p, const size_t q, const uint64_t mask,
+    const uint64_t kmer, const uint64_t kmer_rc)
+{
+    for(size_t i = 0; i < q-p; i++) {
         uint64_t hash = 0;
         size_t o;
         if constexpr (level == 1)
-            o = offsets1[p + i];
+            o = offsets1[p+i];
         if constexpr (level == 2)
-            o = offsets2[p + i];
+            o = offsets2[p+i];
         if constexpr (level == 3)
-            o = offsets3[p + i];
-        size_t next_endpoint = endpoints.select(endpoints.rank(o + 1));
-        size_t e = o + k + span;
-        if (e > next_endpoint)
-            e = next_endpoint;
-        for (uint64_t j = o; j < o + k; j++) {
+            o = offsets3[p+i];
+        for (size_t j=o; j < o+k; j++) {
             uint64_t const new_rank = seqan3::to_rank(text[j]);
             hash <<= 2;
             hash |= new_rank;
         }
-        buffer.push_back(hash);
-        for (size_t j = o + k; j < e; j++) {
+        if(hash == kmer || hash == kmer_rc)
+            return true;
+        size_t next_endpoint = endpoints.select(endpoints.rank(o+1));
+        size_t e = o+k+span;
+        if(e > next_endpoint)
+            e = next_endpoint;
+        for(size_t j=o+k; j < e; j++) {
             uint64_t const new_rank = seqan3::to_rank(text[j]);
             hash <<= 2;
             hash |= new_rank;
             hash &= mask;
-            buffer.push_back(hash);
+            if(hash == kmer || hash == kmer_rc)
+                return true;
         }
     }
+
+    return false;
+}
+
+
+uint64_t RSIndexComp3::lookup(const std::vector<uint64_t> &kmers)
+{
+    const uint64_t mask = compute_mask(2u * k);
+    srindex::minimizers::Three_minimisers_hash minimisers = srindex::minimizers::Three_minimisers_hash(k, m1, m2, m3, seed1, seed2, seed3);
+    uint64_t occurences = 0;
+
+    for(uint64_t kmer : kmers)
+    {
+        minimisers.compute(kmer);
+
+        if(r1[minimisers.minimiser1]) {
+            size_t minimizer_id = r1_rank(minimisers.minimiser1);
+            size_t p = s1_select.select(minimizer_id);
+            size_t q = s1_select.select(minimizer_id+1);
+
+            occurences += check<1>(p, q, mask, minimisers.window, minimisers.window_rev);
+        }
+        else if(r2[minimisers.minimiser2]) {
+            size_t minimizer_id = r2_rank(minimisers.minimiser2);
+            size_t p = s2_select.select(minimizer_id);
+            size_t q = s2_select.select(minimizer_id+1);
+
+            occurences += check<2>(p, q, mask, minimisers.window, minimisers.window_rev);
+        }
+        else if(r3[minimisers.minimiser3]) {
+            size_t minimizer_id = r3_rank(minimisers.minimiser3);
+            size_t p = s3_select.select(minimizer_id);
+            size_t q = s3_select.select(minimizer_id+1);
+
+            occurences += check<3>(p, q, mask, minimisers.window, minimisers.window_rev);
+        }
+        else
+            occurences += hashmap.contains(std::min<uint64_t>(minimisers.window, minimisers.window_rev));
+    }
+
+    return occurences;
 }
 
 

@@ -44,6 +44,30 @@ std::vector<uint64_t> text_kmers(RSIndexComp &index) {
     return kmers;
 }
 
+std::vector<uint64_t> text_kmers(RSIndexComp3 &index) {
+    constexpr uint64_t n = 1000000;
+
+    std::uniform_int_distribution<uint32_t> distr;
+    std::mt19937 m_rand(1);
+    std::vector<std::uint64_t> kmers;
+    kmers.reserve(n);
+
+    const uint64_t no_unitigs = index.number_unitigs();
+    const uint64_t k = index.getk();
+    for (uint64_t i = 0; i < n; ++i) {
+        const uint64_t unitig_id = distr(m_rand) % no_unitigs;
+        const uint64_t offset = distr(m_rand) % index.unitig_size(unitig_id);
+        const uint64_t kmer = index.access(unitig_id, offset);
+
+        if ((i & 1) == 0)
+            kmers.push_back(crc(kmer, k));
+        else
+            kmers.push_back(kmer);
+    }
+
+    return kmers;
+}
+
 
 static inline constexpr uint64_t compute_mask(uint64_t const size)
 {

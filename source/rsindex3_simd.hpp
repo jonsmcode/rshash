@@ -87,9 +87,9 @@ private:
     bit_vector sequences;
     seqan3::bitpacked_sequence<seqan3::dna4> text;
     template<int level>
-    void fill_buffer(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
+    inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t);
     template<int level>
-    void fill_buffer_avx512(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
+    inline void fill_buffer(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
 
 
 public:
@@ -97,6 +97,8 @@ public:
     RSIndexComp3(uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3,
         uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3, size_t const span);
     uint8_t getk() { return k; }
+    uint64_t number_unitigs() { return endpoints.rank(endpoints.size()); }
+    uint64_t access(const uint64_t, const size_t);
     int build(const std::vector<std::vector<seqan3::dna4>>&);
     uint64_t streaming_query(const std::vector<seqan3::dna4>&, uint64_t&);
     uint64_t streaming_query(const std::vector<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
