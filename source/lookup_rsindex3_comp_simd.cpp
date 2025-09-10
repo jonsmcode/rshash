@@ -49,6 +49,9 @@ int check_arguments(sharg::parser &parser, cmd_arguments &args) {
         if(!parser.is_option_set('q'))
             throw sharg::user_input_error("provide query file.");
     }
+    else if(args.cmd == "lookup") {
+        
+    }
     else
         throw sharg::user_input_error("illegal command");
     return 0;
