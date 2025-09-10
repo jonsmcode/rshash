@@ -98,6 +98,8 @@ public:
         uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3, size_t const span);
     uint8_t getk() { return k; }
     uint64_t number_unitigs() { return endpoints.rank(endpoints.size()); }
+    size_t unitig_size(uint64_t unitig_id) { return endpoints.select(unitig_id+1) - endpoints.select(unitig_id) - k + 1; }
+    std::vector<uint64_t> rand_text_kmers(const uint64_t);
     uint64_t access(const uint64_t, const size_t);
     int build(const std::vector<std::vector<seqan3::dna4>>&);
     uint64_t streaming_query(const std::vector<seqan3::dna4>&, uint64_t&);

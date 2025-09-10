@@ -155,7 +155,7 @@ int main(int argc, char** argv)
         if(args.c) {
             RSIndexComp index = RSIndexComp();
             index.load(args.d);
-            std::vector<uint64_t> kmers = text_kmers(index);
+            std::vector<uint64_t> kmers = index.rand_text_kmers(1000000);
             std::cout << "bench lookup...\n";
 
             std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
@@ -171,7 +171,7 @@ int main(int argc, char** argv)
             std::cout << "num_positive_kmers = " << found << " (" << (double) found/kmers.size()*100 << "%)\n";
             std::cout << "pos_time_per_kmer = " << ns_per_kmer << '\n';
 
-            kmers = rand_kmers(index.getk());
+            kmers = rand_kmers(1000000, index.getk());
             std::cout << "bench lookup...\n";
 
             t_start = std::chrono::high_resolution_clock::now();

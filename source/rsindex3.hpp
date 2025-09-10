@@ -102,6 +102,7 @@ public:
     uint64_t number_unitigs() { return endpoints.rank(endpoints.size()); }
     size_t unitig_size(uint64_t unitig_id) { return endpoints.select(unitig_id+1) - endpoints.select(unitig_id) - k + 1; }
     int build(const std::vector<std::vector<seqan3::dna4>>&);
+    std::vector<uint64_t> rand_text_kmers(const uint64_t);
     uint64_t access(const size_t);
     uint64_t access(const uint64_t, const size_t);
     uint64_t lookup(const std::vector<uint64_t>&);

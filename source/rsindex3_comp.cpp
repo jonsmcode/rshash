@@ -537,6 +537,49 @@ int RSIndexComp::build(const std::vector<std::vector<seqan3::dna4>> &input)
     return 0;
 }
 
+
+static inline constexpr uint64_t crc(uint64_t x, uint64_t k) {
+    // assert(k <= 32);
+    uint64_t c = ~x;
+
+    /* swap byte order */
+    uint64_t res = __builtin_bswap64(c);
+
+    /* Swap nuc order in bytes */
+    const uint64_t c1 = 0x0f0f0f0f0f0f0f0f;              // ...0000.1111.0000.1111
+    const uint64_t c2 = 0x3333333333333333;              // ...0011.0011.0011.0011
+    res = ((res & c1) << 4) | ((res & (c1 << 4)) >> 4);  // swap 2-nuc order in bytes
+    res = ((res & c2) << 2) | ((res & (c2 << 2)) >> 2);  // swap nuc order in 2-nuc
+
+    /* Realign to the right */
+    res >>= 64 - 2 * k;
+
+    return res;
+}
+
+
+std::vector<uint64_t> RSIndexComp::rand_text_kmers(const uint64_t n) {
+    std::uniform_int_distribution<uint32_t> distr;
+    std::mt19937 m_rand(1);
+    std::vector<std::uint64_t> kmers;
+    kmers.reserve(n);
+
+    const uint64_t no_unitigs = number_unitigs();
+    for (uint64_t i = 0; i < n; ++i) {
+        const uint64_t unitig_id = distr(m_rand) % no_unitigs;
+        const uint64_t offset = distr(m_rand) % unitig_size(unitig_id);
+        const uint64_t kmer = access(unitig_id, offset);
+
+        if ((i & 1) == 0)
+            kmers.push_back(crc(kmer, k));
+        else
+            kmers.push_back(kmer);
+    }
+
+    return kmers;
+}
+
+
 size_t RSIndexComp::kmerid_to_offset(const size_t kmer_id)
 {
     // todo: BS
@@ -628,16 +671,6 @@ bool inline RSIndexComp::check(const size_t p, const size_t q, const uint64_t ma
     return false;
 }
 
-seqan3::dna4_vector kmer_to_string(uint64_t kmer, size_t const kmer_size)
-    {
-        seqan3::dna4_vector result(kmer_size);
-        for (size_t i = 0; i < kmer_size; ++i)
-        {
-            result[kmer_size - 1 - i].assign_rank(kmer & 0b11);
-            kmer >>= 2;
-        }
-        return result;
-    }
 
 uint64_t RSIndexComp::lookup(const std::vector<uint64_t> &kmers)
 {
