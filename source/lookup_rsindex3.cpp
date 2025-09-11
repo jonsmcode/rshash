@@ -183,7 +183,7 @@ int main(int argc, char** argv)
             ns_per_kmer = (double) elapsed.count() / (kmers.size() * rounds);
             std::cout << "==== negative lookup:\n";
             std::cout << "num_kmers = " << kmers.size() << '\n';
-            std::cout << "num_positive_kmers = " << found << " (" << (double) found/kmers.size()*100 << "%)\n";
+            std::cout << "num_negative_kmers = " << found << " (" << (double) found/kmers.size()*100 << "%)\n";
             std::cout << "neg_time_per_kmer = " << ns_per_kmer << '\n';
 
         }
