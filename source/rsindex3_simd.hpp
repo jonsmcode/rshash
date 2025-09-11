@@ -89,6 +89,10 @@ private:
     template<int level>
     inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t);
     template<int level>
+    inline bool simd_check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t);
+    // template<int level>
+    // inline bool simd_check2(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t);
+    template<int level>
     inline void fill_buffer(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
 
 

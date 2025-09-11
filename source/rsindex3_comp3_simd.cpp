@@ -637,6 +637,69 @@ inline bool RSIndexComp3::check(const size_t p, const size_t q, const uint64_t m
 }
 
 
+template<int level>
+inline bool RSIndexComp3::simd_check(const size_t p, const size_t q, const uint64_t mask,
+    const uint64_t kmer, const uint64_t kmer_rc)
+{
+    const size_t n = q-p;
+    
+    for(size_t i = 0; i < n; i += 8) {
+        alignas(64) uint64_t hashes[8] = {};
+        size_t batch = std::min(8, n - i);
+
+        for(size_t b = 0; b < batch; b++) {
+            uint64_t hash = 0;
+            size_t o;
+            if constexpr (level == 1)
+                o = offsets1[p + i + b];
+            if constexpr (level == 2)
+                o = offsets2[p + i + b];
+            if constexpr (level == 3)
+                o = offsets3[p + i + b];
+
+            for (size_t j = o; j < o + k; j++) {
+                const uint64_t new_rank = seqan3::to_rank(text[j]);
+                hash = (hash << 2) | new_rank;
+            }
+
+            hashes[b] = hash;
+        }
+
+        __m512i hash_vec = _mm512_load_epi64(hashes);
+        __m512i kmer_vec = _mm512_set1_epi64(kmer);
+        __m512i kmer_rc_vec = _mm512_set1_epi64(kmer_rc);
+
+        __mmask8 cmp_kmer = _mm512_cmpeq_epi64_mask(hash_vec, kmer_vec);
+        __mmask8 cmp_kmer_rc = _mm512_cmpeq_epi64_mask(hash_vec, kmer_rc_vec);
+
+        if (cmp_kmer || cmp_kmer_rc)
+            return true;
+
+        for (size_t b = 0; b < batch; b++) {
+            size_t o;
+            if constexpr (level == 1)
+                o = offsets1[p + i + b];
+            if constexpr (level == 2)
+                o = offsets2[p + i + b];
+            if constexpr (level == 3)
+                o = offsets3[p + i + b];
+            size_t e = std::min(o + k + span, endpoints.select(endpoints.rank(o + 1)));
+
+            uint64_t hash = hashes[b];
+            for (size_t j = o + k; j < e; j++) {
+                const uint64_t new_rank = seqan3::to_rank(text[j]);
+                hash = ((hash << 2) | new_rank) & mask;
+
+                if (hash == kmer || hash == kmer_rc)
+                    return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+
 uint64_t RSIndexComp3::lookup(const std::vector<uint64_t> &kmers)
 {
     const uint64_t mask = compute_mask(2u * k);
@@ -652,21 +715,21 @@ uint64_t RSIndexComp3::lookup(const std::vector<uint64_t> &kmers)
             size_t p = s1_select.select(minimizer_id);
             size_t q = s1_select.select(minimizer_id+1);
 
-            occurences += check<1>(p, q, mask, minimisers.window, minimisers.window_rev);
+            occurences += simd_check<1>(p, q, mask, minimisers.window, minimisers.window_rev);
         }
         else if(r2[minimisers.minimiser2]) {
             size_t minimizer_id = r2_rank(minimisers.minimiser2);
             size_t p = s2_select.select(minimizer_id);
             size_t q = s2_select.select(minimizer_id+1);
 
-            occurences += check<2>(p, q, mask, minimisers.window, minimisers.window_rev);
+            occurences += simd_check<2>(p, q, mask, minimisers.window, minimisers.window_rev);
         }
         else if(r3[minimisers.minimiser3]) {
             size_t minimizer_id = r3_rank(minimisers.minimiser3);
             size_t p = s3_select.select(minimizer_id);
             size_t q = s3_select.select(minimizer_id+1);
 
-            occurences += check<3>(p, q, mask, minimisers.window, minimisers.window_rev);
+            occurences += simd_check<3>(p, q, mask, minimisers.window, minimisers.window_rev);
         }
         else
             occurences += hashmap.contains(std::min<uint64_t>(minimisers.window, minimisers.window_rev));
