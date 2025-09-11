@@ -641,9 +641,9 @@ template<int level>
 inline bool RSIndexComp3::simd_check(const size_t p, const size_t q, const uint64_t mask,
     const uint64_t kmer, const uint64_t kmer_rc)
 {
-    const size_t n = q-p;
+    const uint64_t n = q-p;
     
-    for(size_t i = 0; i < n; i += 8) {
+    for(uint64_t i = 0; i < n; i += 8) {
         alignas(64) uint64_t hashes[8] = {};
         const uint64_t batch = std::min(8, n - i);
 
