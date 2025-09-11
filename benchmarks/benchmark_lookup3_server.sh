@@ -88,10 +88,10 @@ run()
           querymem=$(grep "Maximum resident set size" time.txt | awk -F': ' '{print $2}')
           postimekmer=$(grep 'pos_time_per_kmer' out.txt | awk -F'=' '{print $2}' | awk '{print $1}' | sed 's/ns//')
           negtimekmer=$(grep 'neg_time_per_kmer' out.txt | awk -F'=' '{print $2}' | awk '{print $1}' | sed 's/ns//')
-          posfound=$(grep 'num_positive_kmers' out.txt | awk -F'=' '{print $2}' | awk '{print $1}' | sed 's/ns//')
-          negfound=$(grep 'num_negative_kmers' out.txt | awk -F'=' '{print $2}' | awk '{print $1}' | sed 's/ns//')
+          posfound=$(grep 'num_positive_kmers' out.txt | awk -F'[ =()]' '{print $3}')
+          negfound=$(grep 'num_negative_kmers' out.txt | awk -F'[ =()]' '{print $3}')
           
-          echo "$f,$k,$m1,$m2,$m3,$t1,$t2,$t3,$span,$buildtime,$buildmem,$file_size,$spaceoffsets1,$spaceoffsets2,$spaceoffsets3,$spaceht,$spacer1,$spacer2,$spacer3,$spaces1,$spaces2,$spaces3,$density_ht,$spacetotal,$spacetotalreal,$negtimekmer,$postimekmer,$querymem" >> "$CSV"
+          echo "$f,$k,$m1,$m2,$m3,$t1,$t2,$t3,$span,$buildtime,$buildmem,$file_size,$spaceoffsets1,$spaceoffsets2,$spaceoffsets3,$spaceht,$spacer1,$spacer2,$spacer3,$spaces1,$spaces2,$spaces3,$density_ht,$spacetotal,$spacetotalreal,$negtimekmer,$postimekmer,$querymem,$posfound,$negfound" >> "$CSV"
             
         done
 
