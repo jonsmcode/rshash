@@ -645,9 +645,9 @@ inline bool RSIndexComp3::simd_check(const size_t p, const size_t q, const uint6
     
     for(size_t i = 0; i < n; i += 8) {
         alignas(64) uint64_t hashes[8] = {};
-        size_t batch = std::min(8, n - i);
+        const uint64_t batch = std::min(8, n - i);
 
-        for(size_t b = 0; b < batch; b++) {
+        for(uint64_t b = 0; b < batch; b++) {
             uint64_t hash = 0;
             size_t o;
             if constexpr (level == 1)
@@ -675,7 +675,7 @@ inline bool RSIndexComp3::simd_check(const size_t p, const size_t q, const uint6
         if (cmp_kmer || cmp_kmer_rc)
             return true;
 
-        for (size_t b = 0; b < batch; b++) {
+        for (uint64_t b = 0; b < batch; b++) {
             size_t o;
             if constexpr (level == 1)
                 o = offsets1[p + i + b];
