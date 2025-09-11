@@ -645,7 +645,7 @@ inline bool RSIndexComp3::simd_check(const size_t p, const size_t q, const uint6
     
     for(uint64_t i = 0; i < n; i += 8) {
         alignas(64) uint64_t hashes[8] = {};
-        const uint64_t batch = std::min(8, n - i);
+        const uint64_t batch = std::min<uint64_t>(8, n - i);
 
         for(uint64_t b = 0; b < batch; b++) {
             uint64_t hash = 0;
