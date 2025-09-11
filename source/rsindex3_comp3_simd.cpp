@@ -641,58 +641,60 @@ template<int level>
 inline bool RSIndexComp3::simd_check(const size_t p, const size_t q, const uint64_t mask,
     const uint64_t kmer, const uint64_t kmer_rc)
 {
-    const uint64_t n = q-p;
-    
-    for(uint64_t i = 0; i < n; i += 8) {
-        alignas(64) uint64_t hashes[8] = {};
-        const uint64_t batch = std::min<uint64_t>(8, n - i);
-
-        for(uint64_t b = 0; b < batch; b++) {
-            uint64_t hash = 0;
-            size_t o;
-            if constexpr (level == 1)
-                o = offsets1[p + i + b];
-            if constexpr (level == 2)
-                o = offsets2[p + i + b];
-            if constexpr (level == 3)
-                o = offsets3[p + i + b];
-
-            for (size_t j = o; j < o + k; j++) {
-                const uint64_t new_rank = seqan3::to_rank(text[j]);
-                hash = (hash << 2) | new_rank;
-            }
-
-            hashes[b] = hash;
-        }
-
-        __m512i hash_vec = _mm512_load_epi64(hashes);
+    for (size_t i = 0; i < q - p; i++)
+    {
         __m512i kmer_vec = _mm512_set1_epi64(kmer);
         __m512i kmer_rc_vec = _mm512_set1_epi64(kmer_rc);
 
-        __mmask8 cmp_kmer = _mm512_cmpeq_epi64_mask(hash_vec, kmer_vec);
-        __mmask8 cmp_kmer_rc = _mm512_cmpeq_epi64_mask(hash_vec, kmer_rc_vec);
+        size_t o;
+        if constexpr (level == 1)
+            o = offsets1[p + i];
+        if constexpr (level == 2)
+            o = offsets2[p + i];
+        if constexpr (level == 3)
+            o = offsets3[p + i];
+        size_t e = std::min(o + k + span, endpoints.select(endpoints.rank(o + 1)));
 
-        if (cmp_kmer || cmp_kmer_rc)
+        size_t span_len = e - (o + k);
+        size_t start_pos = o + k;
+
+        alignas(64) uint64_t hashes[8] = {0};
+        uint64_t hash = 0;
+        for (size_t j = o; j < o + k; ++j)
+            hash = (hash << 2) | seqan3::to_rank(text[j]);
+
+        size_t count = 0;
+        hashes[count++] = hash;
+        for (size_t j = 0; j < std::min<size_t>(7, span_len); ++j) {
+            uint64_t new_rank = seqan3::to_rank(text[start_pos + j]);
+            hash = ((hash << 2) | new_rank) & mask;
+            hashes[count++] = hash;
+        }
+        for (size_t j = count; j < 8; ++j)
+            hashes[j] = 0xFFFFFFFFFFFFFFFFull;
+
+        __m512i hash_vec = _mm512_load_epi64(hashes);
+        __mmask8 match_mask = _mm512_cmpeq_epi64_mask(hash_vec, kmer_vec) |
+                              _mm512_cmpeq_epi64_mask(hash_vec, kmer_rc_vec);
+        if (match_mask)
             return true;
 
-        for (uint64_t b = 0; b < batch; b++) {
-            size_t o;
-            if constexpr (level == 1)
-                o = offsets1[p + i + b];
-            if constexpr (level == 2)
-                o = offsets2[p + i + b];
-            if constexpr (level == 3)
-                o = offsets3[p + i + b];
-            size_t e = std::min(o + k + span, endpoints.select(endpoints.rank(o + 1)));
-
-            uint64_t hash = hashes[b];
-            for (size_t j = o + k; j < e; j++) {
-                const uint64_t new_rank = seqan3::to_rank(text[j]);
+        for (size_t j = 7; j < span_len; j += 8) {
+            size_t chunk = std::min<size_t>(8, span_len - j);
+            for (size_t b = 0; b < chunk; ++b) {
+                uint64_t new_rank = seqan3::to_rank(text[start_pos + j + b]);
                 hash = ((hash << 2) | new_rank) & mask;
-
-                if (hash == kmer || hash == kmer_rc)
-                    return true;
+                hashes[b] = hash;
             }
+            for (size_t b = chunk; b < 8; ++b)
+                hashes[b] = 0xFFFFFFFFFFFFFFFFull;
+
+            hash_vec = _mm512_load_epi64(hashes);
+            match_mask = _mm512_cmpeq_epi64_mask(hash_vec, kmer_vec) |
+                         _mm512_cmpeq_epi64_mask(hash_vec, kmer_rc_vec);
+
+            if (match_mask)
+                return true;
         }
     }
 
