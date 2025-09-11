@@ -28,7 +28,7 @@ run()
 
         # params=( $((m)) $((m + 2)) $((m + 3)) 64 128 256  $((m + 1)) $((m + 3)) $((m + 3)) 16 32 64 )
         # params=( $((m)) $((m + 2)) $((m + 3)) 64 64 64  $((m + 1)) $((m + 3)) $((m + 3)) 64 64 64 )
-        params=( $((m + 3)) $((m + 3)) $((m + 3)) 64 64 64  $((m + 4)) $((m + 4)) $((m + 4)) 64 64 64 )
+        params=( $((m + 3)) $((m + 3)) $((m + 3)) 64 64 64 )
         span=$((k - m - 2))
         
         for ((i=0; i<${#params[@]}; i+=6)); do
@@ -88,6 +88,8 @@ run()
           querymem=$(grep "Maximum resident set size" time.txt | awk -F': ' '{print $2}')
           postimekmer=$(grep 'pos_time_per_kmer' out.txt | awk -F'=' '{print $2}' | awk '{print $1}' | sed 's/ns//')
           negtimekmer=$(grep 'neg_time_per_kmer' out.txt | awk -F'=' '{print $2}' | awk '{print $1}' | sed 's/ns//')
+          posfound=$(grep 'num_positive_kmers' out.txt | awk -F'=' '{print $2}' | awk '{print $1}' | sed 's/ns//')
+          negfound=$(grep 'num_negative_kmers' out.txt | awk -F'=' '{print $2}' | awk '{print $1}' | sed 's/ns//')
           
           echo "$f,$k,$m1,$m2,$m3,$t1,$t2,$t3,$span,$buildtime,$buildmem,$file_size,$spaceoffsets1,$spaceoffsets2,$spaceoffsets3,$spaceht,$spacer1,$spacer2,$spacer3,$spaces1,$spaces2,$spaces3,$density_ht,$spacetotal,$spacetotalreal,$negtimekmer,$postimekmer,$querymem" >> "$CSV"
             
