@@ -88,8 +88,8 @@ run()
           querymem=$(grep "Maximum resident set size" time.txt | awk -F': ' '{print $2}')
           postimekmer=$(grep 'pos_time_per_kmer' out.txt | awk -F'=' '{print $2}' | awk '{print $1}' | sed 's/ns//')
           negtimekmer=$(grep 'neg_time_per_kmer' out.txt | awk -F'=' '{print $2}' | awk '{print $1}' | sed 's/ns//')
-          posfound=$(grep 'num_positive_kmers' out.txt | awk -F'[ =()]' '{print $3}')
-          negfound=$(grep 'num_negative_kmers' out.txt | awk -F'[ =()]' '{print $3}')
+          posfound=$(grep 'num_positive_kmers' out.txt | sed -E 's/.*\(([0-9]+)%\).*/\1/')
+          negfound=$(grep 'num_negative_kmers' out.txt | sed -E 's/.*\(([0-9]+)%\).*/\1/')
           
           echo "$f,$k,$m1,$m2,$m3,$t1,$t2,$t3,$span,$buildtime,$buildmem,$file_size,$spaceoffsets1,$spaceoffsets2,$spaceoffsets3,$spaceht,$spacer1,$spacer2,$spacer3,$spaces1,$spaces2,$spaces3,$density_ht,$spacetotal,$spacetotalreal,$negtimekmer,$postimekmer,$querymem,$posfound,$negfound" >> "$CSV"
             
@@ -104,6 +104,6 @@ run()
 
 for data in $(find $DIR -mindepth 0 -maxdepth 0 -type d); do
   FILENAME=$(basename $data)
-  echo "textfile,k,m1,m2,m3,t1,t2,t3,span,buildtime [s],buildmem [B],indexsize [B],spaceoffsets1 [bits/kmer],spaceoffsets2 [bits/kmer],spaceoffsets3 [bits/kmer],spaceHT [bits/kmer],spaceR1 [bits/kmer],spaceR2 [bits/kmer],spaceR3 [bits/kmer],spaceS1 [bits/kmer],spaceS2 [bits/kmer],spaceS3 [bits/kmer],kmers HT [%],space theo [bits/kmer],space real [bits/kmer],neglookup [ns/kmer],poslookup [ns/kmer],querymem [B]" > "$CSV"
+  echo "textfile,k,m1,m2,m3,t1,t2,t3,span,buildtime [s],buildmem [B],indexsize [B],spaceoffsets1 [bits/kmer],spaceoffsets2 [bits/kmer],spaceoffsets3 [bits/kmer],spaceHT [bits/kmer],spaceR1 [bits/kmer],spaceR2 [bits/kmer],spaceR3 [bits/kmer],spaceS1 [bits/kmer],spaceS2 [bits/kmer],spaceS3 [bits/kmer],kmers HT [%],space theo [bits/kmer],space real [bits/kmer],neglookup [ns/kmer],poslookup [ns/kmer],querymem [B],negfound [%], posfound [%]" > "$CSV"
   run $data/
 done
