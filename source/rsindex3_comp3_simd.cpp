@@ -713,21 +713,21 @@ uint64_t RSIndexComp3::lookup(const std::vector<uint64_t> &kmers)
         minimisers.compute(kmer);
 
         if(r1[minimisers.minimiser1]) {
-            size_t minimizer_id = r1_rank(minimisers.minimiser1);
+            uint64_t minimizer_id = r1_rank(minimisers.minimiser1);
             size_t p = s1_select.select(minimizer_id);
             size_t q = s1_select.select(minimizer_id+1);
 
             occurences += simd_check<1>(p, q, mask, minimisers.window, minimisers.window_rev);
         }
         else if(r2[minimisers.minimiser2]) {
-            size_t minimizer_id = r2_rank(minimisers.minimiser2);
+            uint64_t minimizer_id = r2_rank(minimisers.minimiser2);
             size_t p = s2_select.select(minimizer_id);
             size_t q = s2_select.select(minimizer_id+1);
 
             occurences += simd_check<2>(p, q, mask, minimisers.window, minimisers.window_rev);
         }
         else if(r3[minimisers.minimiser3]) {
-            size_t minimizer_id = r3_rank(minimisers.minimiser3);
+            uint64_t minimizer_id = r3_rank(minimisers.minimiser3);
             size_t p = s3_select.select(minimizer_id);
             size_t q = s3_select.select(minimizer_id+1);
 
@@ -867,7 +867,7 @@ uint64_t RSIndexComp3::streaming_query(const std::vector<seqan3::dna4> &query, u
         if(minimisers.minimiser1_value == current_minimiser1)
             occurences += streaming_lookup(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1, forward, extensions);
         else if(r1[minimisers.minimiser1_value]) {
-            size_t minimizer_id = r1_rank(minimisers.minimiser1_value);
+            uint64_t minimizer_id = r1_rank(minimisers.minimiser1_value);
             size_t p = s1_select.select(minimizer_id);
             size_t q = s1_select.select(minimizer_id+1);
 
@@ -881,7 +881,7 @@ uint64_t RSIndexComp3::streaming_query(const std::vector<seqan3::dna4> &query, u
         else if(minimisers.minimiser2_value == current_minimiser2)
             occurences += streaming_lookup(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2, forward, extensions);
         else if(r2[minimisers.minimiser2_value]) {
-            size_t minimizer_id = r2_rank(minimisers.minimiser2_value);
+            uint64_t minimizer_id = r2_rank(minimisers.minimiser2_value);
             size_t p = s2_select.select(minimizer_id);
             size_t q = s2_select.select(minimizer_id+1);
 
@@ -895,7 +895,7 @@ uint64_t RSIndexComp3::streaming_query(const std::vector<seqan3::dna4> &query, u
         else if(minimisers.minimiser3_value == current_minimiser3)
             occurences += streaming_lookup(buffer3, minimisers.window_value, minimisers.window_value_rev, last_found3, forward, extensions);
         else if(r3[minimisers.minimiser3_value]) {
-            size_t minimizer_id = r3_rank(minimisers.minimiser3_value);
+            uint64_t minimizer_id = r3_rank(minimisers.minimiser3_value);
             size_t p = s3_select.select(minimizer_id);
             size_t q = s3_select.select(minimizer_id+1);
 
