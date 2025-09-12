@@ -717,21 +717,21 @@ uint64_t RSIndexComp3::lookup(const std::vector<uint64_t> &kmers)
             size_t p = s1_select.select(minimizer_id);
             size_t q = s1_select.select(minimizer_id+1);
 
-            occurences += simd_check<1>(p, q, mask, minimisers.window, minimisers.window_rev);
+            occurences += check<1>(p, q, mask, minimisers.window, minimisers.window_rev);
         }
         else if(r2[minimisers.minimiser2]) {
             uint64_t minimizer_id = r2_rank(minimisers.minimiser2);
             size_t p = s2_select.select(minimizer_id);
             size_t q = s2_select.select(minimizer_id+1);
 
-            occurences += simd_check<2>(p, q, mask, minimisers.window, minimisers.window_rev);
+            occurences += check<2>(p, q, mask, minimisers.window, minimisers.window_rev);
         }
         else if(r3[minimisers.minimiser3]) {
             uint64_t minimizer_id = r3_rank(minimisers.minimiser3);
             size_t p = s3_select.select(minimizer_id);
             size_t q = s3_select.select(minimizer_id+1);
 
-            occurences += simd_check<3>(p, q, mask, minimisers.window, minimisers.window_rev);
+            occurences += check<3>(p, q, mask, minimisers.window, minimisers.window_rev);
         }
         else
             occurences += hashmap.contains(std::min<uint64_t>(minimisers.window, minimisers.window_rev));
