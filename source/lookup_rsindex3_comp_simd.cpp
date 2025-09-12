@@ -131,7 +131,7 @@ int main(int argc, char** argv)
 
         RSIndexComp3 index = RSIndexComp3();
         index.load(args.d);
-        std::vector<uint64_t> kmers = index.rand_text_kmers(100000000);
+        std::vector<uint64_t> kmers = index.rand_text_kmers(1000000);
         std::cout << "bench lookup...\n";
 
         std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
