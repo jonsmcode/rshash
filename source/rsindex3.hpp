@@ -78,9 +78,15 @@ private:
     sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s2_select;
     bit_vector s3;
     sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s3_select;
-    int_vector<0> offsets1;
-    int_vector<0> offsets2;
-    int_vector<0> offsets3;
+    // compact_vector offsets1;
+    // compact_vector offsets2;
+    // compact_vector offsets3;
+    // int_vector<0> offsets1;
+    // int_vector<0> offsets2;
+    // int_vector<0> offsets3;
+    int_vector<32> offsets1;
+    int_vector<32> offsets2;
+    int_vector<32> offsets3;
     gtl::flat_hash_set<uint64_t> hashmap;
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> endpoints;
     bit_vector sequences;

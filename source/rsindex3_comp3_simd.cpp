@@ -130,7 +130,7 @@ int RSIndexComp3::build(const std::vector<std::vector<seqan3::dna4>> &input)
 
     std::cout << "filling offsets_1...\n";
     const size_t offset_width = std::bit_width(N);
-    offsets1.width(offset_width);
+    // offsets1.width(offset_width);
     offsets1.resize(n1);
 
     std::memset(count1, 0, c1*sizeof(uint8_t));
@@ -270,7 +270,7 @@ int RSIndexComp3::build(const std::vector<std::vector<seqan3::dna4>> &input)
     s2_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s2.data()), n2+1, 3);
 
     std::cout << "filling offsets_2...\n";
-    offsets2.width(offset_width);
+    // offsets2.width(offset_width);
     offsets2.resize(n2);
     std::memset(count2, 0, c2*sizeof(uint8_t));
 
@@ -411,7 +411,7 @@ int RSIndexComp3::build(const std::vector<std::vector<seqan3::dna4>> &input)
     s3_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s3.data()), n3+1, 3);
 
     std::cout << "filling offsets_3...\n";
-    offsets3.width(offset_width);
+    // offsets3.width(offset_width);
     offsets3.resize(n3);
     std::memset(count3, 0, c3*sizeof(uint16_t));
 
