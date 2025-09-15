@@ -146,13 +146,13 @@ int RSIndexComp3::build(const std::vector<std::vector<seqan3::dna4>> &input)
                 size_t o = minimiser.occurrences;
                 uint64_t j = 0;
                 while(o > span) {
-                    offsets1[s + count1[i]] = length + minimiser.range_position + j*span;
+                    // offsets1[s + count1[i]] = length + minimiser.range_position + j*span;
                     b1.set(s + count1[i], length + minimiser.range_position + j*span);
                     count1[i]++;
                     o -= span;
                     j++;
                 }
-                offsets1[s + count1[i]] = length + minimiser.range_position + j*span;
+                // offsets1[s + count1[i]] = length + minimiser.range_position + j*span;
                 b1.set(s + count1[i], length + minimiser.range_position + j*span);
                 count1[i]++;
             }
