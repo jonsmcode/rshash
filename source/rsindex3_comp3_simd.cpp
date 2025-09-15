@@ -131,7 +131,9 @@ int RSIndexComp3::build(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "filling offsets_1...\n";
     const size_t offset_width = std::bit_width(N);
     // offsets1.width(offset_width);
-    offsets1.resize(n1);
+    // offsets1.resize(n1);
+    pthash::compact_vector::builder b1;
+    b1.resize(n1, offset_width);
 
     std::memset(count1, 0, c1*sizeof(uint8_t));
 
@@ -145,16 +147,19 @@ int RSIndexComp3::build(const std::vector<std::vector<seqan3::dna4>> &input)
                 uint64_t j = 0;
                 while(o > span) {
                     offsets1[s + count1[i]] = length + minimiser.range_position + j*span;
+                    b1.set(s + count1[i], length + minimiser.range_position + j*span);
                     count1[i]++;
                     o -= span;
                     j++;
                 }
                 offsets1[s + count1[i]] = length + minimiser.range_position + j*span;
+                b1.set(s + count1[i], length + minimiser.range_position + j*span);
                 count1[i]++;
             }
         }
         length += sequence.size();
     }
+    b1.build(offsets1);
 
     delete[] count1;
 
@@ -271,7 +276,9 @@ int RSIndexComp3::build(const std::vector<std::vector<seqan3::dna4>> &input)
 
     std::cout << "filling offsets_2...\n";
     // offsets2.width(offset_width);
-    offsets2.resize(n2);
+    // offsets2.resize(n2);
+    pthash::compact_vector::builder b2;
+    b2.resize(n2, offset_width);
     std::memset(count2, 0, c2*sizeof(uint8_t));
 
     uint64_t skmer_idx = 0;
@@ -283,17 +290,20 @@ int RSIndexComp3::build(const std::vector<std::vector<seqan3::dna4>> &input)
                 size_t o = minimiser.occurrences;
                 uint64_t j = 0;
                 while(o > span) {
-                    offsets2[s + count2[i]] = skmer_positions[skmer_idx] + minimiser.range_position + j*span;
+                    // offsets2[s + count2[i]] = skmer_positions[skmer_idx] + minimiser.range_position + j*span;
+                    b2.set(s + count2[i], skmer_positions[skmer_idx] + minimiser.range_position + j*span);
                     count2[i]++;
                     o -= span;
                     j++;
                 }
-                offsets2[s + count2[i]] = skmer_positions[skmer_idx] + minimiser.range_position + j*span;
+                // offsets2[s + count2[i]] = skmer_positions[skmer_idx] + minimiser.range_position + j*span;
+                b2.set(s + count2[i], skmer_positions[skmer_idx] + minimiser.range_position + j*span);
                 count2[i]++;
             }
         }
         skmer_idx++;
     }
+    b2.build(offsets2);
 
     delete[] count2;
 
@@ -412,7 +422,9 @@ int RSIndexComp3::build(const std::vector<std::vector<seqan3::dna4>> &input)
 
     std::cout << "filling offsets_3...\n";
     // offsets3.width(offset_width);
-    offsets3.resize(n3);
+    // offsets3.resize(n3);
+    pthash::compact_vector::builder b3;
+    b3.resize(n3, offset_width);
     std::memset(count3, 0, c3*sizeof(uint16_t));
 
     skmer_idx = 0;
@@ -424,17 +436,20 @@ int RSIndexComp3::build(const std::vector<std::vector<seqan3::dna4>> &input)
                 size_t o = minimiser.occurrences;
                 uint64_t j = 0;
                 while(o > span) {
-                    offsets3[s + count3[i]] = skmer_positions2[skmer_idx] + minimiser.range_position + j*span;
+                    // offsets3[s + count3[i]] = skmer_positions2[skmer_idx] + minimiser.range_position + j*span;
+                    b3.set(s + count3[i], skmer_positions2[skmer_idx] + minimiser.range_position + j*span);
                     count3[i]++;
                     o -= span;
                     j++;
                 }
-                offsets3[s + count3[i]] = skmer_positions2[skmer_idx] + minimiser.range_position + j*span;
+                // offsets3[s + count3[i]] = skmer_positions2[skmer_idx] + minimiser.range_position + j*span;
+                b3.set(s + count3[i], skmer_positions2[skmer_idx] + minimiser.range_position + j*span);
                 count3[i]++;
             }
         }
         skmer_idx++;
     }
+    b3.build(offsets3);
 
     delete[] count3;
 
@@ -606,12 +621,18 @@ inline bool RSIndexComp3::check(const size_t p, const size_t q, const uint64_t m
     for(size_t i = 0; i < q-p; i++) {
         uint64_t hash = 0;
         size_t o;
+        // if constexpr (level == 1)
+        //     o = offsets1[p+i];
+        // if constexpr (level == 2)
+        //     o = offsets2[p+i];
+        // if constexpr (level == 3)
+        //     o = offsets3[p+i];
         if constexpr (level == 1)
-            o = offsets1[p+i];
+            o = offsets1.access(p+i);
         if constexpr (level == 2)
-            o = offsets2[p+i];
+            o = offsets2.access(p+i);
         if constexpr (level == 3)
-            o = offsets3[p+i];
+            o = offsets3.access(p+i);
         for (size_t j=o; j < o+k; j++) {
             uint64_t const new_rank = seqan3::to_rank(text[j]);
             hash <<= 2;
@@ -747,12 +768,18 @@ inline void RSIndexComp3::fill_buffer(std::vector<uint64_t> &buffer, const uint6
     for(uint64_t i = 0; i < q-p; i++) {
         uint64_t hash = 0;
         size_t o;
+        // if constexpr (level == 1)
+        //     o = offsets1[p+i];
+        // if constexpr (level == 2)
+        //     o = offsets2[p+i];
+        // if constexpr (level == 3)
+        //     o = offsets3[p+i];
         if constexpr (level == 1)
-            o = offsets1[p+i];
+            o = offsets1.access(p+i);
         if constexpr (level == 2)
-            o = offsets2[p+i];
+            o = offsets2.access(p+i);
         if constexpr (level == 3)
-            o = offsets3[p+i];
+            o = offsets3.access(p+i);
         size_t next_endpoint = endpoints.select(endpoints.rank(o+1));
         size_t e = o+k+span;
         if(e > next_endpoint)
@@ -927,12 +954,15 @@ int RSIndexComp3::save(const std::filesystem::path &filepath) {
     seqan3::contrib::sdsl::serialize(s1, out);
     seqan3::contrib::sdsl::serialize(s2, out);
     seqan3::contrib::sdsl::serialize(s3, out);
-    seqan3::contrib::sdsl::serialize(this->offsets1, out);
-    seqan3::contrib::sdsl::serialize(this->offsets2, out);
-    seqan3::contrib::sdsl::serialize(this->offsets3, out);
+    // seqan3::contrib::sdsl::serialize(this->offsets1, out);
+    // seqan3::contrib::sdsl::serialize(this->offsets2, out);
+    // seqan3::contrib::sdsl::serialize(this->offsets3, out);
     seqan3::contrib::sdsl::serialize(this->sequences, out);
 
     cereal::BinaryOutputArchive archive(out);
+    archive(this->offsets1);
+    archive(this->offsets2);
+    archive(this->offsets3);
     archive(this->text);
     archive(this->hashmap);
 
@@ -953,12 +983,15 @@ int RSIndexComp3::load(const std::filesystem::path &filepath) {
     seqan3::contrib::sdsl::load(s1, in);
     seqan3::contrib::sdsl::load(s2, in);
     seqan3::contrib::sdsl::load(s3, in);
-    seqan3::contrib::sdsl::load(this->offsets1, in);
-    seqan3::contrib::sdsl::load(this->offsets2, in);
-    seqan3::contrib::sdsl::load(this->offsets3, in);
+    // seqan3::contrib::sdsl::load(this->offsets1, in);
+    // seqan3::contrib::sdsl::load(this->offsets2, in);
+    // seqan3::contrib::sdsl::load(this->offsets3, in);
     seqan3::contrib::sdsl::load(this->sequences, in);
 
     cereal::BinaryInputArchive archive(in);
+    archive(this->offsets1);
+    archive(this->offsets2);
+    archive(this->offsets3);
     archive(this->text);
     archive(this->hashmap);
 

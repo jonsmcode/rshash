@@ -5,16 +5,14 @@
 #include <sux/bits/EliasFano.hpp>
 #include <gtl/phmap.hpp>
 
+#include "compact_vector.hpp"
+
 using namespace seqan3::literals;
 using namespace seqan3::contrib::sdsl;
-
-// namespace sdsl = seqan3::contrib::sdsl;
 
 const uint64_t seed1 = 0x8F'3F'73'B5'CF'1C'9A'DE;
 const uint64_t seed2 = 0x29'6D'BD'33'32'56'8C'64;
 const uint64_t seed3 = 0xE5'9A'38'5F'03'76'C9'F6;
-
-// const size_t span = 31;
 
 
 class RSIndexComp
@@ -82,9 +80,9 @@ private:
     // int_vector<0> offsets1;
     // int_vector<0> offsets2;
     // int_vector<0> offsets3;
-    int_vector<32> offsets1;
-    int_vector<32> offsets2;
-    int_vector<32> offsets3;
+    pthash::compact_vector offsets1;
+    pthash::compact_vector offsets2;
+    pthash::compact_vector offsets3;
     gtl::flat_hash_set<uint64_t> hashmap;
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> endpoints;
     bit_vector sequences;
