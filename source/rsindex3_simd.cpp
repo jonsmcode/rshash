@@ -24,13 +24,16 @@ static inline constexpr uint64_t compute_mask(uint64_t const size)
 }
 
 
-RSIndex::RSIndex() : endpoints(std::vector<uint64_t>{}, 1) {}
+RSIndex::RSIndex() : endpoints(std::vector<uint64_t>{}, 1),
+    s1_select(std::vector<uint64_t>{}, 1), s2_select(std::vector<uint64_t>{}, 1), s3_select(std::vector<uint64_t>{}, 1)
+{}
 
 RSIndex::RSIndex(
     uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3,
     uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3, size_t const span)
     : k(k), m1(m1), m2(m2), m3(m3),
       m_thres1(m_thres1), m_thres2(m_thres2), m_thres3(m_thres3), span(span),
+      s1_select(std::vector<uint64_t>{}, 1), s2_select(std::vector<uint64_t>{}, 1), s3_select(std::vector<uint64_t>{}, 1),
       endpoints(std::vector<uint64_t>{}, 1)
 {}
 
