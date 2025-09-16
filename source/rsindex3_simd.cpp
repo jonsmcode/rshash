@@ -911,8 +911,8 @@ int RSIndex::load(const std::filesystem::path &filepath) {
     in.close();
 
     r1_rank = rank_support_v<1>(&r1);
-    r2_rank = rank_support_sd<>(&r2);
-    r3_rank = rank_support_sd<>(&r3);
+    r2_rank = rank_support_v<1>(&r2);
+    r3_rank = rank_support_v<1>(&r3);
     this->s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), s1.size(), 3);
     this->s2_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s2.data()), s2.size(), 3);
     this->s3_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s3.data()), s3.size(), 3);
