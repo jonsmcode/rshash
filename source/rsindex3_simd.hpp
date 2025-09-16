@@ -1,7 +1,7 @@
 #include <seqan3/alphabet/nucleotide/dna4.hpp>
 #include <seqan3/alphabet/container/bitpacked_sequence.hpp>
 #include <seqan3/contrib/sdsl-lite.hpp>
-// #include <sux/bits/SimpleSelect.hpp>
+#include <sux/bits/SimpleSelect.hpp>
 #include <sux/bits/Rank9Sel.hpp>
 #include <sux/bits/EliasFano.hpp>
 #include <gtl/phmap.hpp>
@@ -30,13 +30,13 @@ private:
     rank_support_v<1> r3_rank;
     bit_vector s1;
     // sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s1_select;
-    sux::bits::Rank9Sel s1_select;
+    sux::bits::Rank9Sel<sux::util::AllocType::MALLOC> s1_select;
     bit_vector s2;
     // sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s2_select;
-    sux::bits::Rank9Sel s2_select;
+    sux::bits::Rank9Sel<sux::util::AllocType::MALLOC> s2_select;
     bit_vector s3;
     // sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s3_select;
-    sux::bits::Rank9Sel s3_select;
+    sux::bits::Rank9Sel<sux::util::AllocType::MALLOC> s3_select;
     pthash::compact_vector offsets1;
     pthash::compact_vector offsets2;
     pthash::compact_vector offsets3;
