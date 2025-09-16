@@ -3,7 +3,7 @@
 #include <seqan3/io/sequence_file/all.hpp>
 
 #include "rsindex3_simd.hpp"
-
+#include "bench.hpp"
 
 struct cmd_arguments {
     std::string cmd{};
@@ -137,8 +137,8 @@ int main(int argc, char** argv)
         double ns_per_kmer;
         const int rounds = 5;
         std::vector<uint64_t> kmers;
-        std::chrono::high_resolution_clock::time_point t_start;
-        
+        std::chrono::high_resolution_clock::time_point t_start, t_stop;
+
         std::cout << "loading dict...\n";
         if(args.c) {
             RSIndexComp index = RSIndexComp();
@@ -150,20 +150,6 @@ int main(int argc, char** argv)
             for(int r = 0; r < rounds; r++) {
                 found = index.lookup(kmers);
             }
-            // kmers = rand_kmers(1000000, index.getk());
-            // std::cout << "bench lookup...\n";
-
-            // t_start = std::chrono::high_resolution_clock::now();
-            // for(int r = 0; r < rounds; r++) {
-            //     found = index.lookup(kmers);
-            // }
-            // t_stop = std::chrono::high_resolution_clock::now();
-            // elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
-            // ns_per_kmer = (double) elapsed.count() / (kmers.size() * rounds);
-            // std::cout << "==== negative lookup:\n";
-            // std::cout << "num_kmers = " << kmers.size() << '\n';
-            // std::cout << "num_negative_kmers = " << found << " (" << (double) found/kmers.size()*100 << "%)\n";
-            // std::cout << "neg_time_per_kmer = " << ns_per_kmer << '\n';
         }
         else {
             RSIndex index = RSIndex();
@@ -175,14 +161,29 @@ int main(int argc, char** argv)
             for(int r = 0; r < rounds; r++) {
                 found = index.lookup(kmers);
             }
+            t_stop = std::chrono::high_resolution_clock::now();
+            std::chrono::nanoseconds elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
+            ns_per_kmer = (double) elapsed.count() / (kmers.size() * rounds);
+            std::cout << "==== positive lookup:\n";
+            std::cout << "num_kmers = " << kmers.size() << '\n';
+            std::cout << "num_positive_kmers = " << found << " (" << (double) found/kmers.size()*100 << "%)\n";
+            std::cout << "pos_time_per_kmer = " << ns_per_kmer << '\n';
+
+            kmers = rand_kmers(1000000, index.getk());
+            std::cout << "bench lookup...\n";
+
+            t_start = std::chrono::high_resolution_clock::now();
+            for(int r = 0; r < rounds; r++) {
+                found = index.lookup(kmers);
+            }
+            t_stop = std::chrono::high_resolution_clock::now();
+            elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
+            ns_per_kmer = (double) elapsed.count() / (kmers.size() * rounds);
+            std::cout << "==== negative lookup:\n";
+            std::cout << "num_kmers = " << kmers.size() << '\n';
+            std::cout << "num_negative_kmers = " << found << " (" << (double) found/kmers.size()*100 << "%)\n";
+            std::cout << "neg_time_per_kmer = " << ns_per_kmer << '\n';
         }
-        std::chrono::high_resolution_clock::time_point t_stop = std::chrono::high_resolution_clock::now();
-        std::chrono::nanoseconds elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
-        ns_per_kmer = (double) elapsed.count() / (kmers.size() * rounds);
-        std::cout << "==== positive lookup:\n";
-        std::cout << "num_kmers = " << kmers.size() << '\n';
-        std::cout << "num_positive_kmers = " << found << " (" << (double) found/kmers.size()*100 << "%)\n";
-        std::cout << "pos_time_per_kmer = " << ns_per_kmer << '\n';
     }
  
     return 0;
