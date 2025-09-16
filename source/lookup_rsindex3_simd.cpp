@@ -135,15 +135,17 @@ int main(int argc, char** argv)
     else if(args.cmd == "lookup") {
         uint64_t found = 0;
         double ns_per_kmer;
+        const int rounds = 5;
+        std::vector<uint64_t> kmers;
+        std::chrono::high_resolution_clock::time_point t_start;
         std::cout << "loading dict...\n";
         if(args.c) {
             RSIndexComp index = RSIndexComp();
             index.load(args.d);
-            std::vector<uint64_t> kmers = index.rand_text_kmers(1000000);
+            kmers = index.rand_text_kmers(1000000);
             std::cout << "bench lookup...\n";
 
-            std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
-            const int rounds = 5;
+            t_start = std::chrono::high_resolution_clock::now();
             for(int r = 0; r < rounds; r++) {
                 found = index.lookup(kmers);
             }
@@ -165,10 +167,10 @@ int main(int argc, char** argv)
         else {
             RSIndex index = RSIndex();
             index.load(args.d);
-            std::vector<uint64_t> kmers = index.rand_text_kmers(1000000);
+            kmers = index.rand_text_kmers(1000000);
             std::cout << "bench lookup...\n";
 
-            std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
+            t_start = std::chrono::high_resolution_clock::now();
             const int rounds = 5;
             for(int r = 0; r < rounds; r++) {
                 found = index.lookup(kmers);
