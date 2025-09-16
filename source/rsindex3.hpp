@@ -70,10 +70,12 @@ private:
     size_t kmers;
     bit_vector r1;
     rank_support_v<1> r1_rank;
-    sd_vector<> r2;
-    rank_support_sd<> r2_rank;
-    sd_vector<> r3;
-    rank_support_sd<> r3_rank;
+    sux::bits::EliasFano<sux::util::AllocType::MALLOC> r2;
+    sux::bits::EliasFano<sux::util::AllocType::MALLOC> r3;
+    // sd_vector<> r2;
+    // rank_support_sd<> r2_rank;
+    // sd_vector<> r3;
+    // rank_support_sd<> r3_rank;
     bit_vector s1;
     sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s1_select;
     bit_vector s2;
@@ -86,9 +88,6 @@ private:
     // int_vector<0> offsets1;
     // int_vector<0> offsets2;
     // int_vector<0> offsets3;
-    // int_vector<32> offsets1;
-    // int_vector<32> offsets2;
-    // int_vector<32> offsets3;
     gtl::flat_hash_set<uint64_t> hashmap;
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> endpoints;
     bit_vector sequences;

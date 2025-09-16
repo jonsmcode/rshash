@@ -36,14 +36,15 @@ private:
     int_vector<0> offsets1;
     int_vector<0> offsets2;
     int_vector<0> offsets3;
+    // pthash::compact_vector offsets1;
+    // pthash::compact_vector offsets2;
+    // pthash::compact_vector offsets3;
     gtl::flat_hash_set<uint64_t> hashmap;
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> endpoints;
     bit_vector sequences;
     seqan3::bitpacked_sequence<seqan3::dna4> text;
     template<int level>
     void fill_buffer(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
-    template<int level>
-    void fill_buffer_avx512(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
 
 
 public:
@@ -52,6 +53,11 @@ public:
         uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3, size_t const span);
     uint8_t getk() { return k; }
     int build(const std::vector<std::vector<seqan3::dna4>>&);
+    uint64_t number_unitigs() { return endpoints.rank(endpoints.size()); }
+    size_t unitig_size(uint64_t unitig_id) { return endpoints.select(unitig_id+1) - endpoints.select(unitig_id) - k + 1; }
+    uint64_t access(const uint64_t, const size_t);
+    std::vector<uint64_t> rand_text_kmers(const uint64_t);
+    uint64_t lookup(const std::vector<uint64_t>&);
     uint64_t streaming_query(const std::vector<seqan3::dna4>&, uint64_t&);
     uint64_t streaming_query(const std::vector<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
     int save(const std::filesystem::path&);

@@ -12,12 +12,12 @@ struct cmd_arguments {
     std::filesystem::path d{};
     uint8_t k{};
     uint8_t m1{15};
-    uint8_t m2{16};
-    uint8_t m3{17};
-    uint8_t t1{32};
-    uint8_t t2{128};
-    uint16_t t3{512};
-    size_t s{20};
+    uint8_t m2{17};
+    uint8_t m3{19};
+    uint8_t t1{64};
+    uint8_t t2{64};
+    uint16_t t3{64};
+    size_t s{17};
 };
 
 void initialise_argument_parser(sharg::parser &parser, cmd_arguments &args) {
@@ -47,6 +47,9 @@ int check_arguments(sharg::parser &parser, cmd_arguments &args) {
     else if(args.cmd == "query") {
         if(!parser.is_option_set('q'))
             throw sharg::user_input_error("provide query file.");
+    }
+    else if(args.cmd == "lookup") {
+        
     }
     else
         throw sharg::user_input_error("illegal command");
@@ -119,6 +122,45 @@ int main(int argc, char** argv)
         std::cout << "num_positive_kmers = " << found << " (" << (double) found/kmers*100 << "%)\n";
         std::cout << "time_per_kmer = " << ns_per_kmer << '\n';
         std::cout << "num extensions = " << extensions << '\n';
+    }
+    else if(args.cmd == "lookup") {
+        std::cout << "loading dict...\n";
+        uint64_t found = 0;
+        double ns_per_kmer;
+
+        RSIndexComp index = RSIndexComp();
+        index.load(args.d);
+        std::vector<uint64_t> kmers = index.rand_text_kmers(1000000);
+        std::cout << "bench lookup...\n";
+
+        std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
+        const int rounds = 5;
+        for(int r = 0; r < rounds; r++) {
+            found = index.lookup(kmers);
+        }
+        std::chrono::high_resolution_clock::time_point t_stop = std::chrono::high_resolution_clock::now();
+        std::chrono::nanoseconds elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
+        ns_per_kmer = (double) elapsed.count() / (kmers.size() * rounds);
+        std::cout << "==== positive lookup:\n";
+        std::cout << "num_kmers = " << kmers.size() << '\n';
+        std::cout << "num_positive_kmers = " << found << " (" << (double) found/kmers.size()*100 << "%)\n";
+        std::cout << "pos_time_per_kmer = " << ns_per_kmer << '\n';
+
+        // kmers = rand_kmers(1000000, index.getk());
+        // std::cout << "bench lookup...\n";
+
+        // t_start = std::chrono::high_resolution_clock::now();
+        // for(int r = 0; r < rounds; r++) {
+        //     found = index.lookup(kmers);
+        // }
+        // t_stop = std::chrono::high_resolution_clock::now();
+        // elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
+        // ns_per_kmer = (double) elapsed.count() / (kmers.size() * rounds);
+        // std::cout << "==== negative lookup:\n";
+        // std::cout << "num_kmers = " << kmers.size() << '\n';
+        // std::cout << "num_negative_kmers = " << found << " (" << (double) found/kmers.size()*100 << "%)\n";
+        // std::cout << "neg_time_per_kmer = " << ns_per_kmer << '\n';
+
     }
  
     return 0;
