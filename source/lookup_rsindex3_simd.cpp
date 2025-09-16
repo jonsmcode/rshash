@@ -138,6 +138,7 @@ int main(int argc, char** argv)
         const int rounds = 5;
         std::vector<uint64_t> kmers;
         std::chrono::high_resolution_clock::time_point t_start;
+        
         std::cout << "loading dict...\n";
         if(args.c) {
             RSIndexComp index = RSIndexComp();
@@ -171,7 +172,6 @@ int main(int argc, char** argv)
             std::cout << "bench lookup...\n";
 
             t_start = std::chrono::high_resolution_clock::now();
-            const int rounds = 5;
             for(int r = 0; r < rounds; r++) {
                 found = index.lookup(kmers);
             }
