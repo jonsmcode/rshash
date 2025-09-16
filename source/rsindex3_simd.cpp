@@ -125,7 +125,8 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
         j += count1[i];
         s1[j] = 1;
     }
-    s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), n1+1, 3);
+    // s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), n1+1, 3);
+    s1_select = sux::bits::Rank9Sel(reinterpret_cast<uint64_t*>(s1.data()), n1+1);
 
     std::cout << "filling offsets_1...\n";
     const size_t offset_width = std::bit_width(N);
@@ -270,7 +271,8 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
         j += count2[i];
         s2[j] = 1;
     }
-    s2_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s2.data()), n2+1, 3);
+    // s2_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s2.data()), n2+1, 3);
+    s2_select = sux::bits::Rank9Sel(reinterpret_cast<uint64_t*>(s2.data()), n2+1);
 
     std::cout << "filling offsets_2...\n";
     // offsets2.width(offset_width);
@@ -415,7 +417,8 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
         j += count3[i];
         s3[j] = 1;
     }
-    s3_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s3.data()), n3+1, 3);
+    // s3_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s3.data()), n3+1, 3);
+    s3_select = sux::bits::Rank9Sel(reinterpret_cast<uint64_t*>(s3.data()), n3+1);
 
     std::cout << "filling offsets_3...\n";
     // offsets3.width(offset_width);
@@ -913,9 +916,12 @@ int RSIndex::load(const std::filesystem::path &filepath) {
     r1_rank = rank_support_v<1>(&r1);
     r2_rank = rank_support_v<1>(&r2);
     r3_rank = rank_support_v<1>(&r3);
-    this->s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), s1.size(), 3);
-    this->s2_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s2.data()), s2.size(), 3);
-    this->s3_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s3.data()), s3.size(), 3);
+    // this->s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), s1.size(), 3);
+    // this->s2_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s2.data()), s2.size(), 3);
+    // this->s3_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s3.data()), s3.size(), 3);
+    this->s1_select = sux::bits::Rank9Sel(reinterpret_cast<uint64_t*>(s1.data()), s1.size());
+    this->s2_select = sux::bits::Rank9Sel(reinterpret_cast<uint64_t*>(s2.data()), s2.size());
+    this->s3_select = sux::bits::Rank9Sel(reinterpret_cast<uint64_t*>(s3.data()), s3.size());
 
     endpoints = sux::bits::EliasFano(reinterpret_cast<uint64_t*>(sequences.data()), sequences.size());
     
