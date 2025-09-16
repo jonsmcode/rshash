@@ -887,12 +887,15 @@ int RSIndexComp::save(const std::filesystem::path &filepath) {
     seqan3::contrib::sdsl::serialize(s1, out);
     seqan3::contrib::sdsl::serialize(s2, out);
     seqan3::contrib::sdsl::serialize(s3, out);
-    seqan3::contrib::sdsl::serialize(this->offsets1, out);
-    seqan3::contrib::sdsl::serialize(this->offsets2, out);
-    seqan3::contrib::sdsl::serialize(this->offsets3, out);
+    // seqan3::contrib::sdsl::serialize(this->offsets1, out);
+    // seqan3::contrib::sdsl::serialize(this->offsets2, out);
+    // seqan3::contrib::sdsl::serialize(this->offsets3, out);
     seqan3::contrib::sdsl::serialize(this->sequences, out);
 
     cereal::BinaryOutputArchive archive(out);
+    archive(this->offsets1);
+    archive(this->offsets2);
+    archive(this->offsets3);
     archive(this->text);
     archive(this->hashmap);
 
@@ -913,12 +916,15 @@ int RSIndexComp::load(const std::filesystem::path &filepath) {
     seqan3::contrib::sdsl::load(s1, in);
     seqan3::contrib::sdsl::load(s2, in);
     seqan3::contrib::sdsl::load(s3, in);
-    seqan3::contrib::sdsl::load(this->offsets1, in);
-    seqan3::contrib::sdsl::load(this->offsets2, in);
-    seqan3::contrib::sdsl::load(this->offsets3, in);
+    // seqan3::contrib::sdsl::load(this->offsets1, in);
+    // seqan3::contrib::sdsl::load(this->offsets2, in);
+    // seqan3::contrib::sdsl::load(this->offsets3, in);
     seqan3::contrib::sdsl::load(this->sequences, in);
 
     cereal::BinaryInputArchive archive(in);
+    archive(this->offsets1);
+    archive(this->offsets2);
+    archive(this->offsets3);
     archive(this->text);
     archive(this->hashmap);
 
