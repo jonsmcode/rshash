@@ -11,13 +11,14 @@ struct cmd_arguments {
     std::filesystem::path q{};
     std::filesystem::path d{};
     uint8_t k{};
-    uint8_t m1{15};
+    uint8_t m1{17};
     uint8_t m2{17};
-    uint8_t m3{19};
+    uint8_t m3{17};
     uint8_t t1{64};
     uint8_t t2{64};
     uint16_t t3{64};
-    size_t s{17};
+    size_t s{15};
+    bool c{0};
 };
 
 void initialise_argument_parser(sharg::parser &parser, cmd_arguments &args) {
@@ -33,6 +34,7 @@ void initialise_argument_parser(sharg::parser &parser, cmd_arguments &args) {
     parser.add_option(args.t2, sharg::config{.long_id = "t2", .description = "threshold2"});
     parser.add_option(args.t3, sharg::config{.long_id = "t3", .description = "threshold3"});
     parser.add_option(args.s, sharg::config{.short_id = 's', .long_id = "span", .description = "span"});
+    parser.add_flag(args.c, sharg::config{.short_id = 'c', .long_id = "comp", .description = "compress level 2 and 3"});
 }
 
 int check_arguments(sharg::parser &parser, cmd_arguments &args) {
@@ -90,9 +92,16 @@ int main(int argc, char** argv)
         load_file(args.i, text);
 
         std::cout << "building dict...\n";
-        RSIndexComp index = RSIndexComp(args.k, args.m1, args.m2, args.m3, args.t1, args.t2, args.t3, args.s);
-        index.build(text);
-        index.save(args.d);
+        if(args.c) {
+            RSIndexComp index = RSIndexComp(args.k, args.m1, args.m2, args.m3, args.t1, args.t2, args.t3, args.s);
+            index.build(text);
+            index.save(args.d);            
+        }
+        else {
+            RSIndex index = RSIndex(args.k, args.m1, args.m2, args.m3, args.t1, args.t2, args.t3, args.s);
+            index.build(text);
+            index.save(args.d);
+        }
     }
     else if(args.cmd == "query") {
         std::cout << "loading queries...\n";
@@ -124,19 +133,46 @@ int main(int argc, char** argv)
         std::cout << "num extensions = " << extensions << '\n';
     }
     else if(args.cmd == "lookup") {
-        std::cout << "loading dict...\n";
         uint64_t found = 0;
         double ns_per_kmer;
+        std::cout << "loading dict...\n";
+        if(args.c) {
+            RSIndexComp index = RSIndexComp();
+            index.load(args.d);
+            std::vector<uint64_t> kmers = index.rand_text_kmers(1000000);
+            std::cout << "bench lookup...\n";
 
-        RSIndexComp index = RSIndexComp();
-        index.load(args.d);
-        std::vector<uint64_t> kmers = index.rand_text_kmers(1000000);
-        std::cout << "bench lookup...\n";
+            std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
+            const int rounds = 5;
+            for(int r = 0; r < rounds; r++) {
+                found = index.lookup(kmers);
+            }
+            // kmers = rand_kmers(1000000, index.getk());
+            // std::cout << "bench lookup...\n";
 
-        std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
-        const int rounds = 5;
-        for(int r = 0; r < rounds; r++) {
-            found = index.lookup(kmers);
+            // t_start = std::chrono::high_resolution_clock::now();
+            // for(int r = 0; r < rounds; r++) {
+            //     found = index.lookup(kmers);
+            // }
+            // t_stop = std::chrono::high_resolution_clock::now();
+            // elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
+            // ns_per_kmer = (double) elapsed.count() / (kmers.size() * rounds);
+            // std::cout << "==== negative lookup:\n";
+            // std::cout << "num_kmers = " << kmers.size() << '\n';
+            // std::cout << "num_negative_kmers = " << found << " (" << (double) found/kmers.size()*100 << "%)\n";
+            // std::cout << "neg_time_per_kmer = " << ns_per_kmer << '\n';
+        }
+        else {
+            RSIndex index = RSIndex();
+            index.load(args.d);
+            std::vector<uint64_t> kmers = index.rand_text_kmers(1000000);
+            std::cout << "bench lookup...\n";
+
+            std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
+            const int rounds = 5;
+            for(int r = 0; r < rounds; r++) {
+                found = index.lookup(kmers);
+            }
         }
         std::chrono::high_resolution_clock::time_point t_stop = std::chrono::high_resolution_clock::now();
         std::chrono::nanoseconds elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
@@ -145,22 +181,6 @@ int main(int argc, char** argv)
         std::cout << "num_kmers = " << kmers.size() << '\n';
         std::cout << "num_positive_kmers = " << found << " (" << (double) found/kmers.size()*100 << "%)\n";
         std::cout << "pos_time_per_kmer = " << ns_per_kmer << '\n';
-
-        // kmers = rand_kmers(1000000, index.getk());
-        // std::cout << "bench lookup...\n";
-
-        // t_start = std::chrono::high_resolution_clock::now();
-        // for(int r = 0; r < rounds; r++) {
-        //     found = index.lookup(kmers);
-        // }
-        // t_stop = std::chrono::high_resolution_clock::now();
-        // elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
-        // ns_per_kmer = (double) elapsed.count() / (kmers.size() * rounds);
-        // std::cout << "==== negative lookup:\n";
-        // std::cout << "num_kmers = " << kmers.size() << '\n';
-        // std::cout << "num_negative_kmers = " << found << " (" << (double) found/kmers.size()*100 << "%)\n";
-        // std::cout << "neg_time_per_kmer = " << ns_per_kmer << '\n';
-
     }
  
     return 0;
