@@ -44,6 +44,8 @@ private:
     bit_vector sequences;
     seqan3::bitpacked_sequence<seqan3::dna4> text;
     template<int level>
+    inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t);
+    template<int level>
     void fill_buffer(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
 
 
