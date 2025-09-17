@@ -694,7 +694,7 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
             t0_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)).count();
             t1_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1)).count();
             t2_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2)).count();
-            skmers_ += p - q;
+            skmers_ += q - p;
         }
         else if(r2[minimisers.minimiser2]) {
             t0 = std::chrono::high_resolution_clock::now();
@@ -710,7 +710,7 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
             t0_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)).count();
             t1_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1)).count();
             t2_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2)).count();
-            skmers_ += p - q;
+            skmers_ += q - p;
         }
         else if(r3[minimisers.minimiser3]) {
             t0 = std::chrono::high_resolution_clock::now();
@@ -726,7 +726,7 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
             t0_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)).count();
             t1_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1)).count();
             t2_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2)).count();
-            skmers_ += p - q;
+            skmers_ += q - p;
         }
         // else
         //     occurences += hashmap.contains(std::min<uint64_t>(minimisers.window, minimisers.window_rev));
@@ -738,7 +738,7 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
     std::cout << "offsets: " << to/kmers.size() << " ns\n";
     std::cout << "endpoints: " << te/kmers.size() << " ns\n";
     std::cout << "text: " << th/kmers.size() << " ns\n";
-    std::cout << "avg skmers: " << (double) skmers_/kmers.size() << " ns\n";
+    std::cout << "avg skmers: " << (double) skmers_/kmers.size() << "\n";
 
     return occurences;
 }
