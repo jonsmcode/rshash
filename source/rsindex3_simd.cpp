@@ -763,9 +763,10 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
     std::cout << "endpoints: " << te/kmers.size() << " ns\n";
     std::cout << "text: " << th/kmers.size() << " ns\n";
     std::cout << "ht: " << t3_/kmers.size() << " ns\n";
-    std::cout << "lookups lvl1: " << (double) lookups1/(lookups1+lookups2+lookups3)*100 << "%\n";
-    std::cout << "lookups lvl2: " << (double) lookups2/(lookups1+lookups2+lookups3)*100 << "%\n";
-    std::cout << "lookups lvl3: " << (double) lookups3/(lookups1+lookups2+lookups3)*100 << "%\n";
+    std::cout << "lookups lvl1: " << (double) lookups1/(lookups1+lookups2+lookups3+ht_lookups)*100 << "%\n";
+    std::cout << "lookups lvl2: " << (double) lookups2/(lookups1+lookups2+lookups3+ht_lookups)*100 << "%\n";
+    std::cout << "lookups lvl3: " << (double) lookups3/(lookups1+lookups2+lookups3+ht_lookups)*100 << "%\n";
+    std::cout << "lookups ht: " << (double) ht_lookups/(lookups1+lookups2+lookups3+ht_lookups)*100 << "%\n";
     std::cout << "avg skmers1: " << (double) skmers1_/lookups1 << "\n";
     std::cout << "avg skmers2: " << (double) skmers2_/lookups2 << "\n";
     std::cout << "avg skmers3: " << (double) skmers3_/lookups3 << "\n";
