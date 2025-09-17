@@ -659,7 +659,7 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
     srindex::minimizers::Three_minimisers_hash minimisers = srindex::minimizers::Three_minimisers_hash(k, m1, m2, m3, seed1, seed2, seed3);
     uint64_t occurences = 0;
     std::chrono::high_resolution_clock::time_point t0, t1, t2, t3;
-    std::chrono::nanoseconds t0_, t1_, t2_;
+    double t0_, t1_, t2_;
 
     for(uint64_t kmer : kmers)
     {
@@ -708,9 +708,9 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
         t1_ += t12.count();
         t2_ += t23.count();
     }
-    std::cout << "r_rank: " << (double) t0_/kmers.size() << " ns\n";
-    std::cout << "s_select: " << (double) t1_/kmers.size() << " ns\n";
-    std::cout << "check: " << (double) t2_/kmers.size() << " ns\n";
+    std::cout << "r_rank: " << t0_/kmers.size() << " ns\n";
+    std::cout << "s_select: " << t1_/kmers.size() << " ns\n";
+    std::cout << "check: " << t2_/kmers.size() << " ns\n";
 
     return occurences;
 }
