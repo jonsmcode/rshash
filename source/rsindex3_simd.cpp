@@ -752,13 +752,13 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
         }
 
     }
-    std::cout << "r_rank: " << t0_/lookups << " ns\n";
-    std::cout << "s_select: " << t1_/lookups << " ns\n";
-    std::cout << "check: " << t2_/lookups << " ns\n";
-    std::cout << "offsets: " << to/lookups << " ns\n";
-    std::cout << "endpoints: " << te/lookups << " ns\n";
-    std::cout << "text: " << th/lookups << " ns\n";
-    std::cout << "ht: " << t3_/ht_lookups << " ns\n";
+    std::cout << "r_rank: " << t0_/kmers.size() << " ns\n";
+    std::cout << "s_select: " << t1_/kmers.size() << " ns\n";
+    std::cout << "check: " << t2_/kmers.size() << " ns\n";
+    std::cout << "offsets: " << to/kmers.size() << " ns\n";
+    std::cout << "endpoints: " << te/kmers.size() << " ns\n";
+    std::cout << "text: " << th/kmers.size() << " ns\n";
+    std::cout << "ht: " << t3_/kmers.size() << " ns\n";
     std::cout << "avg skmers: " << (double) skmers_/lookups << "\n";
 
     return occurences;
