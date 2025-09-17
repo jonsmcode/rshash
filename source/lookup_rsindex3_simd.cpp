@@ -151,6 +151,7 @@ int main(int argc, char** argv)
         else {
             RSIndex index = RSIndex();
             index.load(args.d);
+            index.stats();
             kmers = index.rand_text_kmers(1000000);
             std::cout << "bench lookup...\n";
 

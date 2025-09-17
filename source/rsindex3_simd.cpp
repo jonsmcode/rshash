@@ -557,6 +557,12 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     return 0;
 }
 
+void RSIndex::stats() {
+    std::cout << "text length: " << text.size() << "\n";
+    // std::cout << "text kmers: " << kmers <<  '\n';
+    std::cout << "m1: " +m1 << " m2: " << +m2 << " m3: " << +m3 << "\n";
+}
+
 
 uint64_t RSIndex::access(const uint64_t unitig_id, const size_t offset)
 {
