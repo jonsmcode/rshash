@@ -617,10 +617,12 @@ std::vector<uint64_t> RSIndex::rand_text_kmers(const uint64_t n) {
 
 template<int level>
 inline bool RSIndex::check(const size_t p, const size_t q, const uint64_t mask,
-    const uint64_t kmer, const uint64_t kmer_rc)
+    const uint64_t kmer, const uint64_t kmer_rc,
+    double &to, double &th, double &te)
 {
+    std::chrono::high_resolution_clock::time_point t0, t1, t2, t3, t4;
     for(size_t i = 0; i < q-p; i++) {
-        uint64_t hash = 0;
+        t0 = std::chrono::high_resolution_clock::now();
         size_t o;
         if constexpr (level == 1)
             o = offsets1.access(p+i);
@@ -628,6 +630,9 @@ inline bool RSIndex::check(const size_t p, const size_t q, const uint64_t mask,
             o = offsets2.access(p+i);
         if constexpr (level == 3)
             o = offsets3.access(p+i);
+        t1 = std::chrono::high_resolution_clock::now();
+        to += (std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)).count();
+        uint64_t hash = 0;
         for (size_t j=o; j < o+k; j++) {
             uint64_t const new_rank = seqan3::to_rank(text[j]);
             hash <<= 2;
@@ -635,10 +640,16 @@ inline bool RSIndex::check(const size_t p, const size_t q, const uint64_t mask,
         }
         if(hash == kmer || hash == kmer_rc)
             return true;
+        t2 = std::chrono::high_resolution_clock::now();
+        th += (std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1)).count();
+
         size_t next_endpoint = endpoints.select(endpoints.rank(o+1));
         size_t e = o+k+span;
         if(e > next_endpoint)
             e = next_endpoint;
+        t3 = std::chrono::high_resolution_clock::now();
+        te += (std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2)).count();
+
         for(size_t j=o+k; j < e; j++) {
             uint64_t const new_rank = seqan3::to_rank(text[j]);
             hash <<= 2;
@@ -647,6 +658,8 @@ inline bool RSIndex::check(const size_t p, const size_t q, const uint64_t mask,
             if(hash == kmer || hash == kmer_rc)
                 return true;
         }
+        t4 = std::chrono::high_resolution_clock::now();
+        th += (std::chrono::duration_cast<std::chrono::nanoseconds>(t4 - t3)).count();
     }
 
     return false;
@@ -660,7 +673,7 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
     uint64_t occurences = 0;
     std::chrono::high_resolution_clock::time_point t0, t1, t2, t3 = std::chrono::high_resolution_clock::now();
     double t0_, t1_, t2_ = 0;
-    bool in_ht = false;
+    double to, th, te = 0;
 
     for(uint64_t kmer : kmers)
     {
@@ -674,7 +687,7 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
             size_t q = s1_select.select(minimizer_id+1);
             t2 = std::chrono::high_resolution_clock::now();
 
-            occurences += check<1>(p, q, mask, minimisers.window, minimisers.window_rev);
+            occurences += check<1>(p, q, mask, minimisers.window, minimisers.window_rev, to, th, te);
             t3 = std::chrono::high_resolution_clock::now();
 
             t0_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)).count();
@@ -689,7 +702,7 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
             size_t q = s2_select.select(minimizer_id+1);
             t2 = std::chrono::high_resolution_clock::now();
 
-            occurences += check<2>(p, q, mask, minimisers.window, minimisers.window_rev);
+            occurences += check<2>(p, q, mask, minimisers.window, minimisers.window_rev, to, th, te);
             t3 = std::chrono::high_resolution_clock::now();
 
             t0_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)).count();
@@ -704,20 +717,23 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
             size_t q = s3_select.select(minimizer_id+1);
             t2 = std::chrono::high_resolution_clock::now();
 
-            occurences += check<3>(p, q, mask, minimisers.window, minimisers.window_rev);
+            occurences += check<3>(p, q, mask, minimisers.window, minimisers.window_rev, to, th, te);
             t3 = std::chrono::high_resolution_clock::now();
 
             t0_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)).count();
             t1_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1)).count();
             t2_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2)).count();
         }
-        // else
-        //     occurences += hashmap.contains(std::min<uint64_t>(minimisers.window, minimisers.window_rev));
+        else
+            occurences += hashmap.contains(std::min<uint64_t>(minimisers.window, minimisers.window_rev));
 
     }
     std::cout << "r_rank: " << t0_/kmers.size() << " ns\n";
     std::cout << "s_select: " << t1_/kmers.size() << " ns\n";
     std::cout << "check: " << t2_/kmers.size() << " ns\n";
+    std::cout << "offsets: " << to/kmers.size() << " ns\n";
+    std::cout << "endpoints: " << te/kmers.size() << " ns\n";
+    std::cout << "text: " << th/kmers.size() << " ns\n";
 
     return occurences;
 }
