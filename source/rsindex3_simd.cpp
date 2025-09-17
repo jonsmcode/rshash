@@ -658,8 +658,8 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
     const uint64_t mask = compute_mask(2u * k);
     srindex::minimizers::Three_minimisers_hash minimisers = srindex::minimizers::Three_minimisers_hash(k, m1, m2, m3, seed1, seed2, seed3);
     uint64_t occurences = 0;
-    std::chrono::high_resolution_clock::time_point t0, t1, t2, t3;
-    double t0_, t1_, t2_;
+    std::chrono::high_resolution_clock::time_point t0, t1, t2, t3 = std::chrono::high_resolution_clock::now();
+    double t0_, t1_, t2_ = 0;
 
     for(uint64_t kmer : kmers)
     {
