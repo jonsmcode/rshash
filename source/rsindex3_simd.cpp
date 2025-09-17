@@ -660,6 +660,7 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
     uint64_t occurences = 0;
     std::chrono::high_resolution_clock::time_point t0, t1, t2, t3 = std::chrono::high_resolution_clock::now();
     double t0_, t1_, t2_ = 0;
+    bool in_ht = false;
 
     for(uint64_t kmer : kmers)
     {
@@ -675,6 +676,10 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
 
             occurences += check<1>(p, q, mask, minimisers.window, minimisers.window_rev);
             t3 = std::chrono::high_resolution_clock::now();
+
+            t0_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)).count();
+            t1_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1)).count();
+            t2_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2)).count();
         }
         else if(r2[minimisers.minimiser2]) {
             t0 = std::chrono::high_resolution_clock::now();
@@ -686,6 +691,10 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
 
             occurences += check<2>(p, q, mask, minimisers.window, minimisers.window_rev);
             t3 = std::chrono::high_resolution_clock::now();
+
+            t0_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)).count();
+            t1_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1)).count();
+            t2_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2)).count();
         }
         else if(r3[minimisers.minimiser3]) {
             t0 = std::chrono::high_resolution_clock::now();
@@ -697,16 +706,14 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
 
             occurences += check<3>(p, q, mask, minimisers.window, minimisers.window_rev);
             t3 = std::chrono::high_resolution_clock::now();
+
+            t0_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)).count();
+            t1_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1)).count();
+            t2_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2)).count();
         }
         else
             occurences += hashmap.contains(std::min<uint64_t>(minimisers.window, minimisers.window_rev));
 
-        std::chrono::nanoseconds t01 = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0);
-        std::chrono::nanoseconds t12 = std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1);
-        std::chrono::nanoseconds t23 = std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2);
-        t0_ += t01.count();
-        t1_ += t12.count();
-        t2_ += t23.count();
     }
     std::cout << "r_rank: " << t0_/kmers.size() << " ns\n";
     std::cout << "s_select: " << t1_/kmers.size() << " ns\n";
