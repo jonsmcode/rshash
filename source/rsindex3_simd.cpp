@@ -685,8 +685,12 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
     double to = 0.0;
     double th = 0.0;
     double te = 0.0;
-    size_t skmers_ = 0;
-    uint64_t lookups = 0;
+    size_t skmers1_ = 0;
+    size_t skmers2_ = 0;
+    size_t skmers3_ = 0;
+    uint64_t lookups1 = 0;
+    uint64_t lookups2 = 0;
+    uint64_t lookups3 = 0;
     uint64_t ht_lookups = 0;
 
     for(uint64_t kmer : kmers)
@@ -707,8 +711,8 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
             t0_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)).count();
             t1_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1)).count();
             t2_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2)).count();
-            skmers_ += q - p;
-            ++lookups;
+            skmers1_ += q - p;
+            ++lookups1;
         }
         else if(r2[minimisers.minimiser2]) {
             t0 = std::chrono::high_resolution_clock::now();
@@ -724,8 +728,8 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
             t0_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)).count();
             t1_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1)).count();
             t2_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2)).count();
-            skmers_ += q - p;
-            ++lookups;
+            skmers2_ += q - p;
+            ++lookups2;
         }
         else if(r3[minimisers.minimiser3]) {
             t0 = std::chrono::high_resolution_clock::now();
@@ -741,8 +745,8 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
             t0_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)).count();
             t1_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1)).count();
             t2_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2)).count();
-            skmers_ += q - p;
-            ++lookups;
+            skmers3_ += q - p;
+            ++lookups3;
         }
         else {
             t4 = std::chrono::high_resolution_clock::now();
@@ -759,7 +763,12 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
     std::cout << "endpoints: " << te/kmers.size() << " ns\n";
     std::cout << "text: " << th/kmers.size() << " ns\n";
     std::cout << "ht: " << t3_/kmers.size() << " ns\n";
-    std::cout << "avg skmers: " << (double) skmers_/lookups << "\n";
+    std::cout << "lookups lvl1: " << (double) lookups1/(lookups1+lookups2+lookups3)*100 << "%\n";
+    std::cout << "lookups lvl2: " << (double) lookups2/(lookups1+lookups2+lookups3)*100 << "%\n";
+    std::cout << "lookups lvl3: " << (double) lookups3/(lookups1+lookups2+lookups3)*100 << "%\n";
+    std::cout << "avg skmers1: " << (double) skmers1_/lookups1 << "\n";
+    std::cout << "avg skmers2: " << (double) skmers2_/lookups2 << "\n";
+    std::cout << "avg skmers3: " << (double) skmers3_/lookups3 << "\n";
 
     return occurences;
 }
