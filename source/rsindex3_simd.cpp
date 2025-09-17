@@ -701,9 +701,12 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
         else
             occurences += hashmap.contains(std::min<uint64_t>(minimisers.window, minimisers.window_rev));
 
-        t0_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)).count();
-        t1_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1)).count();
-        t2_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2)).count();
+        std::chrono::nanoseconds t01 = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0);
+        std::chrono::nanoseconds t12 = std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1);
+        std::chrono::nanoseconds t23 = std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2);
+        t0_ += t01.count();
+        t1_ += t12.count();
+        t2_ += t23.count();
     }
     std::cout << "r_rank: " << (double) t0_/kmers.size() << " ns\n";
     std::cout << "s_select: " << (double) t1_/kmers.size() << " ns\n";
