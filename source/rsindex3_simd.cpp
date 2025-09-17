@@ -616,12 +616,12 @@ std::vector<uint64_t> RSIndex::rand_text_kmers(const uint64_t n) {
 
 
 template<int level>
-inline bool RSIndex::check(const size_t n, const uint64_t mask,
+inline bool RSIndex::check(const size_t p, const size_t q, const uint64_t mask,
     const uint64_t kmer, const uint64_t kmer_rc,
     double &to, double &th, double &te)
 {
     std::chrono::high_resolution_clock::time_point t0, t1, t2, t3, t4;
-    for(size_t i = 0; i < n; i++) {
+    for(size_t i = 0; i < q-p; i++) {
 
         t0 = std::chrono::high_resolution_clock::now();
         size_t o;
@@ -684,52 +684,49 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
             t0 = std::chrono::high_resolution_clock::now();
             uint64_t minimizer_id = r1_rank(minimisers.minimiser1);
             t1 = std::chrono::high_resolution_clock::now();
-            const size_t p = s1_select.select(minimizer_id);
-            const size_t q = s1_select.select(minimizer_id+1);
-            const size_t n = q-p;
+            size_t p = s1_select.select(minimizer_id);
+            size_t q = s1_select.select(minimizer_id+1);
             t2 = std::chrono::high_resolution_clock::now();
 
-            occurences += check<1>(n, mask, minimisers.window, minimisers.window_rev, to, th, te);
+            occurences += check<1>(p, q, mask, minimisers.window, minimisers.window_rev, to, th, te);
             t3 = std::chrono::high_resolution_clock::now();
 
             t0_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)).count();
             t1_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1)).count();
             t2_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2)).count();
-            skmers_ += n;
+            skmers_ += q - p;
         }
         else if(r2[minimisers.minimiser2]) {
             t0 = std::chrono::high_resolution_clock::now();
             uint64_t minimizer_id = r2_rank(minimisers.minimiser2);
             t1 = std::chrono::high_resolution_clock::now();
-            const size_t p = s2_select.select(minimizer_id);
-            const size_t q = s2_select.select(minimizer_id+1);
-            const size_t n = q-p;
+            size_t p = s2_select.select(minimizer_id);
+            size_t q = s2_select.select(minimizer_id+1);
             t2 = std::chrono::high_resolution_clock::now();
 
-            occurences += check<2>(n, mask, minimisers.window, minimisers.window_rev, to, th, te);
+            occurences += check<2>(p, q, mask, minimisers.window, minimisers.window_rev, to, th, te);
             t3 = std::chrono::high_resolution_clock::now();
 
             t0_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)).count();
             t1_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1)).count();
             t2_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2)).count();
-            skmers_ += n;
+            skmers_ += q - p;
         }
         else if(r3[minimisers.minimiser3]) {
             t0 = std::chrono::high_resolution_clock::now();
             uint64_t minimizer_id = r3_rank(minimisers.minimiser3);
             t1 = std::chrono::high_resolution_clock::now();
-            const size_t p = s3_select.select(minimizer_id);
-            const size_t q = s3_select.select(minimizer_id+1);
-            const size_t n = q-p;
+            size_t p = s3_select.select(minimizer_id);
+            size_t q = s3_select.select(minimizer_id+1);
             t2 = std::chrono::high_resolution_clock::now();
 
-            occurences += check<3>(n, mask, minimisers.window, minimisers.window_rev, to, th, te);
+            occurences += check<3>(p, q, mask, minimisers.window, minimisers.window_rev, to, th, te);
             t3 = std::chrono::high_resolution_clock::now();
 
             t0_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)).count();
             t1_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1)).count();
             t2_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2)).count();
-            skmers_ += n;
+            skmers_ += q - p;
         }
         // else
         //     occurences += hashmap.contains(std::min<uint64_t>(minimisers.window, minimisers.window_rev));
