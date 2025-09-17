@@ -674,6 +674,7 @@ inline bool RSIndex::check(const size_t p, const size_t q, const uint64_t mask,
 
 uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
 {
+    std::cout << "m1: " +m1 << " m2: " << +m2 << " m3: " << +m3 << "\n";
     const uint64_t mask = compute_mask(2u * k);
     srindex::minimizers::Three_minimisers_hash minimisers = srindex::minimizers::Three_minimisers_hash(k, m1, m2, m3, seed1, seed2, seed3);
     uint64_t occurences = 0;
@@ -747,8 +748,8 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
         else {
             t4 = std::chrono::high_resolution_clock::now();
             occurences += hashmap.contains(std::min<uint64_t>(minimisers.window, minimisers.window_rev));
-            ++ht_lookups;
             t3_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - t4)).count();
+            ++ht_lookups;
         }
 
     }
