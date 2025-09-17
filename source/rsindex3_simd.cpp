@@ -711,8 +711,8 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
             t1_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1)).count();
             t2_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2)).count();
         }
-        else
-            occurences += hashmap.contains(std::min<uint64_t>(minimisers.window, minimisers.window_rev));
+        // else
+        //     occurences += hashmap.contains(std::min<uint64_t>(minimisers.window, minimisers.window_rev));
 
     }
     std::cout << "r_rank: " << t0_/kmers.size() << " ns\n";
