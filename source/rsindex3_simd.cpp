@@ -745,10 +745,10 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
             ++lookups;
         }
         else {
+            t4 = std::chrono::high_resolution_clock::now();
             occurences += hashmap.contains(std::min<uint64_t>(minimisers.window, minimisers.window_rev));
             ++ht_lookups;
-            t4 = std::chrono::high_resolution_clock::now();
-            t3_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t4 - t3)).count();
+            t3_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - t4)).count();
         }
 
     }
@@ -758,7 +758,7 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
     std::cout << "offsets: " << to/lookups << " ns\n";
     std::cout << "endpoints: " << te/lookups << " ns\n";
     std::cout << "text: " << th/lookups << " ns\n";
-    std::cout << "ht: " << t3_/lookups << " ns\n";
+    std::cout << "ht: " << t3_/ht_lookups << " ns\n";
     std::cout << "avg skmers: " << (double) skmers_/lookups << "\n";
 
     return occurences;
