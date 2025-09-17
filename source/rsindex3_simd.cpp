@@ -677,15 +677,17 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
     const uint64_t mask = compute_mask(2u * k);
     srindex::minimizers::Three_minimisers_hash minimisers = srindex::minimizers::Three_minimisers_hash(k, m1, m2, m3, seed1, seed2, seed3);
     uint64_t occurences = 0;
-    std::chrono::high_resolution_clock::time_point t0, t1, t2, t3 = std::chrono::high_resolution_clock::now();
+    std::chrono::high_resolution_clock::time_point t0, t1, t2, t3, t4 = std::chrono::high_resolution_clock::now();
     double t0_ = 0.0;
     double t1_ = 0.0;
     double t2_ = 0.0;
+    double t3_ = 0.0;
     double to = 0.0;
     double th = 0.0;
     double te = 0.0;
     size_t skmers_ = 0;
     uint64_t lookups = 0;
+    uint64_t ht_lookups = 0;
 
     for(uint64_t kmer : kmers)
     {
@@ -742,8 +744,12 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
             skmers_ += q - p;
             ++lookups;
         }
-        // else
-        //     occurences += hashmap.contains(std::min<uint64_t>(minimisers.window, minimisers.window_rev));
+        else {
+            occurences += hashmap.contains(std::min<uint64_t>(minimisers.window, minimisers.window_rev));
+            ++ht_lookups;
+            t4 = std::chrono::high_resolution_clock::now();
+            t3_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t4 - t3)).count();
+        }
 
     }
     std::cout << "r_rank: " << t0_/lookups << " ns\n";
@@ -752,6 +758,7 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
     std::cout << "offsets: " << to/lookups << " ns\n";
     std::cout << "endpoints: " << te/lookups << " ns\n";
     std::cout << "text: " << th/lookups << " ns\n";
+    std::cout << "ht: " << t3_/lookups << " ns\n";
     std::cout << "avg skmers: " << (double) skmers_/lookups << "\n";
 
     return occurences;
