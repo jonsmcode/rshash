@@ -24,8 +24,8 @@ static inline constexpr uint64_t compute_mask(uint64_t const size)
 }
 
 
-RSIndex::RSIndex() : endpoints(std::vector<uint64_t>{}, 1),
-    s1_select(std::vector<uint64_t>{}, 1), s2_select(std::vector<uint64_t>{}, 1), s3_select(std::vector<uint64_t>{}, 1)
+RSIndex::RSIndex() : endpoints(std::vector<uint64_t>{}, 1)
+    // s1_select(std::vector<uint64_t>{}, 1), s2_select(std::vector<uint64_t>{}, 1), s3_select(std::vector<uint64_t>{}, 1)
 {}
 
 RSIndex::RSIndex(
@@ -33,7 +33,7 @@ RSIndex::RSIndex(
     uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3, size_t const span)
     : k(k), m1(m1), m2(m2), m3(m3),
       m_thres1(m_thres1), m_thres2(m_thres2), m_thres3(m_thres3), span(span),
-      s1_select(std::vector<uint64_t>{}, 1), s2_select(std::vector<uint64_t>{}, 1), s3_select(std::vector<uint64_t>{}, 1),
+      // s1_select(std::vector<uint64_t>{}, 1), s2_select(std::vector<uint64_t>{}, 1), s3_select(std::vector<uint64_t>{}, 1),
       endpoints(std::vector<uint64_t>{}, 1)
 {}
 
@@ -128,8 +128,8 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
         j += count1[i];
         s1[j] = 1;
     }
-    // s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), n1+1, 3);
-    s1_select = sux::bits::Rank9Sel(reinterpret_cast<uint64_t*>(s1.data()), n1+1);
+    s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), n1+1, 3);
+    // s1_select = sux::bits::Rank9Sel(reinterpret_cast<uint64_t*>(s1.data()), n1+1);
 
     std::cout << "filling offsets_1...\n";
     const size_t offset_width = std::bit_width(N);
@@ -274,8 +274,8 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
         j += count2[i];
         s2[j] = 1;
     }
-    // s2_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s2.data()), n2+1, 3);
-    s2_select = sux::bits::Rank9Sel(reinterpret_cast<uint64_t*>(s2.data()), n2+1);
+    s2_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s2.data()), n2+1, 3);
+    // s2_select = sux::bits::Rank9Sel(reinterpret_cast<uint64_t*>(s2.data()), n2+1);
 
     std::cout << "filling offsets_2...\n";
     // offsets2.width(offset_width);
@@ -420,8 +420,8 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
         j += count3[i];
         s3[j] = 1;
     }
-    // s3_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s3.data()), n3+1, 3);
-    s3_select = sux::bits::Rank9Sel(reinterpret_cast<uint64_t*>(s3.data()), n3+1);
+    s3_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s3.data()), n3+1, 3);
+    // s3_select = sux::bits::Rank9Sel(reinterpret_cast<uint64_t*>(s3.data()), n3+1);
 
     std::cout << "filling offsets_3...\n";
     // offsets3.width(offset_width);
@@ -658,35 +658,56 @@ uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
     const uint64_t mask = compute_mask(2u * k);
     srindex::minimizers::Three_minimisers_hash minimisers = srindex::minimizers::Three_minimisers_hash(k, m1, m2, m3, seed1, seed2, seed3);
     uint64_t occurences = 0;
+    std::chrono::high_resolution_clock::time_point t0, t1, t2, t3;
+    std::chrono::nanoseconds t0_, t1_, t2_;
 
     for(uint64_t kmer : kmers)
     {
         minimisers.compute(kmer);
 
         if(r1[minimisers.minimiser1]) {
+            t0 = std::chrono::high_resolution_clock::now();
             uint64_t minimizer_id = r1_rank(minimisers.minimiser1);
+            t1 = std::chrono::high_resolution_clock::now();
             size_t p = s1_select.select(minimizer_id);
             size_t q = s1_select.select(minimizer_id+1);
+            t2 = std::chrono::high_resolution_clock::now();
 
             occurences += check<1>(p, q, mask, minimisers.window, minimisers.window_rev);
+            t3 = std::chrono::high_resolution_clock::now();
         }
         else if(r2[minimisers.minimiser2]) {
+            t0 = std::chrono::high_resolution_clock::now();
             uint64_t minimizer_id = r2_rank(minimisers.minimiser2);
+            t1 = std::chrono::high_resolution_clock::now();
             size_t p = s2_select.select(minimizer_id);
             size_t q = s2_select.select(minimizer_id+1);
+            t2 = std::chrono::high_resolution_clock::now();
 
             occurences += check<2>(p, q, mask, minimisers.window, minimisers.window_rev);
+            t3 = std::chrono::high_resolution_clock::now();
         }
         else if(r3[minimisers.minimiser3]) {
+            t0 = std::chrono::high_resolution_clock::now();
             uint64_t minimizer_id = r3_rank(minimisers.minimiser3);
+            t1 = std::chrono::high_resolution_clock::now();
             size_t p = s3_select.select(minimizer_id);
             size_t q = s3_select.select(minimizer_id+1);
+            t2 = std::chrono::high_resolution_clock::now();
 
             occurences += check<3>(p, q, mask, minimisers.window, minimisers.window_rev);
+            t3 = std::chrono::high_resolution_clock::now();
         }
         else
             occurences += hashmap.contains(std::min<uint64_t>(minimisers.window, minimisers.window_rev));
+
+        t0_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)).count();
+        t1_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1)).count();
+        t2_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2)).count();
     }
+    std::cout << "r_rank: " << (double) t0_/kmers.size() << " ns\n";
+    std::cout << "s_select: " << (double) t1_/kmers.size() << " ns\n";
+    std::cout << "check: " << (double) t2_/kmers.size() << " ns\n";
 
     return occurences;
 }
@@ -919,12 +940,12 @@ int RSIndex::load(const std::filesystem::path &filepath) {
     r1_rank = rank_support_v<1>(&r1);
     r2_rank = rank_support_v<1>(&r2);
     r3_rank = rank_support_v<1>(&r3);
-    // this->s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), s1.size(), 3);
-    // this->s2_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s2.data()), s2.size(), 3);
-    // this->s3_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s3.data()), s3.size(), 3);
-    this->s1_select = sux::bits::Rank9Sel(reinterpret_cast<uint64_t*>(s1.data()), s1.size());
-    this->s2_select = sux::bits::Rank9Sel(reinterpret_cast<uint64_t*>(s2.data()), s2.size());
-    this->s3_select = sux::bits::Rank9Sel(reinterpret_cast<uint64_t*>(s3.data()), s3.size());
+    this->s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), s1.size(), 3);
+    this->s2_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s2.data()), s2.size(), 3);
+    this->s3_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s3.data()), s3.size(), 3);
+    // this->s1_select = sux::bits::Rank9Sel(reinterpret_cast<uint64_t*>(s1.data()), s1.size());
+    // this->s2_select = sux::bits::Rank9Sel(reinterpret_cast<uint64_t*>(s2.data()), s2.size());
+    // this->s3_select = sux::bits::Rank9Sel(reinterpret_cast<uint64_t*>(s3.data()), s3.size());
 
     endpoints = sux::bits::EliasFano(reinterpret_cast<uint64_t*>(sequences.data()), sequences.size());
     
