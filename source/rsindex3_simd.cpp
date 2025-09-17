@@ -560,7 +560,7 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
 void RSIndex::stats() {
     std::cout << "text length: " << text.size() << "\n";
     // std::cout << "text kmers: " << kmers <<  '\n';
-    std::cout << "m1: " +m1 << " m2: " << +m2 << " m3: " << +m3 << "\n";
+    std::cout << "k: " << +k << " m1: " +m1 << " m2: " << +m2 << " m3: " << +m3 << "\n";
 }
 
 
@@ -674,7 +674,7 @@ inline bool RSIndex::check(const size_t p, const size_t q, const uint64_t mask,
 
 uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
 {
-    std::cout << "m1: " +m1 << " m2: " << +m2 << " m3: " << +m3 << "\n";
+    // std::cout << "m1: " +m1 << " m2: " << +m2 << " m3: " << +m3 << "\n";
     const uint64_t mask = compute_mask(2u * k);
     srindex::minimizers::Three_minimisers_hash minimisers = srindex::minimizers::Three_minimisers_hash(k, m1, m2, m3, seed1, seed2, seed3);
     uint64_t occurences = 0;
