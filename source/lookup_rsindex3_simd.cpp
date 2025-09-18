@@ -72,6 +72,16 @@ void load_file(const std::filesystem::path &filepath, std::vector<std::vector<se
     }
 }
 
+uint64_t kmer_to_int(std::vector<seqan3::dna4> &kmerdna4, const uint8_t k) {
+    uint64_t hash = 0;
+    for (uint8_t j=0; j < k; j++) {
+        uint64_t const new_rank = seqan3::to_rank(kmerdna4[j]);
+        hash <<= 2;
+        hash |= new_rank;
+    }
+    return hash;
+}
+
 
 int main(int argc, char** argv)
 {
@@ -152,9 +162,14 @@ int main(int argc, char** argv)
             RSIndex index = RSIndex();
             index.load(args.d);
             index.stats();
-            kmers = index.rand_text_kmers(1000000);
-            std::cout << "bench lookup...\n";
+            // kmers = index.rand_text_kmers(1000000);
+            std::vector<std::vector<seqan3::dna4>> kmers_dna4;
+            load_file(args.i, kmers_dna4);
+            uint8_t k = index.getk();
+            for(auto kmer_dna4 : kmers_dna4)
+                kmers.push_back(kmer_to_int, k);
 
+            std::cout << "bench lookup...\n";
             t_start = std::chrono::high_resolution_clock::now();
             // for(int r = 0; r < rounds; r++) {
             //     found = index.lookup(kmers);

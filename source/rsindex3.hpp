@@ -70,12 +70,10 @@ private:
     size_t kmers;
     bit_vector r1;
     rank_support_v<1> r1_rank;
-    sux::bits::EliasFano<sux::util::AllocType::MALLOC> r2;
-    sux::bits::EliasFano<sux::util::AllocType::MALLOC> r3;
-    // sd_vector<> r2;
-    // rank_support_sd<> r2_rank;
-    // sd_vector<> r3;
-    // rank_support_sd<> r3_rank;
+    sd_vector<> r2;
+    rank_support_sd<> r2_rank;
+    sd_vector<> r3;
+    rank_support_sd<> r3_rank;
     bit_vector s1;
     sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s1_select;
     bit_vector s2;
