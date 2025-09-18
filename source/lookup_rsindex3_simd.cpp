@@ -166,8 +166,8 @@ int main(int argc, char** argv)
             std::vector<std::vector<seqan3::dna4>> kmers_dna4;
             load_file(args.i, kmers_dna4);
             uint8_t k = index.getk();
-            for(auto kmer_dna4 : kmers_dna4)
-                kmers.push_back(kmer_to_int, k);
+            for(auto & kmer_dna4 : kmers_dna4)
+                kmers.push_back(kmer_to_int(kmer_dna4, k));
 
             std::cout << "bench lookup...\n";
             t_start = std::chrono::high_resolution_clock::now();
