@@ -68,7 +68,19 @@ void load_file(const std::filesystem::path &filepath, std::vector<std::vector<se
     for (auto & record : stream) {
         N += record.sequence().size();
         output.push_back(std::move(record.sequence()));
+        // if(N > 1'000'000'000)
+        //     break;
     }
+}
+
+uint64_t kmer_to_int(std::vector<seqan3::dna4> &kmerdna4, const uint8_t k) {
+    uint64_t hash = 0;
+    for (uint8_t j=0; j < k; j++) {
+        uint64_t const new_rank = seqan3::to_rank(kmerdna4[j]);
+        hash <<= 2;
+        hash |= new_rank;
+    }
+    return hash;
 }
 
 
@@ -131,11 +143,17 @@ int main(int argc, char** argv)
 
         RSIndexComp3 index = RSIndexComp3();
         index.load(args.d);
-        std::vector<uint64_t> kmers = index.rand_text_kmers(1000000);
-        std::cout << "bench lookup...\n";
+        // std::vector<uint64_t> kmers = index.rand_text_kmers(1000000);
+        std::vector<uint64_t> kmers;
+        std::vector<std::vector<seqan3::dna4>> kmers_dna4;
+        load_file(args.i, kmers_dna4);
+        uint8_t k = index.getk();
+        for(auto & kmer_dna4 : kmers_dna4)
+            kmers.push_back(kmer_to_int(kmer_dna4, k));
 
+        std::cout << "bench lookup...\n";
         std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
-        const int rounds = 5;
+        const int rounds = 1;
         for(int r = 0; r < rounds; r++) {
             found = index.lookup(kmers);
         }

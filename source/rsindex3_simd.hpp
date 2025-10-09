@@ -11,7 +11,9 @@
 using namespace seqan3::literals;
 using namespace seqan3::contrib::sdsl;
 
-const uint64_t seed1 = 0x8F'3F'73'B5'CF'1C'9A'DE;
+
+// const uint64_t seed1 = 0x8F'3F'73'B5'CF'1C'9A'DE;
+const uint64_t seed1 = 1;
 const uint64_t seed2 = 0x29'6D'BD'33'32'56'8C'64;
 const uint64_t seed3 = 0xE5'9A'38'5F'03'76'C9'F6;
 
@@ -147,7 +149,7 @@ private:
     bit_vector sequences;
     seqan3::bitpacked_sequence<seqan3::dna4> text;
     template<int level>
-    inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t);
+    inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, double &, double &, double &);
     template<int level>
     inline bool simd_check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t);
     // template<int level>

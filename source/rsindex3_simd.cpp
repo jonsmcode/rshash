@@ -10,6 +10,8 @@
 #include "rsindex3_simd.hpp"
 #include "io.hpp"
 #include "minimiser_rev_xor_views3.hpp"
+// #include "minimiser_rev_xor_hash_views3.hpp"
+// #include "minimiser_rev_xor_hash_views3-2.hpp"
 
 
 static inline constexpr uint64_t compute_mask(uint64_t const size)
@@ -42,25 +44,36 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
 {
     auto view1 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
 
+    const uint64_t mask1 = compute_mask(2u * m1);
+    const uint64_t mask2 = compute_mask(2u * m3);
+    const uint64_t mask3 = compute_mask(2u * m3);
+
     std::cout << +m1 << " " << +m2 << " " << +m3 << "\n";
 
     const uint64_t M1 = 1ULL << (m1+m1);
     const uint64_t M2 = 1ULL << (m2+m2);
     const uint64_t M3 = 1ULL << (m3+m3);
 
-    std::cout << "find minimizers...\n";
+    // std::cout << "find minimizers...\n";
     bit_vector r1tmp = bit_vector(M1, 0);
 
+    std::cout << "scan text...\n";
     size_t N = 0;
+    uint64_t kmers = 0;
     uint64_t no_sequences = 0;
     for(auto & record : input) {
         for(auto && minimiser : record | view1) {
-            r1tmp[minimiser.minimiser_value] = 1;
+            r1tmp[minimiser.minimiser_value & mask1] = 1;
         }
         N += record.size();
+        kmers += record.size() - k + 1;
         no_sequences++;
     }
     rank_support_v<1> r1tmp_rank = rank_support_v<1>(&r1tmp);
+
+    std::cout << "text length: " << N << "\n";
+    std::cout << "text kmers: " << kmers <<  '\n';
+    std::cout << "no sequences: " << no_sequences << "\n";
 
     std::cout << "get sequences...\n";
     sequences = bit_vector(N+1, 0);
@@ -77,17 +90,16 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     uint8_t* count1tmp = new uint8_t[c1tmp];
     std::memset(count1tmp, 0, c1tmp*sizeof(uint8_t));
 
-    uint64_t kmers = 0;
     uint64_t n = 0;
     for(auto & sequence : input) {
         for(auto && minimiser : sequence | view1) {
-            size_t i = r1tmp_rank(minimiser.minimiser_value);
+            size_t i = r1tmp_rank(minimiser.minimiser_value & mask1);
             size_t o = minimiser.occurrences;
             size_t w = o/span + 1;
             count1tmp[i] += w;
+            ++count1tmp[i];
             if(count1tmp[i] > m_thres1)
                 count1tmp[i] = m_thres1;
-            kmers += o;
             n += w;
         }
     }
@@ -96,10 +108,12 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     r1 = bit_vector(M1, 0);
     for(auto & sequence : input) {
         for(auto && minimisers : sequence | view1) {
-            if(count1tmp[r1tmp_rank(minimisers.minimiser_value)] < m_thres1)
-                r1[minimisers.minimiser_value] = 1;
+            if(count1tmp[r1tmp_rank(minimisers.minimiser_value & mask1)] < m_thres1)
+                r1[minimisers.minimiser_value & mask1] = 1;
         }
     }
+
+    r1 = bit_vector(M1, 0);
     r1_rank = seqan3::contrib::sdsl::rank_support_v<1>(&r1);
 
     delete[] count1tmp;
@@ -110,9 +124,10 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     std::memset(count1, 0, c1*sizeof(uint8_t));
     for(auto & sequence : input) {
         for(auto && minimiser : sequence | view1) {
-            if(r1[minimiser.minimiser_value]) {
-                size_t i = r1_rank(minimiser.minimiser_value);
+            if(r1[minimiser.minimiser_value & mask1]) {
+                size_t i = r1_rank(minimiser.minimiser_value & mask1);
                 count1[i] += minimiser.occurrences/span + 1;
+                // ++count1[i];
             }
         }
     }
@@ -143,8 +158,8 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     size_t length = 0;
     for(auto & sequence : input) {
         for (auto && minimiser : sequence | view1) {
-            if(r1[minimiser.minimiser_value]) {
-                size_t i = r1_rank(minimiser.minimiser_value);
+            if(r1[minimiser.minimiser_value & mask1]) {
+                size_t i = r1_rank(minimiser.minimiser_value & mask1);
                 size_t s = s1_select.select(i);
                 size_t o = minimiser.occurrences;
                 size_t j = 0;
@@ -176,13 +191,13 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
         bool current_level_up;
 
         for(auto && minimiser : sequence | view1) {
-            level_up = r1[minimiser.minimiser_value];
+            level_up = r1[minimiser.minimiser_value & mask1];
             break;
         }
         if(!level_up)
             start_position = 0;
         for(auto && minimiser : sequence | view1) {
-            current_level_up = r1[minimiser.minimiser_value];
+            current_level_up = r1[minimiser.minimiser_value & mask1];
 
             if(level_up && !current_level_up)
                 start_position = minimiser.range_position;
@@ -210,8 +225,12 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     size_t len_rem_seqs = 0;
     for(auto & sequence : freq_skmers1)
         len_rem_seqs += sequence.size();
+    size_t freq_kmers1 = 0;
+    for(auto & skmer : freq_skmers1)
+        freq_kmers1 += skmer.size() - k + 1;
     std::cout << "remaining superkmers " << freq_skmers1.size() << " (" << (double) freq_skmers1.size()/n*100 << "%) ";
     std::cout << "total length: " << len_rem_seqs << " (" << (double) len_rem_seqs/N*100 << "%)\n";
+    std::cout << "with " << freq_kmers1 << " kmers (" << (double) freq_kmers1/kmers*100 << "%)\n";
 
 
     std::cout << "build level 2...\n";
@@ -220,7 +239,7 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
 
     for(auto & record : freq_skmers1) {
         for(auto && minimiser : record | view2)
-            r2tmp[minimiser.minimiser_value] = 1;
+            r2tmp[minimiser.minimiser_value & mask2] = 1;
     }
     rank_support_v<1> r2tmp_rank = rank_support_v<1>(&r2tmp);
 
@@ -231,8 +250,9 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
 
     for(auto & sequence : freq_skmers1) {
         for(auto && minimiser : sequence | view2) {
-            size_t i = r2tmp_rank(minimiser.minimiser_value);
+            size_t i = r2tmp_rank(minimiser.minimiser_value & mask2);
             count2tmp[i] += minimiser.occurrences/span + 1;
+            // ++count2tmp[i];
             if(count2tmp[i] > m_thres2)
                 count2tmp[i] = m_thres2;
         }
@@ -242,8 +262,8 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     r2 = bit_vector(M2, 0);
     for(auto & sequence : freq_skmers1) {
         for(auto && minimiser : sequence | view2) {
-            if(count2tmp[r2tmp_rank(minimiser.minimiser_value)] < m_thres2)
-                r2[minimiser.minimiser_value] = 1;
+            if(count2tmp[r2tmp_rank(minimiser.minimiser_value & mask2)] < m_thres2)
+                r2[minimiser.minimiser_value & mask2] = 1;
         }
     }
     r2_rank = seqan3::contrib::sdsl::rank_support_v<1>(&r2);
@@ -253,9 +273,15 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     uint8_t* count2 = new uint8_t[c2];
     std::memset(count2, 0, c2*sizeof(uint8_t));
 
+    // for(auto & sequence : freq_skmers1) {
+    //     for(auto && minimiser : sequence | view2) {
+    //         count2[r2_rank(minimiser.minimiser_value)] = count2tmp[r2tmp_rank(minimiser.minimiser_value)];
+    //     }
+    // }
     for(auto & sequence : freq_skmers1) {
         for(auto && minimiser : sequence | view2) {
-            count2[r2_rank(minimiser.minimiser_value)] = count2tmp[r2tmp_rank(minimiser.minimiser_value)];
+            if(r2[minimiser.minimiser_value & mask2])
+                count2[r2_rank(minimiser.minimiser_value & mask2)] = count2tmp[r2tmp_rank(minimiser.minimiser_value & mask2)];
         }
     }
 
@@ -287,8 +313,8 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     uint64_t skmer_idx = 0;
     for(auto & skmer : freq_skmers1) {
         for (auto && minimiser : skmer | view2) {
-            if(r2[minimiser.minimiser_value]) {
-                size_t i = r2_rank(minimiser.minimiser_value);
+            if(r2[minimiser.minimiser_value & mask2]) {
+                size_t i = r2_rank(minimiser.minimiser_value & mask2);
                 size_t s = s2_select.select(i);
                 size_t o = minimiser.occurrences;
                 size_t j = 0;
@@ -321,13 +347,13 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
         bool current_level_up;
 
         for(auto && minimiser : sequence | view2) {
-            level_up = r2[minimiser.minimiser_value];
+            level_up = r2[minimiser.minimiser_value & mask2];
             break;
         }
         if(!level_up)
             start_position = 0;
         for(auto && minimiser : sequence | view2) {
-            current_level_up = r2[minimiser.minimiser_value];
+            current_level_up = r2[minimiser.minimiser_value & mask2];
 
             if(level_up && !current_level_up)
                 start_position = minimiser.range_position;
@@ -355,8 +381,12 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     len_rem_seqs = 0;
     for(auto & sequence : freq_skmers2)
         len_rem_seqs += sequence.size();
+    size_t freq_kmers2 = 0;
+    for(auto & skmer : freq_skmers2)
+        freq_kmers2 += skmer.size() - k + 1;
     std::cout << "remaining superkmers " << freq_skmers2.size() << " (" << (double) freq_skmers2.size()/n*100 << "%) ";
     std::cout << "total length: " << len_rem_seqs << " (" << (double) len_rem_seqs/N*100 << "%)\n";
+    std::cout << "with " << freq_kmers2 << " kmers (" << (double) freq_kmers2/kmers*100 << "%)\n";
 
 
     std::cout << "build level 3...\n";
@@ -366,7 +396,7 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
 
     for(auto & record : freq_skmers2) {
         for(auto && minimiser : record | view3)
-            r3tmp[minimiser.minimiser_value] = 1;
+            r3tmp[minimiser.minimiser_value & mask3] = 1;
     }
     rank_support_v<1> r3tmp_rank = rank_support_v<1>(&r3tmp);
 
@@ -377,8 +407,9 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
 
     for(auto & sequence : freq_skmers2) {
         for(auto && minimiser : sequence | view3) {
-            size_t i = r3tmp_rank(minimiser.minimiser_value);
+            size_t i = r3tmp_rank(minimiser.minimiser_value & mask3);
             count3tmp[i] += minimiser.occurrences/span + 1;
+            // ++count3tmp[i];
             if(count3tmp[i] > m_thres3)
                 count3tmp[i] = m_thres3;
         }
@@ -388,8 +419,8 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     r3 = bit_vector(M3, 0);
     for(auto & sequence : freq_skmers2) {
         for(auto && minimiser : sequence | view3) {
-            if(count3tmp[r3tmp_rank(minimiser.minimiser_value)] < m_thres3)
-                r3[minimiser.minimiser_value] = 1;
+            if(count3tmp[r3tmp_rank(minimiser.minimiser_value & mask3)] < m_thres3)
+                r3[minimiser.minimiser_value & mask3] = 1;
         }
     }
     r3_rank = seqan3::contrib::sdsl::rank_support_v<1>(&r3);
@@ -399,9 +430,15 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     uint16_t* count3 = new uint16_t[c3];
     std::memset(count3, 0, c3*sizeof(uint16_t));
 
+    // for(auto & sequence : freq_skmers2) {
+    //     for(auto && minimiser : sequence | view3) {
+    //         count3[r3_rank(minimiser.minimiser_value)] = count3tmp[r3tmp_rank(minimiser.minimiser_value)];
+    //     }
+    // }
     for(auto & sequence : freq_skmers2) {
         for(auto && minimiser : sequence | view3) {
-            count3[r3_rank(minimiser.minimiser_value)] = count3tmp[r3tmp_rank(minimiser.minimiser_value)];
+            if(r3[minimiser.minimiser_value & mask3])
+                count3[r3_rank(minimiser.minimiser_value & mask3)] = count3tmp[r3tmp_rank(minimiser.minimiser_value & mask3)];
         }
     }
 
@@ -433,8 +470,8 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     skmer_idx = 0;
     for(auto & skmer : freq_skmers2) {
         for (auto && minimiser : skmer | view3) {
-            if(r3[minimiser.minimiser_value]) {
-                size_t i = r3_rank(minimiser.minimiser_value);
+            if(r3[minimiser.minimiser_value & mask3]) {
+                size_t i = r3_rank(minimiser.minimiser_value & mask3);
                 size_t s = s3_select.select(i);
                 size_t o = minimiser.occurrences;
                 size_t j = 0;
@@ -466,13 +503,13 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
         bool current_level_up;
 
         for(auto && minimiser : sequence | view3) {
-            level_up = r3[minimiser.minimiser_value];
+            level_up = r3[minimiser.minimiser_value & mask3];
             break;
         }
         if(!level_up)
             start_position = 0;
         for(auto && minimiser : sequence | view3) {
-            current_level_up = r3[minimiser.minimiser_value];
+            current_level_up = r3[minimiser.minimiser_value & mask3];
 
             if(level_up && !current_level_up)
                 start_position = minimiser.range_position;
@@ -496,8 +533,12 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     len_rem_seqs = 0;
     for(auto & sequence : freq_skmers3)
         len_rem_seqs += sequence.size();
+    size_t freq_kmers3 = 0;
+    for(auto & skmer : freq_skmers3)
+        freq_kmers3 += skmer.size() - k + 1;
     std::cout << "remaining superkmers " << freq_skmers3.size() << " (" << (double) freq_skmers3.size()/n*100 << "%) ";
     std::cout << "total length: " << len_rem_seqs << " (" << (double) len_rem_seqs/N*100 << "%)\n";
+    std::cout << "with " << freq_kmers3 << " kmers (" << (double) freq_kmers3/kmers*100 << "%)\n";
 
     std::cout << "filling HT...\n";
     auto view4 = srindex::views::xor_minimiser_and_window({.minimiser_size = m1, .window_size = k, .seed=seed1});
@@ -652,6 +693,7 @@ inline bool RSIndex::check(const size_t p, const size_t q, const uint64_t mask,
         th += (std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1)).count();
 
         uint64_t e = std::min<uint64_t>(endpoints.select(endpoints.rank(o+1)), o+k+span);
+        // uint64_t e = o+k+span;
 
         t3 = std::chrono::high_resolution_clock::now();
         te += (std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2)).count();
@@ -666,6 +708,7 @@ inline bool RSIndex::check(const size_t p, const size_t q, const uint64_t mask,
         }
         t4 = std::chrono::high_resolution_clock::now();
         th += (std::chrono::duration_cast<std::chrono::nanoseconds>(t4 - t3)).count();
+        // th += (std::chrono::duration_cast<std::chrono::nanoseconds>(t4 - t1)).count();
     }
 
     return false;
