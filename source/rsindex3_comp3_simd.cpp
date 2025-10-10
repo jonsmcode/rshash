@@ -38,7 +38,9 @@ RSIndexComp3::RSIndexComp3(
 
 int RSIndexComp3::build(const std::vector<std::vector<seqan3::dna4>> &input)
 {
-    auto view1 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
+    // auto view1 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
+    // auto view1 = srindex::views::xor_minimiser_and_positions2({.minimiser_size = m1, .window_size = k, .seed=seed1});
+    auto view1 = srindex::views::xor_minimiser_and_window2({.minimiser_size = m1, .window_size = k, .seed=seed1});
 
     std::cout << +m1 << " " << +m2 << " " << +m3 << "\n";
 
@@ -73,47 +75,54 @@ int RSIndexComp3::build(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "count minimizers...\n";
     std::unordered_map<uint64_t, uint8_t> minimizers1;
 
-    auto reverse_2bitwise = [](uint64_t x) -> uint64_t {
-        uint64_t res = 0;
-        for (int i = 0; i < 32; ++i) {
-            uint64_t two_bits = (x >> (i * 2)) & 0x3;
-            res |= two_bits << ((31 - i) * 2);
-        }
-        return res >> 2;
-    };
-
-    uint64_t s = 0;
-    for(auto & sequence : input) {
-        std::cout << "#sequence: " << s++ << " len: " << sequence.size() << '\n';
-        seqan3::debug_stream << sequence << '\n';
-        uint64_t prev_minimizer = std::numeric_limits<uint64_t>::max();
-        for(auto && minimiser : sequence | srindex::views::xor_minimiser_and_window({.minimiser_size = m1, .window_size = k, .seed=seed1})) {
-            if(prev_minimizer != minimiser.minimiser_value) {
-                std::cout << minimiser.window_value << " " << minimiser.window_value_rev << " " << reverse_2bitwise(minimiser.window_value) << " " << minimiser.minimiser_value << " " << minimiser.minimiser_position << "\n";
-                std::cout << std::bitset<64>(minimiser.window_value) << " "  << std::bitset<64>(minimiser.window_value_rev) << "\n";
-                std::cout << std::bitset<64>(reverse_2bitwise(minimiser.window_value)) << " " << std::bitset<64>(reverse_2bitwise(minimiser.window_value_rev)) << " " << std::bitset<64>(minimiser.minimiser_value) << "\n";
-                prev_minimizer = minimiser.minimiser_value;
-            }
+    // uint64_t s = 0;
+    // for(auto & sequence : input) {
+    //     std::cout << "#sequence: " << s++ << " len: " << sequence.size() << '\n';
+    //     seqan3::debug_stream << sequence << '\n';
+    //     uint64_t prev_minimizer = std::numeric_limits<uint64_t>::max();
+    //     for(auto && minimiser : sequence | view1) {
+    //         if(prev_minimizer != minimiser.minimiser_value) {
+    //             std::cout << minimiser.window_value << "\n" << std::bitset<64>(minimiser.window_value) << "\n";
+    //             // std::cout << reverse_2bitwise(minimiser.window_value) << "\n" << std::bitset<64>(reverse_2bitwise(minimiser.window_value)) << "\n";
+    //             std::cout << minimiser.window_value_rev << "\n" << std::bitset<64>(minimiser.window_value_rev) << "\n";
+    //             // std::cout << reverse_2bitwise(minimiser.window_value_rev) << "\n" << std::bitset<64>(reverse_2bitwise(minimiser.window_value_rev)) << "\n";
+    //             // std::cout << minimiser.minimiser_hash << " " << minimiser.minimiser_value << " " << minimiser.range_position << " " << minimiser.minimiser_hash << " " << minimiser.minimiser_rc_hash << "\n";
+    //             // std::cout << minimiser.minimiser_hash << " " << minimiser.minimiser_value << " " << minimiser.range_position << "\n";
+    //             std::cout << minimiser.minimiser_value << "\n";
+    //             prev_minimizer = minimiser.minimiser_value;
+    //         }
             
-        }
-        std::cout << "\n";
-        if(s > 2) break;
-    }
+    //     }
+    //     std::cout << "\n";
+    //     if(s > 1) break;
+    // }
 
     size_t n = 0;
     uint64_t skmers = 0;
     for(auto & sequence : input) {
-        // std::cout << "#sequence: " << ++s << '\n';
-        // seqan3::debug_stream << sequence << '\n';
+        uint64_t cur_minimizer;
         for(auto && minimiser : sequence | view1) {
-            minimizers1[minimiser.minimiser_value] += minimiser.occurrences/span + 1;
-            if(minimizers1[minimiser.minimiser_value] > m_thres1)
-                minimizers1[minimiser.minimiser_value] = m_thres1;
-            n += minimiser.occurrences/span + 1;
-            skmers++;
-            // std::cout << minimiser.minimiser_value << " ";
+            cur_minimizer = minimiser.minimiser_value;
+            break;
         }
-        // std::cout << "\n";
+        size_t occurrences = 0;
+        for(auto && minimiser : sequence | view1) {
+            if(cur_minimizer != minimiser.minimiser_value) {
+                minimizers1[cur_minimizer] += occurrences/span+1;
+                if(minimizers1[cur_minimizer] > m_thres1)
+                    minimizers1[cur_minimizer] = m_thres1;
+                n += occurrences/span + 1;
+                skmers++;
+                cur_minimizer = minimiser.minimiser_value;
+                occurrences = 0;
+            }
+            occurrences++;
+        }
+        minimizers1[cur_minimizer] += occurrences/span+1;
+        if(minimizers1[cur_minimizer] > m_thres1)
+            minimizers1[cur_minimizer] = m_thres1;
+        n += occurrences/span + 1;
+        skmers++;
     }
     std::cout << "skmers: " << skmers << " minimizers/windows: " << n << " distinct minimizers: " << minimizers1.size() << "\n";
     
@@ -217,7 +226,7 @@ int RSIndexComp3::build(const std::vector<std::vector<seqan3::dna4>> &input)
 
     size_t length = 0;
     for(auto & sequence : input) {
-        for (auto && minimiser : sequence | view1) {
+        for (auto && minimiser : sequence | srindex::views::xor_minimiser_and_positions2({.minimiser_size = m1, .window_size = k, .seed=seed1})) {
             if(r1[minimiser.minimiser_value]) {
                 size_t i = r1_rank(minimiser.minimiser_value);
                 size_t s = s1_select.select(i);
@@ -250,13 +259,13 @@ int RSIndexComp3::build(const std::vector<std::vector<seqan3::dna4>> &input)
         bool level_up;
         bool current_level_up;
 
-        for(auto && minimiser : sequence | view1) {
+        for(auto && minimiser : sequence | srindex::views::xor_minimiser_and_positions2({.minimiser_size = m1, .window_size = k, .seed=seed1})) {
             level_up = r1[minimiser.minimiser_value];
             break;
         }
         if(!level_up)
             start_position = 0;
-        for(auto && minimiser : sequence | view1) {
+        for(auto && minimiser : sequence | srindex::views::xor_minimiser_and_positions2({.minimiser_size = m1, .window_size = k, .seed=seed1})) {
             current_level_up = r1[minimiser.minimiser_value];
 
             if(level_up && !current_level_up)
