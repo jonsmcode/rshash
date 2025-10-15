@@ -148,8 +148,10 @@ private:
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> endpoints;
     bit_vector sequences;
     seqan3::bitpacked_sequence<seqan3::dna4> text;
+    // template<int level>
+    // inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, double &, double &, double &);
     template<int level>
-    inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, double &, double &, double &);
+    inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t);
     template<int level>
     inline bool simd_check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t);
     // template<int level>
