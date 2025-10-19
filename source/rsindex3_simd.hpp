@@ -128,6 +128,10 @@ private:
     size_t span;
     sd_vector<> r1;
     rank_support_sd<> r1_rank;
+    // rrr_vector<15> r1;
+    // rank_support_rrr<1, 15> r1_rank;
+    // bit_vector r1;
+    // rank_support_v<1> r1_rank;
     sd_vector<> r2;
     rank_support_sd<> r2_rank;
     sd_vector<> r3;
@@ -148,14 +152,10 @@ private:
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> endpoints;
     bit_vector sequences;
     seqan3::bitpacked_sequence<seqan3::dna4> text;
-    // template<int level>
-    // inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, double &, double &, double &);
+    template<int level>
+    inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, double &, double &, double &);
     template<int level>
     inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t);
-    template<int level>
-    inline bool simd_check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t);
-    // template<int level>
-    // inline bool simd_check2(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t);
     template<int level>
     inline void fill_buffer(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
 
@@ -169,7 +169,7 @@ public:
     size_t unitig_size(uint64_t unitig_id) { return endpoints.select(unitig_id+1) - endpoints.select(unitig_id) - k + 1; }
     std::vector<uint64_t> rand_text_kmers(const uint64_t);
     uint64_t access(const uint64_t, const size_t);
-    uint64_t lookup(const std::vector<uint64_t>&);
+    uint64_t lookup(const std::vector<uint64_t>&, bool verbose);
     int build(const std::vector<std::vector<seqan3::dna4>>&);
     uint64_t streaming_query(const std::vector<seqan3::dna4>&, uint64_t&);
     uint64_t streaming_query(const std::vector<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);

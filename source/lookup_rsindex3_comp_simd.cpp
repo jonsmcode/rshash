@@ -159,9 +159,10 @@ int main(int argc, char** argv)
 
         std::cout << "bench lookup...\n";
         std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
-        const int rounds = 1;
+        const int rounds = 5;
+        const bool verbose = true;
         for(int r = 0; r < rounds; r++) {
-            found = index.lookup(kmers);
+            found = index.lookup(kmers, verbose);
         }
         std::chrono::high_resolution_clock::time_point t_stop = std::chrono::high_resolution_clock::now();
         std::chrono::nanoseconds elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
@@ -171,12 +172,12 @@ int main(int argc, char** argv)
         std::cout << "num_positive_kmers = " << found << " (" << (double) found/kmers.size()*100 << "%)\n";
         std::cout << "pos_time_per_kmer = " << ns_per_kmer << '\n';
 
-        kmers = rand_kmers(1000000, index.getk());
+        kmers = rand_kmers(10000000, index.getk());
         std::cout << "bench lookup...\n";
 
         t_start = std::chrono::high_resolution_clock::now();
         for(int r = 0; r < rounds; r++) {
-            found = index.lookup(kmers);
+            found = index.lookup(kmers, verbose);
         }
         t_stop = std::chrono::high_resolution_clock::now();
         elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);

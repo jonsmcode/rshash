@@ -2091,6 +2091,659 @@ inline constexpr auto three_minimisers_and_window_hash = srindex::detail::three_
 }
 
 
+
+
+namespace srindex
+{
+
+struct three_minimisers_and_window_hash2_parameters
+{
+    size_t minimiser_size1{};
+    size_t minimiser_size2{};
+    size_t minimiser_size3{};
+    size_t window_size{};
+    uint64_t seed1{};
+    uint64_t seed2{};
+    uint64_t seed3{};
+};
+
+struct three_minimisers_and_window_hash2_result
+{
+    uint64_t minimiser1_value;
+    uint64_t minimiser2_value;
+    uint64_t minimiser3_value;
+    uint64_t window_value;
+    uint64_t window_value_rev;
+};
+
+}
+
+namespace srindex::detail
+{
+
+template <std::ranges::view range_t>
+    requires std::ranges::input_range<range_t> && std::ranges::sized_range<range_t>
+class three_minimisers_and_window_hash2 : public std::ranges::view_interface<three_minimisers_and_window_hash2<range_t>>
+{
+private:
+    range_t range{};
+    three_minimisers_and_window_hash2_parameters params{};
+
+    template <bool range_is_const>
+    class basic_iterator;
+
+public:
+    three_minimisers_and_window_hash2()
+        requires std::default_initializable<range_t>
+    = default;
+    three_minimisers_and_window_hash2(three_minimisers_and_window_hash2 const & rhs) = default;
+    three_minimisers_and_window_hash2(three_minimisers_and_window_hash2 && rhs) = default;
+    three_minimisers_and_window_hash2 & operator=(three_minimisers_and_window_hash2 const & rhs) = default;
+    three_minimisers_and_window_hash2 & operator=(three_minimisers_and_window_hash2 && rhs) = default;
+    ~three_minimisers_and_window_hash2() = default;
+
+    explicit three_minimisers_and_window_hash2(range_t range, three_minimisers_and_window_hash2_parameters params) :
+        range{std::move(range)},
+        params{std::move(params)}
+    {}
+
+    basic_iterator<false> begin()
+    {
+        return {std::ranges::begin(range), std::ranges::size(range), params};
+    }
+
+    basic_iterator<true> begin() const
+        requires std::ranges::view<range_t const> && std::ranges::input_range<range_t const>
+    {
+        return {std::ranges::begin(range), std::ranges::size(range), params};
+    }
+
+    auto end() noexcept
+    {
+        return std::default_sentinel;
+    }
+
+    auto end() const noexcept
+        requires std::ranges::view<range_t const> && std::ranges::input_range<range_t const>
+    {
+        return std::default_sentinel;
+    }
+};
+
+template <std::ranges::view range_t>
+    requires std::ranges::input_range<range_t> && std::ranges::sized_range<range_t>
+template <bool range_is_const>
+class three_minimisers_and_window_hash2<range_t>::basic_iterator
+{
+private:
+    template <bool>
+    friend class basic_iterator;
+
+    using maybe_const_range_t = std::conditional_t<range_is_const, range_t const, range_t>;
+    using range_iterator_t = std::ranges::iterator_t<maybe_const_range_t>;
+
+public:
+    using difference_type = std::ranges::range_difference_t<maybe_const_range_t>;
+    using value_type = three_minimisers_and_window_hash2_result;
+    using pointer = void;
+    using reference = value_type;
+    using iterator_category = std::conditional_t<std::ranges::forward_range<maybe_const_range_t>,
+                                                 std::forward_iterator_tag,
+                                                 std::input_iterator_tag>;
+    using iterator_concept = iterator_category;
+
+private:
+    range_iterator_t range_it{};
+
+    uint64_t kmer_mask1{std::numeric_limits<uint64_t>::max()};
+    uint64_t kmer_mask2{std::numeric_limits<uint64_t>::max()};
+    uint64_t kmer_mask3{std::numeric_limits<uint64_t>::max()};
+    uint64_t window_mask{std::numeric_limits<uint64_t>::max()};
+    uint64_t seed1{};
+    uint64_t seed2{};
+    uint64_t seed3{};
+    mixer_64 m_hasher1{};
+    mixer_64 m_hasher2{};
+    mixer_64 m_hasher3{};
+    uint8_t minimisers_in_window{};
+    uint64_t minimiser_size1{};
+    uint64_t minimiser_size2{};
+    uint64_t minimiser_size3{};
+    uint64_t window_size{};
+
+    size_t fwd_hash1_position{};
+    size_t rc_hash1_position{};
+    size_t fwd_hash2_position{};
+    size_t rc_hash2_position{};
+    size_t fwd_hash3_position{};
+    size_t rc_hash3_position{};
+
+    uint64_t kmer_value1{};
+    uint64_t kmer_value_rev1{};
+    uint64_t kmer_value2{};
+    uint64_t kmer_value_rev2{};
+    uint64_t kmer_value3{};
+    uint64_t kmer_value_rev3{};
+
+    uint64_t fwd_hash1{};
+    uint64_t rc_hash1{};
+    uint64_t fwd_hash2{};
+    uint64_t rc_hash2{};
+    uint64_t fwd_hash3{};
+    uint64_t rc_hash3{};
+    uint64_t minimiser1_fwd_value{};
+    uint64_t minimiser1_rc_value{};
+    uint64_t minimiser2_fwd_value{};
+    uint64_t minimiser2_rc_value{};
+    uint64_t minimiser3_fwd_value{};
+    uint64_t minimiser3_rc_value{};
+
+    size_t range_size{};
+    size_t range_position{};
+
+    value_type current{};
+
+    std::deque<uint64_t> kmer_hashs1_in_window{};
+    std::deque<uint64_t> kmer_values1_in_window{};
+    std::deque<uint64_t> kmer_rc_hashs1_in_window{};
+    std::deque<uint64_t> kmer_rc_values1_in_window{};
+
+    std::deque<uint64_t> kmer_hashs2_in_window{};
+    std::deque<uint64_t> kmer_values2_in_window{};
+    std::deque<uint64_t> kmer_rc_hashs2_in_window{};
+    std::deque<uint64_t> kmer_rc_values2_in_window{};
+    
+    std::deque<uint64_t> kmer_hashs3_in_window{};
+    std::deque<uint64_t> kmer_values3_in_window{};
+    std::deque<uint64_t> kmer_rc_hashs3_in_window{};
+    std::deque<uint64_t> kmer_rc_values3_in_window{};
+
+    static inline constexpr uint64_t compute_mask(uint64_t const size)
+    {
+        assert(size > 0u);
+        assert(size <= 64u);
+
+        if(size == 64u)
+            return std::numeric_limits<uint64_t>::max();
+        else
+            return (uint64_t{1u} << (size)) - 1u;
+    }
+
+public:
+    basic_iterator() = default;
+    basic_iterator(basic_iterator const &) = default;
+    basic_iterator(basic_iterator &&) = default;
+    basic_iterator & operator=(basic_iterator const &) = default;
+    basic_iterator & operator=(basic_iterator &&) = default;
+    ~basic_iterator() = default;
+
+    basic_iterator(basic_iterator<!range_is_const> const & it)
+        requires range_is_const
+        :
+        range_it{it.range_it},
+        kmer_mask1{it.kmer_mask1},
+        kmer_mask2{it.kmer_mask2},
+        kmer_mask3{it.kmer_mask3},
+        window_mask{it.window_mask},
+        kmer_value1{it.kmer_value1},
+        kmer_value_rev1{it.kmer_value_rev1},
+        kmer_value2{it.kmer_value2},
+        kmer_value_rev2{it.kmer_value_rev2},
+        kmer_value3{it.kmer_value3},
+        kmer_value_rev3{it.kmer_value_rev3},
+        range_size{it.range_size},
+        range_position{it.range_position},
+        current{it.current},
+        kmer_hashs1_in_window{it.kmer_hashs1_in_window},
+        kmer_values1_in_window{it.kmer_values1_in_window},
+        kmer_rc_hashs1_in_window{it.kmer_rc_hashs1_in_window},
+        kmer_rc_values1_in_window{it.kmer_rc_values1_in_window},
+        kmer_hashs2_in_window{it.kmer_hashs2_in_window},
+        kmer_values2_in_window{it.kmer_values2_in_window},
+        kmer_rc_hashs2_in_window{it.kmer_rc_hashs2_in_window},
+        kmer_rc_values2_in_window{it.kmer_rc_values2_in_window},
+        kmer_hashs3_in_window{it.kmer_hashs3_in_window},
+        kmer_values3_in_window{it.kmer_values3_in_window},
+        kmer_rc_hashs3_in_window{it.kmer_rc_hashs3_in_window},
+        kmer_rc_values3_in_window{it.kmer_rc_values3_in_window},
+        fwd_hash1_position{it.fwd_hash1_position},
+        rc_hash1_position{it.rc_hash1_position},
+        fwd_hash2_position{it.fwd_hash2_position},
+        rc_hash2_position{it.rc_hash2_position},
+        fwd_hash3_position{it.fwd_hash3_position},
+        rc_hash3_position{it.rc_hash3_position},
+        fwd_hash1{it.fwd_hash1},
+        rc_hash1{it.rc_hash1},
+        fwd_hash2{it.fwd_hash2},
+        rc_hash2{it.rc_hash2},
+        fwd_hash3{it.fwd_hash3},
+        rc_hash3{it.rc_hash3},
+        minimiser1_fwd_value{it.minimiser1_fwd_value},
+        minimiser1_rc_value{it.minimiser1_rc_value},
+        minimiser2_fwd_value{it.minimiser2_fwd_value},
+        minimiser2_rc_value{it.minimiser2_rc_value},
+        minimiser3_fwd_value{it.minimiser3_fwd_value},
+        minimiser3_rc_value{it.minimiser3_rc_value}
+    {}
+
+    basic_iterator(range_iterator_t range_iterator,
+                   size_t const range_size,
+                   three_minimisers_and_window_hash2_parameters const & params) :
+        range_it{std::move(range_iterator)},
+        kmer_mask1{compute_mask(2u * params.minimiser_size1)},
+        kmer_mask2{compute_mask(2u * params.minimiser_size2)},
+        kmer_mask3{compute_mask(2u * params.minimiser_size3)},
+        window_mask{compute_mask(2u * params.window_size)},
+        range_size{range_size}
+    {
+        if (range_size < params.window_size)
+            range_position = range_size;
+        else
+            init(params);
+    }
+
+    friend bool operator==(basic_iterator const & lhs, basic_iterator const & rhs)
+    {
+        return lhs.range_it == rhs.range_it;
+    }
+
+    friend bool operator==(basic_iterator const & lhs, std::default_sentinel_t const &)
+    {
+        return lhs.range_position == lhs.range_size;
+    }
+
+    basic_iterator & operator++() noexcept
+    {
+        while (!next_minimiser_is_new())
+        {}
+        return *this;
+    }
+
+    basic_iterator operator++(int) noexcept
+    {
+        basic_iterator tmp{*this};
+        while (!next_minimiser_is_new())
+        {}
+        return tmp;
+    }
+
+    value_type operator*() const noexcept
+    {
+        return current;
+    }
+
+private:
+    enum class pop_first : bool
+    {
+        no,
+        yes
+    };
+
+    void rolling_hash()
+    {
+        uint64_t const new_rank = seqan3::to_rank(*range_it);
+
+        current.window_value = (current.window_value >> 2) | (new_rank << 2*(window_size-1));
+        current.window_value_rev = ((current.window_value_rev << 2) | (new_rank^0b11)) & window_mask;
+
+        kmer_value1 = current.window_value >> 2*(window_size - minimiser_size1);
+        kmer_value_rev1 = current.window_value_rev & kmer_mask1;
+        kmer_value2 = current.window_value >> 2*(window_size - minimiser_size2);
+        kmer_value_rev2 = current.window_value_rev & kmer_mask2;
+        kmer_value3 = current.window_value >> 2*(window_size - minimiser_size3);
+        kmer_value_rev3 = current.window_value_rev & kmer_mask3;
+    }
+
+    template <pop_first pop>
+    void next_window()
+    {
+        ++range_position;
+        ++range_it;
+
+        rolling_hash();
+
+        if constexpr (pop == pop_first::yes) {
+            kmer_hashs1_in_window.pop_front();
+            kmer_values1_in_window.pop_front();
+            kmer_rc_hashs1_in_window.pop_front();
+            kmer_rc_values1_in_window.pop_front();
+            kmer_hashs2_in_window.pop_front();
+            kmer_values2_in_window.pop_front();
+            kmer_rc_hashs2_in_window.pop_front();
+            kmer_rc_values2_in_window.pop_front();
+            kmer_hashs3_in_window.pop_front();
+            kmer_values3_in_window.pop_front();
+            kmer_rc_hashs3_in_window.pop_front();
+            kmer_rc_values3_in_window.pop_front();
+        }
+        
+        kmer_hashs1_in_window.push_back(m_hasher1.hash(kmer_value1));
+        kmer_rc_hashs1_in_window.push_back(m_hasher1.hash(kmer_value_rev1));
+        kmer_values1_in_window.push_back(kmer_value1);
+        kmer_rc_values1_in_window.push_back(kmer_value_rev1);
+        kmer_hashs2_in_window.push_back(m_hasher2.hash(kmer_value2));
+        kmer_rc_hashs2_in_window.push_back(m_hasher2.hash(kmer_value_rev2));
+        kmer_values2_in_window.push_back(kmer_value2);
+        kmer_rc_values2_in_window.push_back(kmer_value_rev2);
+        kmer_hashs3_in_window.push_back(m_hasher3.hash(kmer_value3));
+        kmer_rc_hashs3_in_window.push_back(m_hasher3.hash(kmer_value_rev3));
+        kmer_values3_in_window.push_back(kmer_value3);
+        kmer_rc_values3_in_window.push_back(kmer_value_rev3);
+    }
+
+    void find_minimiser1_in_window()
+    {
+        auto minimiser_fwd_it = std::ranges::min_element(kmer_hashs1_in_window, std::less_equal<uint64_t>{});
+        fwd_hash1 = *minimiser_fwd_it;
+        fwd_hash1_position = std::distance(std::begin(kmer_hashs1_in_window), minimiser_fwd_it);
+        minimiser1_fwd_value = kmer_values1_in_window[fwd_hash1_position];
+
+        auto minimiser_rc_it = std::ranges::min_element(kmer_rc_hashs1_in_window, std::less_equal<uint64_t>{});
+        rc_hash1 = *minimiser_rc_it;
+        rc_hash1_position = std::distance(std::begin(kmer_rc_hashs1_in_window), minimiser_rc_it);
+        minimiser1_rc_value = kmer_rc_values1_in_window[rc_hash1_position];
+
+        current.minimiser1_value = std::min<uint64_t>(minimiser1_fwd_value, minimiser1_rc_value);
+    }
+
+    void find_minimiser2_in_window()
+    {
+        auto minimiser_fwd_it = std::ranges::min_element(kmer_hashs2_in_window, std::less_equal<uint64_t>{});
+        fwd_hash2 = *minimiser_fwd_it;
+        fwd_hash2_position = std::distance(std::begin(kmer_hashs2_in_window), minimiser_fwd_it);
+        minimiser2_fwd_value = kmer_values2_in_window[fwd_hash2_position];
+
+        auto minimiser_rc_it = std::ranges::min_element(kmer_rc_hashs2_in_window, std::less_equal<uint64_t>{});
+        rc_hash2 = *minimiser_rc_it;
+        rc_hash2_position = std::distance(std::begin(kmer_rc_hashs2_in_window), minimiser_rc_it);
+        minimiser2_rc_value = kmer_rc_values2_in_window[rc_hash2_position];
+
+        current.minimiser2_value = std::min<uint64_t>(minimiser2_fwd_value, minimiser2_rc_value);
+    }
+
+    void find_minimiser3_in_window()
+    {
+        auto minimiser_fwd_it = std::ranges::min_element(kmer_hashs3_in_window, std::less_equal<uint64_t>{});
+        fwd_hash3 = *minimiser_fwd_it;
+        fwd_hash3_position = std::distance(std::begin(kmer_hashs3_in_window), minimiser_fwd_it);
+        minimiser3_fwd_value = kmer_values3_in_window[fwd_hash3_position];
+
+        auto minimiser_rc_it = std::ranges::min_element(kmer_rc_hashs3_in_window, std::less_equal<uint64_t>{});
+        rc_hash3 = *minimiser_rc_it;
+        rc_hash3_position = std::distance(std::begin(kmer_rc_hashs3_in_window), minimiser_rc_it);
+        minimiser3_rc_value = kmer_rc_values3_in_window[rc_hash3_position];
+
+        current.minimiser3_value = std::min<uint64_t>(minimiser3_fwd_value, minimiser3_rc_value);
+    }
+
+    void find_hash_fwd1_in_window()
+    {
+        auto minimiser_it = std::ranges::min_element(kmer_hashs1_in_window, std::less_equal<uint64_t>{});
+        fwd_hash1 = *minimiser_it;
+        fwd_hash1_position = std::distance(std::begin(kmer_hashs1_in_window), minimiser_it);
+        minimiser1_fwd_value = kmer_values1_in_window[fwd_hash1_position];
+        current.minimiser1_value = std::min<uint64_t>(minimiser1_fwd_value, minimiser1_rc_value);
+    }
+
+    void find_hash_rc1_in_window()
+    {
+        auto minimiser_it = std::ranges::min_element(kmer_rc_hashs1_in_window, std::less_equal<uint64_t>{});
+        rc_hash1 = *minimiser_it;
+        rc_hash1_position = std::distance(std::begin(kmer_rc_hashs1_in_window), minimiser_it);
+        minimiser1_rc_value = kmer_rc_values1_in_window[rc_hash1_position];
+        current.minimiser1_value = std::min<uint64_t>(minimiser1_fwd_value, minimiser1_rc_value);
+    }
+
+    void find_hash_fwd2_in_window()
+    {
+        auto minimiser_it = std::ranges::min_element(kmer_hashs2_in_window, std::less_equal<uint64_t>{});
+        fwd_hash2 = *minimiser_it;
+        fwd_hash2_position = std::distance(std::begin(kmer_hashs2_in_window), minimiser_it);
+        minimiser2_fwd_value = kmer_values2_in_window[fwd_hash2_position];
+        current.minimiser2_value = std::min<uint64_t>(minimiser2_fwd_value, minimiser2_rc_value);
+    }
+
+    void find_hash_rc2_in_window()
+    {
+        auto minimiser_it = std::ranges::min_element(kmer_rc_hashs2_in_window, std::less_equal<uint64_t>{});
+        rc_hash2 = *minimiser_it;
+        rc_hash2_position = std::distance(std::begin(kmer_rc_hashs2_in_window), minimiser_it);
+        minimiser2_rc_value = kmer_rc_values2_in_window[rc_hash2_position];
+        current.minimiser2_value = std::min<uint64_t>(minimiser2_fwd_value, minimiser2_rc_value);
+    }
+
+    void find_hash_fwd3_in_window()
+    {
+        auto minimiser_it = std::ranges::min_element(kmer_hashs3_in_window, std::less_equal<uint64_t>{});
+        fwd_hash3 = *minimiser_it;
+        fwd_hash3_position = std::distance(std::begin(kmer_hashs3_in_window), minimiser_it);
+        minimiser3_fwd_value = kmer_values3_in_window[fwd_hash3_position];
+        current.minimiser3_value = std::min<uint64_t>(minimiser3_fwd_value, minimiser3_rc_value);
+    }
+
+    void find_hash_rc3_in_window()
+    {
+        auto minimiser_it = std::ranges::min_element(kmer_rc_hashs3_in_window, std::less_equal<uint64_t>{});
+        rc_hash3 = *minimiser_it;
+        rc_hash3_position = std::distance(std::begin(kmer_rc_hashs3_in_window), minimiser_it);
+        minimiser3_rc_value = kmer_rc_values3_in_window[rc_hash3_position];
+        current.minimiser3_value = std::min<uint64_t>(minimiser3_fwd_value, minimiser3_rc_value);
+    }
+
+    void init(three_minimisers_and_window_hash2_parameters const & params)
+    {
+        minimiser_size1 = params.minimiser_size1;
+        minimiser_size2 = params.minimiser_size2;
+        minimiser_size3 = params.minimiser_size3;
+        window_size = params.window_size;
+        seed1 = params.seed1;
+        seed2 = params.seed2;
+        seed3 = params.seed3;
+        m_hasher1.seed(seed1);
+        m_hasher2.seed(seed2);
+        m_hasher3.seed(seed3);
+
+        uint64_t new_rank = seqan3::to_rank(*range_it);
+
+        current.window_value = (current.window_value >> 2) | (new_rank << 2*(window_size-1));
+        current.window_value_rev = (current.window_value_rev << 2) | (new_rank^0b11);
+        for (size_t i = 1u; i < minimiser_size1; ++i) {
+            ++range_position;
+            ++range_it;
+            new_rank = seqan3::to_rank(*range_it);
+            current.window_value = (current.window_value >> 2) | (new_rank << 2*(window_size-1));
+            current.window_value_rev = (current.window_value_rev << 2) | (new_rank^0b11);
+        }
+        kmer_value1 = current.window_value >> 2*(window_size - minimiser_size1);
+        kmer_value_rev1 = current.window_value_rev & kmer_mask1;
+
+        kmer_values1_in_window.push_back(kmer_value1);
+        kmer_rc_values1_in_window.push_back(kmer_value_rev1);
+        kmer_hashs1_in_window.push_back(m_hasher1.hash(kmer_value1));
+        kmer_rc_hashs1_in_window.push_back(m_hasher1.hash(kmer_value_rev1));
+
+        for (size_t i = minimiser_size1; i < minimiser_size2; ++i) {
+            ++range_position;
+            ++range_it;
+            new_rank = seqan3::to_rank(*range_it);
+
+            current.window_value = (current.window_value >> 2) | (new_rank << 2*(window_size-1));
+            current.window_value_rev = (current.window_value_rev << 2) | (new_rank^0b11);
+
+            kmer_value1 = current.window_value >> 2*(window_size - minimiser_size1);
+            kmer_value_rev1 = current.window_value_rev & kmer_mask1;
+            
+            kmer_values1_in_window.push_back(kmer_value1);
+            kmer_rc_values1_in_window.push_back(kmer_value_rev1);
+            kmer_hashs1_in_window.push_back(m_hasher1.hash(kmer_value1));
+            kmer_rc_hashs1_in_window.push_back(m_hasher1.hash(kmer_value_rev1));
+        }
+        kmer_value2 = current.window_value >> 2*(window_size - minimiser_size2);
+        kmer_value_rev2 = current.window_value_rev & kmer_mask2;
+
+        kmer_values2_in_window.push_back(kmer_value2);
+        kmer_rc_values2_in_window.push_back(kmer_value_rev2);
+        kmer_hashs2_in_window.push_back(m_hasher2.hash(kmer_value2));
+        kmer_rc_hashs2_in_window.push_back(m_hasher2.hash(kmer_value_rev2));
+
+        for (size_t i = minimiser_size2; i < minimiser_size3; ++i) {
+            ++range_position;
+            ++range_it;
+            new_rank = seqan3::to_rank(*range_it);
+
+            current.window_value = (current.window_value >> 2) | (new_rank << 2*(window_size-1));
+            current.window_value_rev = (current.window_value_rev << 2) | (new_rank^0b11);
+
+            kmer_value1 = current.window_value >> 2*(window_size - minimiser_size1);
+            kmer_value_rev1 = current.window_value_rev & kmer_mask1;
+            kmer_values1_in_window.push_back(kmer_value1);
+            kmer_rc_values1_in_window.push_back(kmer_value_rev1);
+            kmer_hashs1_in_window.push_back(m_hasher1.hash(kmer_value1));
+            kmer_rc_hashs1_in_window.push_back(m_hasher1.hash(kmer_value_rev1));
+
+            kmer_value2 = current.window_value >> 2*(window_size - minimiser_size2);
+            kmer_value_rev2 = current.window_value_rev & kmer_mask2;
+            kmer_values2_in_window.push_back(kmer_value2);
+            kmer_rc_values2_in_window.push_back(kmer_value_rev2);
+            kmer_hashs2_in_window.push_back(m_hasher2.hash(kmer_value2));
+            kmer_rc_hashs2_in_window.push_back(m_hasher2.hash(kmer_value_rev2));
+        }
+        kmer_value3 = current.window_value >> 2*(window_size - minimiser_size3);
+        kmer_value_rev3 = current.window_value_rev & kmer_mask3;
+        kmer_values3_in_window.push_back(kmer_value3);
+        kmer_rc_values3_in_window.push_back(kmer_value_rev3);
+        kmer_hashs3_in_window.push_back(m_hasher3.hash(kmer_value3));
+        kmer_rc_hashs3_in_window.push_back(m_hasher3.hash(kmer_value_rev3));
+
+        for (size_t i = minimiser_size3; i < window_size; ++i)
+            next_window<pop_first::no>();
+
+        find_minimiser1_in_window();
+        find_minimiser2_in_window();
+        find_minimiser3_in_window();
+    }
+
+    bool next_minimiser_is_new()
+    {
+        if (range_position + 1 == range_size)
+            return ++range_position;
+
+        next_window<pop_first::yes>();
+
+        if (fwd_hash1_position-- == 0)
+            find_hash_fwd1_in_window();
+        if (rc_hash1_position-- == 0)
+            find_hash_rc1_in_window();
+        if (fwd_hash2_position-- == 0)
+            find_hash_fwd2_in_window();
+        if (rc_hash2_position-- == 0)
+            find_hash_rc2_in_window();
+        if (fwd_hash3_position-- == 0)
+            find_hash_fwd3_in_window();
+        if (rc_hash3_position-- == 0)
+            find_hash_rc3_in_window();
+
+        if (uint64_t new_kmer_hash = kmer_hashs1_in_window.back(); new_kmer_hash < fwd_hash1) {
+            fwd_hash1 = new_kmer_hash;
+            minimiser1_fwd_value = kmer_values1_in_window.back();
+            fwd_hash1_position = minimisers_in_window;
+            current.minimiser1_value = std::min<uint64_t>(minimiser1_fwd_value, minimiser1_rc_value);
+        }
+        if (uint64_t new_kmer_hash = kmer_rc_hashs1_in_window.back(); new_kmer_hash < rc_hash1) {
+            rc_hash1 = new_kmer_hash;
+            minimiser1_rc_value = kmer_rc_values1_in_window.back();
+            rc_hash1_position = minimisers_in_window;
+            current.minimiser1_value = std::min<uint64_t>(minimiser1_fwd_value, minimiser1_rc_value);
+        }
+        if (uint64_t new_kmer_hash = kmer_hashs2_in_window.back(); new_kmer_hash < fwd_hash2) {
+            fwd_hash2 = new_kmer_hash;
+            minimiser2_fwd_value = kmer_values2_in_window.back();
+            fwd_hash2_position = minimisers_in_window;
+            current.minimiser2_value = std::min<uint64_t>(minimiser2_fwd_value, minimiser2_rc_value);
+        }
+        if (uint64_t new_kmer_hash = kmer_rc_hashs2_in_window.back(); new_kmer_hash < rc_hash2) {
+            rc_hash2 = new_kmer_hash;
+            minimiser2_rc_value = kmer_rc_values2_in_window.back();
+            rc_hash2_position = minimisers_in_window;
+            current.minimiser2_value = std::min<uint64_t>(minimiser2_fwd_value, minimiser2_rc_value);
+        }
+        if (uint64_t new_kmer_hash = kmer_hashs3_in_window.back(); new_kmer_hash < fwd_hash3) {
+            fwd_hash3 = new_kmer_hash;
+            minimiser3_fwd_value = kmer_values3_in_window.back();
+            fwd_hash3_position = minimisers_in_window;
+            current.minimiser3_value = std::min<uint64_t>(minimiser3_fwd_value, minimiser3_rc_value);
+        }
+        if (uint64_t new_kmer_hash = kmer_rc_hashs3_in_window.back(); new_kmer_hash < rc_hash3) {
+            rc_hash3 = new_kmer_hash;
+            minimiser3_rc_value = kmer_rc_values3_in_window.back();
+            rc_hash3_position = minimisers_in_window;
+            current.minimiser3_value = std::min<uint64_t>(minimiser3_fwd_value, minimiser3_rc_value);
+        }
+
+        return true;
+    }
+};
+
+
+template <std::ranges::viewable_range rng_t>
+three_minimisers_and_window_hash2(rng_t &&, three_minimisers_and_window_hash2_parameters &&)
+    -> three_minimisers_and_window_hash2<std::views::all_t<rng_t>>;
+
+struct three_minimisers_and_window_hash2_fn
+{
+    constexpr auto operator()(three_minimisers_and_window_hash2_parameters params) const
+    {
+        return seqan3::detail::adaptor_from_functor{*this, std::move(params)};
+    }
+
+    template <std::ranges::range range_t>
+    constexpr auto operator()(range_t && range, three_minimisers_and_window_hash2_parameters params) const
+    {
+        static_assert(std::same_as<std::ranges::range_value_t<range_t>, seqan3::dna4>, "Only dna4 supported.");
+        static_assert(std::ranges::sized_range<range_t>, "Input range must be a std::ranges::sized_range.");
+
+        if (params.minimiser_size1 == 0u)
+            throw std::invalid_argument{"minimiser_size must be > 0."};
+        if (params.minimiser_size1 > 32u)
+            throw std::invalid_argument{"minimiser_size must be <= 32."};
+        if (params.minimiser_size2 == 0u)
+            throw std::invalid_argument{"minimiser_size must be > 0."};
+        if (params.minimiser_size2 > 32u)
+            throw std::invalid_argument{"minimiser_size must be <= 32."};
+        if (params.minimiser_size3 == 0u)
+            throw std::invalid_argument{"minimiser_size must be > 0."};
+        if (params.minimiser_size3 > 32u) {
+            std::cout << params.minimiser_size3 << '\n';
+            throw std::invalid_argument{"minimiser_size must be <= 32."};
+        }
+        if (params.window_size == 0u)
+            throw std::invalid_argument{"window_size must be > 0."};
+        if (params.window_size > 32u)
+            throw std::invalid_argument{"window_size must be <= 32."};
+        if (params.window_size < params.minimiser_size1)
+            throw std::invalid_argument{"window_size must be >= minimiser_size."};
+        if (params.window_size < params.minimiser_size2)
+            throw std::invalid_argument{"window_size must be >= minimiser_size."};
+        if (params.window_size < params.minimiser_size3)
+            throw std::invalid_argument{"window_size must be >= minimiser_size."};
+
+        return three_minimisers_and_window_hash2{range, std::move(params)};
+    }
+};
+
+}
+
+namespace srindex::views
+{
+
+inline constexpr auto three_minimisers_and_window_hash2 = srindex::detail::three_minimisers_and_window_hash2_fn{};
+
+}
+
+
+
+
+
 namespace srindex::minimizers
 {
 
