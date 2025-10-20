@@ -828,9 +828,10 @@ if (verbose) {
         t4_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - t5)).count();
 
         t6 = std::chrono::high_resolution_clock::now();
-        if(r1[minimisers.minimiser1]) {
+        if(uint64_t minimizer_id = r1_rank(minimisers.minimiser1); r1_rank(minimisers.minimiser1+1) > minimizer_id) {
+        // if(r1[minimisers.minimiser1]) {
             t0 = std::chrono::high_resolution_clock::now();
-            uint64_t minimizer_id = r1_rank(minimisers.minimiser1);
+            // uint64_t minimizer_id = r1_rank(minimisers.minimiser1);
             t1 = std::chrono::high_resolution_clock::now();
             size_t p = s1_select.select(minimizer_id);
             size_t q = s1_select.select(minimizer_id+1);
@@ -956,12 +957,6 @@ inline void RSIndexComp3::fill_buffer(std::vector<uint64_t> &buffer, const uint6
     for(uint64_t i = 0; i < q-p; i++) {
         uint64_t hash = 0;
         size_t o;
-        // if constexpr (level == 1)
-        //     o = offsets1[p+i];
-        // if constexpr (level == 2)
-        //     o = offsets2[p+i];
-        // if constexpr (level == 3)
-        //     o = offsets3[p+i];
         if constexpr (level == 1)
             o = offsets1.access(p+i);
         if constexpr (level == 2)
@@ -972,17 +967,9 @@ inline void RSIndexComp3::fill_buffer(std::vector<uint64_t> &buffer, const uint6
         size_t e = o+k+span;
         if(e > next_endpoint)
             e = next_endpoint;
-        for (uint64_t j=o; j < o+k; j++) {
+        for (uint64_t j=o; j < e; j++) {
             uint64_t const new_rank = seqan3::to_rank(text[j]);
-            hash <<= 2;
-            hash |= new_rank;
-        }
-        buffer.push_back(hash);
-        for(size_t j=o+k; j < e; j++) {
-            uint64_t const new_rank = seqan3::to_rank(text[j]);
-            hash <<= 2;
-            hash |= new_rank;
-            hash &= mask;
+            hash = (hash >> 2) | (new_rank << 2*(k-1));
             buffer.push_back(hash);
         }
     }
@@ -1088,7 +1075,6 @@ uint64_t RSIndexComp3::streaming_query(const std::vector<seqan3::dna4> &query, u
 
             buffer1.clear();
             fill_buffer<1>(buffer1, mask, p, q);
-            // fill_buffer_avx512<1>(buffer1, mask, p, q);
             // last_found1 = 0;
             occurences += lookup_avx512(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1, forward);
             current_minimiser1 = minimisers.minimiser1_value;
@@ -1102,7 +1088,6 @@ uint64_t RSIndexComp3::streaming_query(const std::vector<seqan3::dna4> &query, u
 
             buffer2.clear();
             fill_buffer<2>(buffer2, mask, p, q);
-            // fill_buffer_avx512<2>(buffer2, mask, p, q);
             // last_found2 = 0;
             occurences += lookup_avx512(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2, forward);
             current_minimiser2 = minimisers.minimiser2_value;
@@ -1116,7 +1101,6 @@ uint64_t RSIndexComp3::streaming_query(const std::vector<seqan3::dna4> &query, u
 
             buffer3.clear();
             fill_buffer<3>(buffer3, mask, p, q);
-            // fill_buffer_avx512<3>(buffer3, mask, p, q);
             // last_found3 = 0;
             occurences += lookup_avx512(buffer3, minimisers.window_value, minimisers.window_value_rev, last_found3, forward);
             current_minimiser3 = minimisers.minimiser3_value;

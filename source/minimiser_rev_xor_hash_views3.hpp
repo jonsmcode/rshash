@@ -2407,10 +2407,12 @@ private:
             kmer_values1_in_window.pop_front();
             kmer_rc_hashs1_in_window.pop_front();
             kmer_rc_values1_in_window.pop_front();
+
             kmer_hashs2_in_window.pop_front();
             kmer_values2_in_window.pop_front();
             kmer_rc_hashs2_in_window.pop_front();
             kmer_rc_values2_in_window.pop_front();
+
             kmer_hashs3_in_window.pop_front();
             kmer_values3_in_window.pop_front();
             kmer_rc_hashs3_in_window.pop_front();
@@ -2421,10 +2423,12 @@ private:
         kmer_rc_hashs1_in_window.push_back(m_hasher1.hash(kmer_value_rev1));
         kmer_values1_in_window.push_back(kmer_value1);
         kmer_rc_values1_in_window.push_back(kmer_value_rev1);
+
         kmer_hashs2_in_window.push_back(m_hasher2.hash(kmer_value2));
         kmer_rc_hashs2_in_window.push_back(m_hasher2.hash(kmer_value_rev2));
         kmer_values2_in_window.push_back(kmer_value2);
         kmer_rc_values2_in_window.push_back(kmer_value_rev2);
+
         kmer_hashs3_in_window.push_back(m_hasher3.hash(kmer_value3));
         kmer_rc_hashs3_in_window.push_back(m_hasher3.hash(kmer_value_rev3));
         kmer_values3_in_window.push_back(kmer_value3);
@@ -2482,7 +2486,7 @@ private:
         fwd_hash1 = *minimiser_it;
         fwd_hash1_position = std::distance(std::begin(kmer_hashs1_in_window), minimiser_it);
         minimiser1_fwd_value = kmer_values1_in_window[fwd_hash1_position];
-        current.minimiser1_value = std::min<uint64_t>(minimiser1_fwd_value, minimiser1_rc_value);
+        // current.minimiser1_value = std::min<uint64_t>(minimiser1_fwd_value, minimiser1_rc_value);
     }
 
     void find_hash_rc1_in_window()
@@ -2491,7 +2495,7 @@ private:
         rc_hash1 = *minimiser_it;
         rc_hash1_position = std::distance(std::begin(kmer_rc_hashs1_in_window), minimiser_it);
         minimiser1_rc_value = kmer_rc_values1_in_window[rc_hash1_position];
-        current.minimiser1_value = std::min<uint64_t>(minimiser1_fwd_value, minimiser1_rc_value);
+        // current.minimiser1_value = std::min<uint64_t>(minimiser1_fwd_value, minimiser1_rc_value);
     }
 
     void find_hash_fwd2_in_window()
@@ -2500,7 +2504,7 @@ private:
         fwd_hash2 = *minimiser_it;
         fwd_hash2_position = std::distance(std::begin(kmer_hashs2_in_window), minimiser_it);
         minimiser2_fwd_value = kmer_values2_in_window[fwd_hash2_position];
-        current.minimiser2_value = std::min<uint64_t>(minimiser2_fwd_value, minimiser2_rc_value);
+        // current.minimiser2_value = std::min<uint64_t>(minimiser2_fwd_value, minimiser2_rc_value);
     }
 
     void find_hash_rc2_in_window()
@@ -2509,7 +2513,7 @@ private:
         rc_hash2 = *minimiser_it;
         rc_hash2_position = std::distance(std::begin(kmer_rc_hashs2_in_window), minimiser_it);
         minimiser2_rc_value = kmer_rc_values2_in_window[rc_hash2_position];
-        current.minimiser2_value = std::min<uint64_t>(minimiser2_fwd_value, minimiser2_rc_value);
+        // current.minimiser2_value = std::min<uint64_t>(minimiser2_fwd_value, minimiser2_rc_value);
     }
 
     void find_hash_fwd3_in_window()
@@ -2518,7 +2522,7 @@ private:
         fwd_hash3 = *minimiser_it;
         fwd_hash3_position = std::distance(std::begin(kmer_hashs3_in_window), minimiser_it);
         minimiser3_fwd_value = kmer_values3_in_window[fwd_hash3_position];
-        current.minimiser3_value = std::min<uint64_t>(minimiser3_fwd_value, minimiser3_rc_value);
+        // current.minimiser3_value = std::min<uint64_t>(minimiser3_fwd_value, minimiser3_rc_value);
     }
 
     void find_hash_rc3_in_window()
@@ -2527,7 +2531,7 @@ private:
         rc_hash3 = *minimiser_it;
         rc_hash3_position = std::distance(std::begin(kmer_rc_hashs3_in_window), minimiser_it);
         minimiser3_rc_value = kmer_rc_values3_in_window[rc_hash3_position];
-        current.minimiser3_value = std::min<uint64_t>(minimiser3_fwd_value, minimiser3_rc_value);
+        // current.minimiser3_value = std::min<uint64_t>(minimiser3_fwd_value, minimiser3_rc_value);
     }
 
     void init(three_minimisers_and_window_hash2_parameters const & params)
@@ -2630,55 +2634,71 @@ private:
 
         next_window<pop_first::yes>();
 
-        if (fwd_hash1_position-- == 0)
+        if (fwd_hash1_position-- == 0) {
             find_hash_fwd1_in_window();
-        if (rc_hash1_position-- == 0)
+            // current.minimiser1_value = std::min<uint64_t>(minimiser1_fwd_value, minimiser1_rc_value);
+        }
+        if (rc_hash1_position-- == 0) {
             find_hash_rc1_in_window();
-        if (fwd_hash2_position-- == 0)
+            // current.minimiser1_value = std::min<uint64_t>(minimiser1_fwd_value, minimiser1_rc_value);
+        }
+        if (fwd_hash2_position-- == 0) {
             find_hash_fwd2_in_window();
-        if (rc_hash2_position-- == 0)
+            // current.minimiser2_value = std::min<uint64_t>(minimiser2_fwd_value, minimiser2_rc_value);
+        }
+        if (rc_hash2_position-- == 0) {
             find_hash_rc2_in_window();
-        if (fwd_hash3_position-- == 0)
+            // current.minimiser2_value = std::min<uint64_t>(minimiser2_fwd_value, minimiser2_rc_value);
+        }
+        if (fwd_hash3_position-- == 0) {
             find_hash_fwd3_in_window();
-        if (rc_hash3_position-- == 0)
+            // current.minimiser3_value = std::min<uint64_t>(minimiser3_fwd_value, minimiser3_rc_value);
+        }
+        if (rc_hash3_position-- == 0) {
             find_hash_rc3_in_window();
+            // current.minimiser3_value = std::min<uint64_t>(minimiser3_fwd_value, minimiser3_rc_value);
+        }
 
         if (uint64_t new_kmer_hash = kmer_hashs1_in_window.back(); new_kmer_hash < fwd_hash1) {
             fwd_hash1 = new_kmer_hash;
             minimiser1_fwd_value = kmer_values1_in_window.back();
             fwd_hash1_position = minimisers_in_window;
-            current.minimiser1_value = std::min<uint64_t>(minimiser1_fwd_value, minimiser1_rc_value);
+            // current.minimiser1_value = std::min<uint64_t>(minimiser1_fwd_value, minimiser1_rc_value);
         }
         if (uint64_t new_kmer_hash = kmer_rc_hashs1_in_window.back(); new_kmer_hash < rc_hash1) {
             rc_hash1 = new_kmer_hash;
             minimiser1_rc_value = kmer_rc_values1_in_window.back();
             rc_hash1_position = minimisers_in_window;
-            current.minimiser1_value = std::min<uint64_t>(minimiser1_fwd_value, minimiser1_rc_value);
+            // current.minimiser1_value = std::min<uint64_t>(minimiser1_fwd_value, minimiser1_rc_value);
         }
         if (uint64_t new_kmer_hash = kmer_hashs2_in_window.back(); new_kmer_hash < fwd_hash2) {
             fwd_hash2 = new_kmer_hash;
             minimiser2_fwd_value = kmer_values2_in_window.back();
             fwd_hash2_position = minimisers_in_window;
-            current.minimiser2_value = std::min<uint64_t>(minimiser2_fwd_value, minimiser2_rc_value);
+            // current.minimiser2_value = std::min<uint64_t>(minimiser2_fwd_value, minimiser2_rc_value);
         }
         if (uint64_t new_kmer_hash = kmer_rc_hashs2_in_window.back(); new_kmer_hash < rc_hash2) {
             rc_hash2 = new_kmer_hash;
             minimiser2_rc_value = kmer_rc_values2_in_window.back();
             rc_hash2_position = minimisers_in_window;
-            current.minimiser2_value = std::min<uint64_t>(minimiser2_fwd_value, minimiser2_rc_value);
+            // current.minimiser2_value = std::min<uint64_t>(minimiser2_fwd_value, minimiser2_rc_value);
         }
         if (uint64_t new_kmer_hash = kmer_hashs3_in_window.back(); new_kmer_hash < fwd_hash3) {
             fwd_hash3 = new_kmer_hash;
             minimiser3_fwd_value = kmer_values3_in_window.back();
             fwd_hash3_position = minimisers_in_window;
-            current.minimiser3_value = std::min<uint64_t>(minimiser3_fwd_value, minimiser3_rc_value);
+            // current.minimiser3_value = std::min<uint64_t>(minimiser3_fwd_value, minimiser3_rc_value);
         }
         if (uint64_t new_kmer_hash = kmer_rc_hashs3_in_window.back(); new_kmer_hash < rc_hash3) {
             rc_hash3 = new_kmer_hash;
             minimiser3_rc_value = kmer_rc_values3_in_window.back();
             rc_hash3_position = minimisers_in_window;
-            current.minimiser3_value = std::min<uint64_t>(minimiser3_fwd_value, minimiser3_rc_value);
+            // current.minimiser3_value = std::min<uint64_t>(minimiser3_fwd_value, minimiser3_rc_value);
         }
+
+        current.minimiser1_value = std::min<uint64_t>(minimiser1_fwd_value, minimiser1_rc_value);
+        current.minimiser2_value = std::min<uint64_t>(minimiser2_fwd_value, minimiser2_rc_value);
+        current.minimiser3_value = std::min<uint64_t>(minimiser3_fwd_value, minimiser3_rc_value);
 
         return true;
     }
