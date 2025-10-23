@@ -21,20 +21,18 @@ static inline constexpr uint64_t compute_mask(uint64_t const size)
 }
 
 
-RSIndex::RSIndex() {}
+RSIndex::RSIndex() : endpoints(std::vector<uint64_t>{}, 1)
+    // s1_select(std::vector<uint64_t>{}, 1), s2_select(std::vector<uint64_t>{}, 1), s3_select(std::vector<uint64_t>{}, 1)
+{}
 
-RSIndex::RSIndex(uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3,
+RSIndex::RSIndex(
+    uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3,
     uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3, size_t const span)
-{
-    this->k = k;
-    this->m1 = m1;
-    this->m2 = m2;
-    this->m3 = m3;
-    this->m_thres1 = m_thres1;
-    this->m_thres2 = m_thres2;
-    this->m_thres3 = m_thres3;
-    this->span = span;
-}
+    : k(k), m1(m1), m2(m2), m3(m3),
+      m_thres1(m_thres1), m_thres2(m_thres2), m_thres3(m_thres3), span(span),
+      // s1_select(std::vector<uint64_t>{}, 1), s2_select(std::vector<uint64_t>{}, 1), s3_select(std::vector<uint64_t>{}, 1),
+      endpoints(std::vector<uint64_t>{}, 1)
+{}
 
 
 int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
@@ -539,6 +537,216 @@ int RSIndex::build(const std::vector<std::vector<seqan3::dna4>> &input)
     // std::cout << "total: " << (double) (n1*offset_width+n2*offset_width+2*N+M1+M2+n1+1+n2+1+size_in_bytes(endpoints)/8+8*hashmap.size()/kmers)/kmers << "\n";
 
     return 0;
+}
+
+uint64_t RSIndex::access(const uint64_t unitig_id, const size_t offset)
+{
+    size_t offset_text = endpoints.select(unitig_id) + offset;
+
+    uint64_t kmer = 0;
+    for (size_t i=offset_text; i < offset_text+k; i++) {
+        uint64_t const new_rank = seqan3::to_rank(text[i]);
+        kmer <<= 2;
+        kmer |= new_rank;
+    }
+
+    return kmer;
+}
+
+
+static inline constexpr uint64_t crc(uint64_t x, uint64_t k) {
+    // assert(k <= 32);
+    uint64_t c = ~x;
+
+    /* swap byte order */
+    uint64_t res = __builtin_bswap64(c);
+
+    /* Swap nuc order in bytes */
+    const uint64_t c1 = 0x0f0f0f0f0f0f0f0f;              // ...0000.1111.0000.1111
+    const uint64_t c2 = 0x3333333333333333;              // ...0011.0011.0011.0011
+    res = ((res & c1) << 4) | ((res & (c1 << 4)) >> 4);  // swap 2-nuc order in bytes
+    res = ((res & c2) << 2) | ((res & (c2 << 2)) >> 2);  // swap nuc order in 2-nuc
+
+    /* Realign to the right */
+    res >>= 64 - 2 * k;
+
+    return res;
+}
+
+
+std::vector<uint64_t> RSIndex::rand_text_kmers(const uint64_t n) {
+    std::uniform_int_distribution<uint32_t> distr;
+    std::mt19937 m_rand(1);
+    std::vector<std::uint64_t> kmers;
+    kmers.reserve(n);
+
+    const uint64_t no_unitigs = number_unitigs();
+    for (uint64_t i = 0; i < n; ++i) {
+        const uint64_t unitig_id = distr(m_rand) % no_unitigs;
+        const uint64_t offset = distr(m_rand) % unitig_size(unitig_id);
+        const uint64_t kmer = access(unitig_id, offset);
+
+        if ((i & 1) == 0)
+            kmers.push_back(crc(kmer, k));
+        else
+            kmers.push_back(kmer);
+    }
+
+    return kmers;
+}
+
+
+template<int level>
+inline bool RSIndex::check(const size_t p, const size_t q, const uint64_t mask,
+    const uint64_t kmer, const uint64_t kmer_rc,
+    double &to, double &th, double &te)
+{
+    std::chrono::high_resolution_clock::time_point t0, t1, t2, t3, t4;
+    for(size_t i = 0; i < q-p; i++) {
+
+        t0 = std::chrono::high_resolution_clock::now();
+        size_t o;
+        if constexpr (level == 1)
+            o = offsets1.access(p+i);
+        if constexpr (level == 2)
+            o = offsets2.access(p+i);
+        if constexpr (level == 3)
+            o = offsets3.access(p+i);
+        t1 = std::chrono::high_resolution_clock::now();
+        to += (std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)).count();
+
+        uint64_t hash = 0;
+        for (size_t j=o; j < o+k; j++) {
+            uint64_t const new_rank = seqan3::to_rank(text[j]);
+            hash <<= 2;
+            hash |= new_rank;
+        }
+        if(hash == kmer || hash == kmer_rc)
+            return true;
+        t2 = std::chrono::high_resolution_clock::now();
+        th += (std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1)).count();
+
+        uint64_t e = std::min<uint64_t>(endpoints.select(endpoints.rank(o+1)), o+k+span);
+
+        t3 = std::chrono::high_resolution_clock::now();
+        te += (std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2)).count();
+
+        for(size_t j=o+k; j < e; j++) {
+            uint64_t const new_rank = seqan3::to_rank(text[j]);
+            hash <<= 2;
+            hash |= new_rank;
+            hash &= mask;
+            if(hash == kmer || hash == kmer_rc)
+                return true;
+        }
+        t4 = std::chrono::high_resolution_clock::now();
+        th += (std::chrono::duration_cast<std::chrono::nanoseconds>(t4 - t3)).count();
+    }
+
+    return false;
+}
+
+
+uint64_t RSIndex::lookup(const std::vector<uint64_t> &kmers)
+{
+    const uint64_t mask = compute_mask(2u * k);
+    srindex::minimizers::Three_minimisers_hash minimisers = srindex::minimizers::Three_minimisers_hash(k, m1, m2, m3, seed1, seed2, seed3);
+    uint64_t occurences = 0;
+    std::chrono::high_resolution_clock::time_point t0, t1, t2, t3, t4 = std::chrono::high_resolution_clock::now();
+    double t0_ = 0.0;
+    double t1_ = 0.0;
+    double t2_ = 0.0;
+    double t3_ = 0.0;
+    double to = 0.0;
+    double th = 0.0;
+    double te = 0.0;
+    size_t skmers1_ = 0;
+    size_t skmers2_ = 0;
+    size_t skmers3_ = 0;
+    uint64_t lookups1 = 0;
+    uint64_t lookups2 = 0;
+    uint64_t lookups3 = 0;
+    uint64_t ht_lookups = 0;
+
+    for(uint64_t kmer : kmers)
+    {
+        minimisers.compute(kmer);
+
+        if(r1[minimisers.minimiser1]) {
+            t0 = std::chrono::high_resolution_clock::now();
+            uint64_t minimizer_id = r1_rank(minimisers.minimiser1);
+            t1 = std::chrono::high_resolution_clock::now();
+            size_t p = s1_select.select(minimizer_id);
+            size_t q = s1_select.select(minimizer_id+1);
+            t2 = std::chrono::high_resolution_clock::now();
+
+            occurences += check<1>(p, q, mask, minimisers.window, minimisers.window_rev, to, th, te);
+            t3 = std::chrono::high_resolution_clock::now();
+
+            t0_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)).count();
+            t1_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1)).count();
+            t2_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2)).count();
+            skmers1_ += q - p;
+            ++lookups1;
+        }
+        else if(r2[minimisers.minimiser2]) {
+            t0 = std::chrono::high_resolution_clock::now();
+            uint64_t minimizer_id = r2_rank(minimisers.minimiser2);
+            t1 = std::chrono::high_resolution_clock::now();
+            size_t p = s2_select.select(minimizer_id);
+            size_t q = s2_select.select(minimizer_id+1);
+            t2 = std::chrono::high_resolution_clock::now();
+
+            occurences += check<2>(p, q, mask, minimisers.window, minimisers.window_rev, to, th, te);
+            t3 = std::chrono::high_resolution_clock::now();
+
+            t0_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)).count();
+            t1_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1)).count();
+            t2_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2)).count();
+            skmers2_ += q - p;
+            ++lookups2;
+        }
+        else if(r3[minimisers.minimiser3]) {
+            t0 = std::chrono::high_resolution_clock::now();
+            uint64_t minimizer_id = r3_rank(minimisers.minimiser3);
+            t1 = std::chrono::high_resolution_clock::now();
+            size_t p = s3_select.select(minimizer_id);
+            size_t q = s3_select.select(minimizer_id+1);
+            t2 = std::chrono::high_resolution_clock::now();
+
+            occurences += check<3>(p, q, mask, minimisers.window, minimisers.window_rev, to, th, te);
+            t3 = std::chrono::high_resolution_clock::now();
+
+            t0_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)).count();
+            t1_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1)).count();
+            t2_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2)).count();
+            skmers3_ += q - p;
+            ++lookups3;
+        }
+        else {
+            t4 = std::chrono::high_resolution_clock::now();
+            occurences += hashmap.contains(std::min<uint64_t>(minimisers.window, minimisers.window_rev));
+            t3_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - t4)).count();
+            ++ht_lookups;
+        }
+
+    }
+    std::cout << "r_rank: " << t0_/kmers.size() << " ns\n";
+    std::cout << "s_select: " << t1_/kmers.size() << " ns\n";
+    std::cout << "check: " << t2_/kmers.size() << " ns\n";
+    std::cout << "offsets: " << to/kmers.size() << " ns\n";
+    std::cout << "endpoints: " << te/kmers.size() << " ns\n";
+    std::cout << "text: " << th/kmers.size() << " ns\n";
+    std::cout << "ht: " << t3_/kmers.size() << " ns\n";
+    std::cout << "lookups lvl1: " << (double) lookups1/(lookups1+lookups2+lookups3+ht_lookups)*100 << "%\n";
+    std::cout << "lookups lvl2: " << (double) lookups2/(lookups1+lookups2+lookups3+ht_lookups)*100 << "%\n";
+    std::cout << "lookups lvl3: " << (double) lookups3/(lookups1+lookups2+lookups3+ht_lookups)*100 << "%\n";
+    std::cout << "lookups ht: " << (double) ht_lookups/(lookups1+lookups2+lookups3+ht_lookups)*100 << "%\n";
+    std::cout << "avg skmers1: " << (double) skmers1_/lookups1 << "\n";
+    std::cout << "avg skmers2: " << (double) skmers2_/lookups2 << "\n";
+    std::cout << "avg skmers3: " << (double) skmers3_/lookups3 << "\n";
+
+    return occurences;
 }
 
 

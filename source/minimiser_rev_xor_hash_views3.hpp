@@ -3074,3 +3074,94 @@ class Three_minimisers_hash2
 };
 
 }
+
+
+namespace srindex::minimizers
+{
+
+class Minimisers_hash2
+{
+    public:
+        uint64_t window{};
+        uint64_t window_rev{};
+        uint64_t minimiser1{};
+
+    private:
+        uint8_t window_size{};
+        uint8_t minimiser_size1{};
+
+        uint64_t kmer_mask1{};
+        uint64_t seed1{};
+
+        mixer_64 m_hasher1;
+
+        static inline constexpr uint64_t compute_mask(uint64_t const size)
+        {
+            assert(size > 0u);
+            assert(size <= 64u);
+
+            if(size == 64u)
+                return std::numeric_limits<uint64_t>::max();
+            else
+                return (uint64_t{1u} << (size)) - 1u;
+        }
+
+        static inline constexpr uint64_t crc(uint64_t x, uint64_t k) {
+            // assert(k <= 32);
+            uint64_t c = ~x;
+
+            /* swap byte order */
+            uint64_t res = __builtin_bswap64(c);
+
+            /* Swap nuc order in bytes */
+            const uint64_t c1 = 0x0f0f0f0f0f0f0f0f;              // ...0000.1111.0000.1111
+            const uint64_t c2 = 0x3333333333333333;              // ...0011.0011.0011.0011
+            res = ((res & c1) << 4) | ((res & (c1 << 4)) >> 4);  // swap 2-nuc order in bytes
+            res = ((res & c2) << 2) | ((res & (c2 << 2)) >> 2);  // swap nuc order in 2-nuc
+
+            /* Realign to the right */
+            res >>= 64 - 2 * k;
+
+            return res;
+        }
+
+    public:
+        Minimisers_hash2(const uint8_t k, const uint8_t m1, const uint64_t s1)
+        {
+            window_size = k;
+            minimiser_size1 = m1;
+            kmer_mask1 = compute_mask(2u * m1);
+            seed1 = s1;
+            m_hasher1.seed(seed1);
+        };
+
+        void compute(const uint64_t kmer)
+        {
+            window = kmer;
+            window_rev = crc(window, window_size);
+
+            uint64_t minimiser_fwd_value;
+            uint64_t minimiser_rc_value;
+            uint64_t minimiser_fwd_hash = std::numeric_limits<uint64_t>::max();
+            uint64_t minimiser_rc_hash = std::numeric_limits<uint64_t>::max();
+
+            for (uint8_t i = 0; i <= window_size-minimiser_size1; ++i)
+            {
+                const uint64_t kmer_value = (window >> 2*(window_size - minimiser_size1 - i)) & kmer_mask1;
+                const uint64_t kmer_value_rev = (window_rev >> 2*i) & kmer_mask1;
+
+                if(uint64_t fwd_hash = m_hasher1.hash(kmer_value); fwd_hash < minimiser_fwd_hash) {
+                    minimiser_fwd_hash = fwd_hash;
+                    minimiser_fwd_value = kmer_value;
+                }
+                if(uint64_t rev_hash = m_hasher1.hash(kmer_value_rev); rev_hash < minimiser_rc_hash) {
+                    minimiser_rc_hash = rev_hash;
+                    minimiser_rc_value = kmer_value_rev;
+                }
+            }
+            minimiser1 = std::min<uint64_t>(minimiser_fwd_value, minimiser_rc_value);
+            
+        }
+};
+
+}

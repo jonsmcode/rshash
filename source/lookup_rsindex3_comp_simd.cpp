@@ -12,6 +12,7 @@ struct cmd_arguments {
     std::filesystem::path q{};
     std::filesystem::path d{};
     uint8_t k{};
+    uint8_t l{3};
     uint8_t m1{14};
     uint8_t m2{16};
     uint8_t m3{17};
@@ -27,6 +28,7 @@ void initialise_argument_parser(sharg::parser &parser, cmd_arguments &args) {
     parser.add_option(args.q, sharg::config{.short_id = 'q', .long_id = "query", .description = "provide query file"});
     parser.add_option(args.d, sharg::config{.short_id = 'd', .long_id = "dict", .description = "provide dict file"});
     parser.add_option(args.k, sharg::config{.short_id = 'k', .long_id = "k-mer", .description = "k-mer length"});
+    parser.add_option(args.l, sharg::config{.short_id = 'l', .long_id = "level", .description = "no level"});
     parser.add_option(args.m1, sharg::config{.long_id = "m1", .description = "minimiser1 length"});
     parser.add_option(args.m2, sharg::config{.long_id = "m2", .description = "minimiser2 length"});
     parser.add_option(args.m3, sharg::config{.long_id = "m3", .description = "minimiser3 length"});
@@ -44,6 +46,8 @@ int check_arguments(sharg::parser &parser, cmd_arguments &args) {
             throw sharg::user_input_error("provide input file.");
         if(!parser.is_option_set('k'))
             throw sharg::user_input_error("specify k");
+        if(!parser.is_option_set('l'))
+            throw sharg::user_input_error("specify level");
     }
     else if(args.cmd == "query") {
         if(!parser.is_option_set('q'))
@@ -107,31 +111,54 @@ int main(int argc, char** argv)
         load_file(args.i, text);
 
         std::cout << "building dict...\n";
-        RSIndexComp3 index = RSIndexComp3(args.k, args.m1, args.m2, args.m3, args.t1, args.t2, args.t3, args.s);
-        index.build(text);
-        index.save(args.d);
+        if(args.l == 1) {
+            RSIndexComp1 index = RSIndexComp1(args.k, args.m1, args.t1, args.s);
+            index.build(text);
+            index.save(args.d);
+        }
+        else if(args.l == 3) {
+            RSIndexComp3 index = RSIndexComp3(args.k, args.m1, args.m2, args.m3, args.t1, args.t2, args.t3, args.s);
+            index.build(text);
+            index.save(args.d);
+        }
     }
     else if(args.cmd == "query") {
         std::cout << "loading queries...\n";
         std::vector<std::vector<seqan3::dna4>> queries;
         load_file(args.q, queries);
 
-        std::cout << "loading dict...\n";
-        RSIndexComp3 index = RSIndexComp3();
-        index.load(args.d);
-        std::cout << "querying...\n";
-
         uint64_t kmers = 0;
         uint64_t found = 0;
         uint64_t extensions = 0;
+        std::chrono::nanoseconds elapsed;
+        if(args.l == 1) {
+            std::cout << "loading dict...\n";
+            RSIndexComp1 index = RSIndexComp1();
+            index.load(args.d);
+            std::cout << "querying...\n";
 
-        std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
-        for (auto query : queries) {
-            found += index.streaming_query(query, extensions);
-            kmers += query.size() - index.getk() + 1;
+            std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
+            for (auto query : queries) {
+                found += index.streaming_query(query, extensions);
+                kmers += query.size() - index.getk() + 1;
+            }
+            std::chrono::high_resolution_clock::time_point t_stop = std::chrono::high_resolution_clock::now();
+            elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
         }
-        std::chrono::high_resolution_clock::time_point t_stop = std::chrono::high_resolution_clock::now();
-        std::chrono::nanoseconds elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
+        else if(args.l == 3) {
+            std::cout << "loading dict...\n";
+            RSIndexComp3 index = RSIndexComp3();
+            index.load(args.d);
+            std::cout << "querying...\n";
+
+            std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
+            for (auto query : queries) {
+                found += index.streaming_query(query, extensions);
+                kmers += query.size() - index.getk() + 1;
+            }
+            std::chrono::high_resolution_clock::time_point t_stop = std::chrono::high_resolution_clock::now();
+            elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
+        }
         double ns_per_kmer = (double) elapsed.count() / kmers;
         
         std::cout << "==== query report:\n";

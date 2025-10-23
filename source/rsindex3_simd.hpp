@@ -120,6 +120,46 @@ public:
 };
 
 
+class RSIndexComp1
+{
+private:
+    uint8_t k, m1, m_thres1;
+    size_t span;
+    sd_vector<> r1;
+    rank_support_sd<> r1_rank;
+    // rrr_vector<15> r1;
+    // rank_support_rrr<1, 15> r1_rank;
+    // bit_vector r1;
+    // rank_support_v<1> r1_rank;
+    bit_vector s1;
+    sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s1_select;
+    pthash::compact_vector offsets1;
+    gtl::flat_hash_set<uint64_t> hashmap;
+    sux::bits::EliasFano<sux::util::AllocType::MALLOC> endpoints;
+    bit_vector sequences;
+    seqan3::bitpacked_sequence<seqan3::dna4> text;
+    inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, double &, double &, double &);
+    inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t);
+    inline void fill_buffer(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
+
+
+public:
+    RSIndexComp1();
+    RSIndexComp1(uint8_t const k, uint8_t const m1, uint8_t const m_thres1, size_t const span);
+    uint8_t getk() { return k; }
+    uint64_t number_unitigs() { return endpoints.rank(endpoints.size()); }
+    size_t unitig_size(uint64_t unitig_id) { return endpoints.select(unitig_id+1) - endpoints.select(unitig_id) - k + 1; }
+    std::vector<uint64_t> rand_text_kmers(const uint64_t);
+    uint64_t access(const uint64_t, const size_t);
+    uint64_t lookup(const std::vector<uint64_t>&, bool verbose);
+    int build(const std::vector<std::vector<seqan3::dna4>>&);
+    uint64_t streaming_query(const std::vector<seqan3::dna4>&, uint64_t&);
+    uint64_t streaming_query(const std::vector<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
+    int save(const std::filesystem::path&);
+    int load(const std::filesystem::path&);
+};
+
+
 class RSIndexComp3
 {
 private:
