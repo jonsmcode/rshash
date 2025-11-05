@@ -140,7 +140,9 @@ private:
     seqan3::bitpacked_sequence<seqan3::dna4> text;
     inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, double &, double &, double &);
     inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t);
-    inline void fill_buffer(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
+    // inline void fill_buffer(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
+    inline void fill_text_buffer(std::vector<uint64_t>&, size_t, size_t, size_t&, bool);
+    inline void fill_minimiser_buffer(std::vector<uint64_t>&, std::vector<size_t>&, size_t, size_t);
 
 
 public:

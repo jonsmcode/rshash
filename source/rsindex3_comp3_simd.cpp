@@ -967,6 +967,11 @@ inline void RSIndexComp3::fill_buffer(std::vector<uint64_t> &buffer, const uint6
         size_t e = o+k+span;
         if(e > next_endpoint)
             e = next_endpoint;
+        for (uint64_t j=o; j < o+k; j++) {
+            uint64_t const new_rank = seqan3::to_rank(text[j]);
+            hash = (hash >> 2) | (new_rank << 2*(k-1));
+        }
+        buffer.push_back(hash);
         for (uint64_t j=o; j < e; j++) {
             uint64_t const new_rank = seqan3::to_rank(text[j]);
             hash = (hash >> 2) | (new_rank << 2*(k-1));
