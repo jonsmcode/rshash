@@ -775,21 +775,24 @@ inline void RSIndexComp1::fill_minimiser_buffer(std::vector<uint64_t> &buffer, s
 }
 
 
-inline void RSIndexComp1::fill_text_buffer(std::vector<uint64_t> &buffer, size_t position, size_t offset, size_t& last_found, bool forward)
+inline void RSIndexComp1::fill_text_buffer(std::vector<uint64_t> &buffer, size_t position, size_t offset, size_t& last_found, bool forward, size_t& prev_endpoint, size_t& next_endpoint)
 {
     if(forward) {
-        size_t next_endpoint = endpoints.select(endpoints.rank(position+1));
-        size_t e = position + offset + k + 2*span;
+        if(offset == 0)
+            next_endpoint = endpoints.select(endpoints.rank(position+1));
+        if(position+offset+1+k >= next_endpoint)
+            return;
+        size_t e = position+offset+1+k + span;
         if(e > next_endpoint)
             e = next_endpoint;
 
         uint64_t hash = 0;
-        for(uint64_t i = position+offset+1; i < position+offset+1+k; i++) {
+        for(size_t i = position+offset+1; i < position+offset+1+k; i++) {
             uint64_t const new_rank = seqan3::to_rank(text[i]);
             hash = (hash >> 2) | (new_rank << 2*(k-1));
         }
         buffer.push_back(hash);
-        for (uint64_t i=position+offset+1+k; i < e; i++) {
+        for (size_t i=position+offset+1+k; i < e; i++) {
             uint64_t const new_rank = seqan3::to_rank(text[i]);
             hash = (hash >> 2) | (new_rank << 2*(k-1));
             buffer.push_back(hash);
@@ -797,18 +800,21 @@ inline void RSIndexComp1::fill_text_buffer(std::vector<uint64_t> &buffer, size_t
         last_found = 0;
     }
     else {
-        size_t prev_endpoint = endpoints.select(endpoints.rank(position-1)-1);
-        size_t s = position - offset - 2*span;
+        if(offset == 0)
+            prev_endpoint = endpoints.select(endpoints.rank(position+1)-1);
+        size_t s = position-offset-1 - span;
+        if(s+k <= prev_endpoint)
+            return;
         if(s < prev_endpoint)
             s = prev_endpoint;
 
         uint64_t hash = 0;
-        for(uint64_t i = s; i < s+k; i++) {
+        for(size_t i = s; i < s+k; i++) {
             uint64_t const new_rank = seqan3::to_rank(text[i]);
             hash = (hash >> 2) | (new_rank << 2*(k-1));
         }
         buffer.push_back(hash);
-        for (uint64_t i=s+k; i < position-offset-1+k; i++) {
+        for (size_t i=s+k; i < position-offset-1+k; i++) {
             uint64_t const new_rank = seqan3::to_rank(text[i]);
             hash = (hash >> 2) | (new_rank << 2*(k-1));
             buffer.push_back(hash);
@@ -851,6 +857,7 @@ uint64_t RSIndexComp1::streaming_query(const std::vector<seqan3::dna4> &query, u
     uint64_t current_minimiser=std::numeric_limits<uint64_t>::max();
     size_t last_found = 0;
     size_t text_buf_found = 0;
+    size_t prev_endpoint, next_endpoint;
     bool forward = true;
     size_t text_buffer_size = 0;
 
@@ -859,7 +866,7 @@ uint64_t RSIndexComp1::streaming_query(const std::vector<seqan3::dna4> &query, u
         if((forward && text_buf_found == text_buffer.size()-1) || (!forward && text_buf_found == 0)) {
             text_buffer_size += text_buffer.size()-1;
             text_buffer.clear();
-            fill_text_buffer(text_buffer, pos_buffer[last_found], text_buffer_size, text_buf_found, forward);
+            fill_text_buffer(text_buffer, pos_buffer[last_found], text_buffer_size, text_buf_found, forward, prev_endpoint, next_endpoint);
         }
 
         if(extend(text_buffer, minimisers.window_value, minimisers.window_value_rev, text_buf_found, forward)) {
@@ -871,7 +878,7 @@ uint64_t RSIndexComp1::streaming_query(const std::vector<seqan3::dna4> &query, u
                 occurences++;
                 text_buffer.clear();
                 text_buffer_size = 0;
-                fill_text_buffer(text_buffer, pos_buffer[last_found], 0, text_buf_found, forward);
+                fill_text_buffer(text_buffer, pos_buffer[last_found], 0, text_buf_found, forward, prev_endpoint, next_endpoint);
             }
         }
         else if(r1[minimisers.minimiser_value]) {
@@ -885,7 +892,7 @@ uint64_t RSIndexComp1::streaming_query(const std::vector<seqan3::dna4> &query, u
                 occurences++;
                 text_buffer.clear();
                 text_buffer_size = 0;
-                fill_text_buffer(text_buffer, pos_buffer[last_found], 0, text_buf_found, forward);
+                fill_text_buffer(text_buffer, pos_buffer[last_found], 0, text_buf_found, forward, prev_endpoint, next_endpoint);
             }
         }
         else
