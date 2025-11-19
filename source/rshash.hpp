@@ -120,6 +120,15 @@ public:
 };
 
 
+
+struct SkmerInfo {
+    size_t position;
+    size_t length;
+    size_t unitig_begin;
+    size_t unitig_end;
+};
+
+
 class RSHash1
 {
 private:
@@ -127,8 +136,6 @@ private:
     size_t span;
     sd_vector<> r1;
     rank_support_sd<> r1_rank;
-    // rrr_vector<15> r1;
-    // rank_support_rrr<1, 15> r1_rank;
     // bit_vector r1;
     // rank_support_v<1> r1_rank;
     bit_vector s1;
@@ -140,9 +147,9 @@ private:
     seqan3::bitpacked_sequence<seqan3::dna4> text;
     inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, double &, double &, double &);
     inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t);
-    inline void fill_buffer(std::vector<uint64_t>&, std::vector<size_t> &, std::vector<size_t> &, std::vector<size_t> &, std::vector<size_t> &, size_t, size_t);
-    inline bool lookup_serial(std::vector<uint64_t> &, std::vector<size_t> &, std::vector<size_t> &, std::vector<size_t> &, std::vector<size_t> &, const uint64_t,  const uint64_t, size_t &, size_t &, bool &, size_t &, size_t &, size_t &);
-    inline bool extend_in_text(size_t&, size_t, size_t, bool, const uint64_t, const uint64_t, size_t&, size_t&);
+    inline void fill_buffer(std::vector<uint64_t>&, std::vector<SkmerInfo> &, size_t, size_t);
+    inline bool lookup_serial(std::vector<uint64_t> &, std::vector<SkmerInfo> &, const uint64_t,  const uint64_t, size_t &, size_t &, bool &, size_t &, size_t &, size_t &);
+    inline bool extend_in_text(size_t&, size_t, size_t, bool, const uint64_t, const uint64_t);
 
 
 public:
@@ -155,7 +162,7 @@ public:
     uint64_t access(const uint64_t, const size_t);
     uint64_t lookup(const std::vector<uint64_t>&, bool verbose);
     int build(const std::vector<std::vector<seqan3::dna4>>&);
-    uint64_t streaming_query(const std::vector<seqan3::dna4>&, uint64_t&, size_t &, size_t &);
+    uint64_t streaming_query(const std::vector<seqan3::dna4>&, uint64_t&);
     uint64_t streaming_query(const std::vector<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
     int save(const std::filesystem::path&);
     int load(const std::filesystem::path&);

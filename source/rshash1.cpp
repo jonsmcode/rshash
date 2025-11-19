@@ -619,17 +619,13 @@ else {
 
 
 
-
-
-
 inline bool RSHash1::extend_in_text(size_t &text_pos, size_t start, size_t end,
-    bool forward, const uint64_t query, const uint64_t query_rc, size_t &fwd_counter, size_t &rev_counter)
+    bool forward, const uint64_t query, const uint64_t query_rc)
 {
     if(forward) {
         if(++text_pos < end) {
             uint64_t const new_rank = seqan3::to_rank(text[text_pos]);
-            bool const found = (new_rank == (query >> (2*(k-1)))); // check & 0b11
-            fwd_counter += found;
+            bool const found = (new_rank == (query >> (2*(k-1))));
             return found;
         }
     }
@@ -637,42 +633,10 @@ inline bool RSHash1::extend_in_text(size_t &text_pos, size_t start, size_t end,
         if(--text_pos >= start) {
             uint64_t const new_rank = seqan3::to_rank(text[text_pos]);
             bool const found = (new_rank == (query_rc & 0b11));
-            rev_counter += found;
             return found;
         }
     }
     return false;
-}
-
-
-inline void RSHash1::fill_buffer(std::vector<uint64_t> &buffer, std::vector<size_t> &skmer_lengths,
-    std::vector<size_t> &startpositions, std::vector<size_t> &endpositions,
-    std::vector<size_t> &text_positions, size_t p, size_t q)
-{
-    for(size_t i = 0; i < q-p; i++) {
-        size_t o = offsets1.access(p+i);
-        uint64_t next_endpoint;
-        uint64_t prev_endpoint = endpoints.select(endpoints.rank(o+1)-1, &next_endpoint);
-        size_t e = std::min(o+k+span, next_endpoint);
-
-        // todo: let buffer be bitvector text[o,..,e]
-        // check kmer at position p in skmer with reinterpret_cast<uint64_t*>(buffer+2*p)[0] >> (64 - 2*k);
-        uint64_t hash = 0;
-        for (size_t j=o; j < o+k; j++) {
-            uint64_t const new_rank = seqan3::to_rank(text[j]);
-            hash = (hash >> 2) | (new_rank << 2*(k-1));
-        }
-        buffer.push_back(hash);
-        for (size_t j=o+k; j < e; j++) {
-            uint64_t const new_rank = seqan3::to_rank(text[j]);
-            hash = (hash >> 2) | (new_rank << 2*(k-1));
-            buffer.push_back(hash);
-        }
-        startpositions.push_back(prev_endpoint);
-        endpositions.push_back(next_endpoint);
-        skmer_lengths.push_back(e - o - k + 1);
-        text_positions.push_back(o);
-    }
 }
 
 
@@ -694,31 +658,54 @@ inline bool extend_in_buffer(std::vector<uint64_t> &skmers, const uint64_t query
 }
 
 
-inline bool RSHash1::lookup_serial(std::vector<uint64_t> &skmers, std::vector<size_t> &skmer_lengths,
-    std::vector<size_t> &unitig_begins, std::vector<size_t> &unitig_ends,
-    std::vector<size_t> &text_positions, const uint64_t query,  const uint64_t queryrc,
+inline void RSHash1::fill_buffer(std::vector<uint64_t> &buffer, std::vector<SkmerInfo> &skmers, size_t p, size_t q)
+{
+    for(size_t i = 0; i < q-p; i++) {
+        size_t o = offsets1.access(p+i);
+        uint64_t next_endpoint;
+        uint64_t prev_endpoint = endpoints.select(endpoints.rank(o+1)-1, &next_endpoint);
+        size_t e = std::min(o+k+span, next_endpoint);
+
+        // todo: let buffer be bitvector text[o,..,e]
+        // check kmer at position p in skmer with reinterpret_cast<uint64_t*>(buffer+2*p)[0] >> (64 - 2*k);
+        uint64_t hash = 0;
+        for (size_t j=o; j < o+k; j++) {
+            uint64_t const new_rank = seqan3::to_rank(text[j]);
+            hash = (hash >> 2) | (new_rank << 2*(k-1));
+        }
+        buffer.push_back(hash);
+        for (size_t j=o+k; j < e; j++) {
+            uint64_t const new_rank = seqan3::to_rank(text[j]);
+            hash = (hash >> 2) | (new_rank << 2*(k-1));
+            buffer.push_back(hash);
+        }
+        skmers.push_back({o, e - o - k + 1, prev_endpoint, next_endpoint});
+    }
+}
+
+
+inline bool RSHash1::lookup_serial(std::vector<uint64_t> &buffer, std::vector<SkmerInfo> &skmers,
+    const uint64_t query, const uint64_t queryrc,
     size_t &text_pos, size_t &skmer_pos, bool &forward, size_t &kmers_left, size_t &start_pos, size_t &end_pos)
 {
     size_t s = 0, e = 0;
-    for (size_t i = 0; i < skmer_lengths.size(); i++) {
-        e += skmer_lengths[i];
+    for (size_t i = 0; i < skmers.size(); i++) {
+        e += skmers[i].length;
         for(size_t j = s; j < e; j++) {
-            if(skmers[j] == query) {
+            if(buffer[j] == query) {
                 skmer_pos = j;
                 forward = true;
                 kmers_left = e - j - 1;
-                text_pos = text_positions[i] + k - 1 + skmer_lengths[i] - 1;
-                // text_pos = text_positions[i] + j - s + k - 1;
-                end_pos = unitig_ends[i];
+                text_pos = skmers[i].position + k + skmers[i].length - 2;
+                end_pos = skmers[i].unitig_end;
                 return true;
             }
-            if(skmers[j] == queryrc) {
+            if(buffer[j] == queryrc) {
                 skmer_pos = j;
                 forward = false;
                 kmers_left = j - s;
-                text_pos = text_positions[i];
-                // text_pos = text_positions[i] + j - s;
-                start_pos = unitig_begins[i];
+                text_pos = skmers[i].position;
+                start_pos = skmers[i].unitig_begin;
                 return true;
             }
         }
@@ -728,18 +715,14 @@ inline bool RSHash1::lookup_serial(std::vector<uint64_t> &skmers, std::vector<si
 }
 
 
-uint64_t RSHash1::streaming_query(const std::vector<seqan3::dna4> &query,
-    uint64_t &extensions, size_t &fwd_extensions, size_t &rev_extensions)
+uint64_t RSHash1::streaming_query(const std::vector<seqan3::dna4> &query, uint64_t &extensions)
 {
     auto view = srindex::views::xor_minimiser_and_window({.minimiser_size = m1, .window_size = k, .seed=seed1});
 
     uint64_t occurences = 0;
     uint64_t current_minimiser=std::numeric_limits<uint64_t>::max();
     std::vector<uint64_t> buffer;
-    std::vector<size_t> unitig_begins;
-    std::vector<size_t> unitig_ends;
-    std::vector<size_t> skmer_lengths;
-    std::vector<size_t> text_positions;
+    std::vector<SkmerInfo> skmers;
     size_t unitig_begin, unitig_end;
     size_t skmer_pos;
     size_t kmers_left;
@@ -749,17 +732,18 @@ uint64_t RSHash1::streaming_query(const std::vector<seqan3::dna4> &query,
 
     for(auto && minimisers : query | view)
     {
-        if(found && kmers_left == 0 && extend_in_text(text_pos, unitig_begin, unitig_end, forward, minimisers.window_value, minimisers.window_value_rev, fwd_extensions, rev_extensions)) {
+        if(found && kmers_left == 0 && extend_in_text(text_pos, unitig_begin, unitig_end, forward, minimisers.window_value, minimisers.window_value_rev)) {
+            extensions++;
             occurences++;
         }
         else if(minimisers.minimiser_value == current_minimiser) {
-            if(found && kmers_left > 0 && extend_in_buffer(buffer, minimisers.window_value, minimisers.window_value_rev, skmer_pos, forward)) {
-                extensions++;
+            if(kmers_left > 0 && extend_in_buffer(buffer, minimisers.window_value, minimisers.window_value_rev, skmer_pos, forward)) {
                 kmers_left--;
+                extensions++;
                 occurences++;
             }
             else {
-                found = this->lookup_serial(buffer, skmer_lengths, unitig_begins, unitig_ends, text_positions, minimisers.window_value, minimisers.window_value_rev, text_pos, skmer_pos, forward, kmers_left, unitig_begin, unitig_end);
+                found = lookup_serial(buffer, skmers, minimisers.window_value, minimisers.window_value_rev, text_pos, skmer_pos, forward, kmers_left, unitig_begin, unitig_end);
                 occurences += found;
             }
         }
@@ -769,196 +753,20 @@ uint64_t RSHash1::streaming_query(const std::vector<seqan3::dna4> &query,
             size_t q = s1_select.select(minimizer_id+1);
 
             buffer.clear();
-            skmer_lengths.clear();
-            unitig_begins.clear();
-            unitig_ends.clear();
-            text_positions.clear();
-            fill_buffer(buffer, skmer_lengths, unitig_begins, unitig_ends, text_positions, p, q);
-            found = lookup_serial(buffer, skmer_lengths, unitig_begins, unitig_ends, text_positions, minimisers.window_value, minimisers.window_value_rev, text_pos, skmer_pos, forward, kmers_left, unitig_begin, unitig_end);
+            skmers.clear();
+            fill_buffer(buffer, skmers, p, q);
+            found = lookup_serial(buffer, skmers, minimisers.window_value, minimisers.window_value_rev, text_pos, skmer_pos, forward, kmers_left, unitig_begin, unitig_end);
             occurences += found;
             current_minimiser = minimisers.minimiser_value;
         }
         else {
             occurences += hashmap.contains(std::min<uint64_t>(minimisers.window_value, minimisers.window_value_rev));
-            found = false; // cannot extend in text without position
+            found = false;
         }
-
     }
     
     return occurences;
 }
-
-
-
-// inline bool lookup_serial(std::vector<uint64_t> &buffer, std::vector<size_t> &buffer_lengths, uint64_t query, uint64_t queryrc, size_t &found, bool &forward)
-// {
-//     size_t j = 0;
-//     size_t l = 0;
-//     for (size_t i = 0; i < buffer_lengths.size(); i++) {
-//         l += buffer_lengths[i];
-//         for(; j < l; j++) {
-//             if(buffer[j] == query) {
-//                 found = j;
-//                 forward = true;
-//                 return true;
-//             }
-//             if(buffer[j] == queryrc) {
-//                 found = j;
-//                 forward = false;
-//                 return true;
-//             }
-//         }
-//     }
-//     return false;
-// }
-
-
-// inline void RSHash1::fill_minimiser_buffer(std::vector<uint64_t> &buffer, std::vector<size_t> &buffer_lengths, std::vector<size_t> &positions, size_t p, size_t q)
-// {
-//     for(uint64_t i = 0; i < q-p; i++) {
-//         size_t o = offsets1.access(p+i);
-//         size_t next_endpoint = endpoints.select(endpoints.rank(o+1));
-//         size_t e = o+k+span;
-//         if(e > next_endpoint)
-//             e = next_endpoint;
-//         uint64_t hash = 0;
-//         for (size_t j = o; j < o+k; j++) {
-//             uint64_t const new_rank = seqan3::to_rank(text[j]);
-//             hash = (hash >> 2) | (new_rank << 2*(k-1));
-//         }
-//         buffer.push_back(hash);
-//         for (size_t j = o+k; j < e; j++) {
-//             uint64_t const new_rank = seqan3::to_rank(text[j]);
-//             hash = (hash >> 2) | (new_rank << 2*(k-1));
-//             buffer.push_back(hash);
-//         }
-//         buffer_lengths.push_back(buffer.size()); // e-k-o
-//         positions.push_back(o);
-//     }
-// }
-
-
-// inline void RSHash1::fill_text_buffer(std::vector<uint64_t> &buffer, size_t position, size_t offset, size_t& last_found, bool forward, size_t& prev_endpoint, size_t& next_endpoint)
-// {
-//     if(forward) {
-//         if(offset == 0)
-//             next_endpoint = endpoints.select(endpoints.rank(position+1));
-//         if(position+offset+1+k >= next_endpoint)
-//             return;
-//         size_t e = position+offset+1+k + 12;
-//         if(e > next_endpoint)
-//             e = next_endpoint;
-
-//         uint64_t hash = 0;
-//         for(size_t i = position+offset+1; i < position+offset+1+k; i++) {
-//             uint64_t const new_rank = seqan3::to_rank(text[i]);
-//             hash = (hash >> 2) | (new_rank << 2*(k-1));
-//         }
-//         buffer.push_back(hash);
-//         for (size_t i=position+offset+1+k; i < e; i++) {
-//             uint64_t const new_rank = seqan3::to_rank(text[i]);
-//             hash = (hash >> 2) | (new_rank << 2*(k-1));
-//             buffer.push_back(hash);
-//         }
-//         last_found = 0;
-//     }
-//     else {
-//         if(offset == 0)
-//             prev_endpoint = endpoints.select(endpoints.rank(position+1)-1);
-//         size_t s = position-offset-1 - 12;
-//         if(s+k <= prev_endpoint)
-//             return;
-//         if(s < prev_endpoint)
-//             s = prev_endpoint;
-
-//         uint64_t hash = 0;
-//         for(size_t i = s; i < s+k; i++) {
-//             uint64_t const new_rank = seqan3::to_rank(text[i]);
-//             hash = (hash >> 2) | (new_rank << 2*(k-1));
-//         }
-//         buffer.push_back(hash);
-//         for (size_t i=s+k; i < position-offset-1+k; i++) {
-//             uint64_t const new_rank = seqan3::to_rank(text[i]);
-//             hash = (hash >> 2) | (new_rank << 2*(k-1));
-//             buffer.push_back(hash);
-//         }
-//         last_found = buffer.size()-1;
-//     }
-// }
-
-
-// inline bool extend_in_buffer(std::vector<uint64_t> &buffer, uint64_t query, uint64_t queryrc, size_t& last_found, bool forward) {
-//     if(forward) {
-//         if(buffer[last_found] == query) {
-//             last_found++;
-//             return true;
-//         }
-//     }
-//     else {
-//         if(buffer[last_found] == queryrc) {
-//             last_found--;
-//             return true;
-//         }
-//     }
-//     return false;
-// }
-
-// inline bool streaming_lookup(std::vector<uint64_t> &buffer, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward, uint64_t &extensions)
-// {
-//     if(extend_in_buffer(buffer, query, queryrc, last_found, forward)) {
-//         extensions++;
-//         return true;
-//     }
-//     else
-//         return lookup_serial(buffer, query, queryrc, last_found, forward);
-// }
-
-
-// uint64_t RSHash1::streaming_query(const std::vector<seqan3::dna4> &query, uint64_t &extensions)
-// {
-//     auto view = srindex::views::xor_minimiser_and_window({.minimiser_size = m1, .window_size = k, .seed=seed1});
-
-//     uint64_t occurences = 0;
-//     std::vector<uint64_t> minimiser_buffer;
-//     std::vector<size_t> pos_buffer;
-//     uint64_t current_minimiser=std::numeric_limits<uint64_t>::max();
-//     size_t last_found;
-//     size_t prev_endpoint, next_endpoint;
-//     bool forward;
-//     size_t text_pos;
-//     size_t minimiser_buffer_left;
-//     bool found = false;
-
-//     for(auto && minimisers : query | view)
-//     {
-//         if(found && minimiser_buffer_left == 0 && extend_in_text(text_pos, forward, minimisers.window_value, minimisers.window_value_rev)) {
-//             extensions++;
-//             occurences++;
-//         }
-//         else if(current_minimiser == minimisers.minimiser_value) {
-//             found = streaming_lookup(minimiser_buffer, minimisers.window_value, minimisers.window_value_rev, last_found, forward, extensions);
-//             occurences += found;
-//             minimiser_buffer_left--;
-//         }
-//         else if(r1[minimisers.minimiser_value]) {
-//             uint64_t minimizer_id = r1_rank(minimisers.minimiser_value);
-//             size_t p = s1_select.select(minimizer_id);
-//             size_t q = s1_select.select(minimizer_id+1);
-
-//             fill_minimiser_buffer(minimiser_buffer, pos_buffer, p, q);
-
-//             found = lookup_serial(minimiser_buffer, minimisers.window_value, minimisers.window_value_rev, last_found, forward);
-//             occurences += found;
-//             minimiser_buffer_left = ;
-//         }
-//         else {
-//             occurences += hashmap.contains(std::min<uint64_t>(minimisers.window_value, minimisers.window_value_rev));
-//             found = false; // cannot extend in text without position
-//         }
-//     }
-
-//     return occurences;
-// }
 
 
 int RSHash1::save(const std::filesystem::path &filepath) {
@@ -997,9 +805,6 @@ int RSHash1::load(const std::filesystem::path &filepath) {
 
     in.close();
 
-    // r1_rank = rank_support_rrr<1, 15>();
-    // r1_rank.set_vector(&r1);
-    // r1_rank = rank_support_v<1>(&r1);
     r1_rank = rank_support_sd<>(&r1);
     this->s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), s1.size(), 3);
 
