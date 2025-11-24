@@ -35,7 +35,6 @@ void initialise_argument_parser(sharg::parser &parser, cmd_arguments &args) {
     parser.add_option(args.t1, sharg::config{.long_id = "t1", .description = "threshold1"});
     parser.add_option(args.t2, sharg::config{.long_id = "t2", .description = "threshold2"});
     parser.add_option(args.t3, sharg::config{.long_id = "t3", .description = "threshold3"});
-    parser.add_option(args.s, sharg::config{.short_id = 's', .long_id = "span", .description = "span"});
 }
 
 int check_arguments(sharg::parser &parser, cmd_arguments &args) {
@@ -107,17 +106,17 @@ int main(int argc, char** argv)
 
         std::cout << "building dict...\n";
         if(args.l == 1) {
-            RSHash1 index = RSHash1(args.k, args.m1, args.t1, args.s);
+            RSHash1 index = RSHash1(args.k, args.m1, args.t1);
             index.build(text);
             index.save(args.d);
         }
         else if(args.l == 2) {
-            RSHash2 index = RSHash2(args.k, args.m1, args.m2, args.t1, args.t2, args.s);
+            RSHash2 index = RSHash2(args.k, args.m1, args.m2, args.t1, args.t2);
             index.build(text);
             index.save(args.d);
         }
         else if(args.l == 3) {
-            RSHash3 index = RSHash3(args.k, args.m1, args.m2, args.m3, args.t1, args.t2, args.t3, args.s);
+            RSHash3 index = RSHash3(args.k, args.m1, args.m2, args.m3, args.t1, args.t2, args.t3);
             index.build(text);
             index.save(args.d);
         }
@@ -130,7 +129,7 @@ int main(int argc, char** argv)
         uint64_t kmers = 0;
         uint64_t found = 0;
         uint64_t extensions = 0;
-        std::chrono::nanoseconds elapsed;
+        uint64_t buffer_fwd_extensions = 0, buffer_rev_extensions = 0, text_fwd_extensions = 0, text_rev_extensions = 0;        std::chrono::nanoseconds elapsed;
         if(args.l == 1) {
             std::cout << "loading dict...\n";
             RSHash1 index = RSHash1();
@@ -139,7 +138,7 @@ int main(int argc, char** argv)
 
             std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
             for (auto query : queries) {
-                found += index.streaming_query(query, extensions);
+                found += index.streaming_query(query, buffer_fwd_extensions, buffer_rev_extensions, text_fwd_extensions, text_rev_extensions);
                 kmers += query.size() - index.getk() + 1;
             }
             std::chrono::high_resolution_clock::time_point t_stop = std::chrono::high_resolution_clock::now();
@@ -154,7 +153,7 @@ int main(int argc, char** argv)
 
             std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
             for (auto query : queries) {
-                found += index.streaming_query(query, extensions);
+                found += index.streaming_query(query, buffer_fwd_extensions, buffer_rev_extensions, text_fwd_extensions, text_rev_extensions);
                 kmers += query.size() - index.getk() + 1;
             }
             std::chrono::high_resolution_clock::time_point t_stop = std::chrono::high_resolution_clock::now();
@@ -180,7 +179,10 @@ int main(int argc, char** argv)
         std::cout << "num_kmers = " << kmers << '\n';
         std::cout << "num_positive_kmers = " << found << " (" << (double) found/kmers*100 << "%)\n";
         std::cout << "time_per_kmer = " << ns_per_kmer << '\n';
-        std::cout << "num extensions = " << extensions << '\n';
+        std::cout << "buffer_fwd_extensions = " << buffer_fwd_extensions << '\n';
+        std::cout << "buffer_rev_extensions = " << buffer_rev_extensions << '\n';
+        std::cout << "text_fwd_extensions = " << text_fwd_extensions << '\n';
+        std::cout << "text_rev_extensions = " << text_rev_extensions << '\n';
     }
     else if(args.cmd == "lookup") {
         std::cout << "loading dict...\n";

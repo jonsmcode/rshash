@@ -149,12 +149,12 @@ private:
     inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t);
     inline void fill_buffer(std::vector<uint64_t>&, std::vector<SkmerInfo> &, size_t, size_t);
     inline bool lookup_serial(std::vector<uint64_t> &, std::vector<SkmerInfo> &, const uint64_t,  const uint64_t, size_t &, size_t &, bool &, size_t &, size_t &, size_t &);
-    inline bool extend_in_text(size_t&, size_t, size_t, bool, const uint64_t, const uint64_t);
+    inline bool extend_in_text(size_t&, size_t, size_t, bool, const uint64_t, const uint64_t, uint64_t&, uint64_t&);
 
 
 public:
     RSHash1();
-    RSHash1(uint8_t const k, uint8_t const m1, uint8_t const m_thres1, size_t const span);
+    RSHash1(uint8_t const k, uint8_t const m1, uint8_t const m_thres1);
     uint8_t getk() { return k; }
     uint64_t number_unitigs() { return endpoints.rank(endpoints.size()); }
     size_t unitig_size(uint64_t unitig_id) { return endpoints.select(unitig_id+1) - endpoints.select(unitig_id) - k + 1; }
@@ -162,7 +162,7 @@ public:
     uint64_t access(const uint64_t, const size_t);
     uint64_t lookup(const std::vector<uint64_t>&, bool verbose);
     int build(const std::vector<std::vector<seqan3::dna4>>&);
-    uint64_t streaming_query(const std::vector<seqan3::dna4>&, uint64_t&);
+    uint64_t streaming_query(const std::vector<seqan3::dna4>&, uint64_t&, uint64_t&, uint64_t&, uint64_t&);
     uint64_t streaming_query(const std::vector<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
     int save(const std::filesystem::path&);
     int load(const std::filesystem::path&);
@@ -173,7 +173,7 @@ class RSHash2
 {
 private:
     uint8_t k, m1, m_thres1, m2, m_thres2;
-    size_t span;
+    size_t span1, span2;
     sd_vector<> r1;
     rank_support_sd<> r1_rank;
     sd_vector<> r2;
@@ -193,15 +193,15 @@ private:
     template<int level>
     inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t);
     template<int level>
-    inline void fill_buffer(std::vector<uint64_t>&, size_t, size_t);
-    // inline void fill_text_buffer(std::vector<uint64_t>&, size_t, size_t, size_t&, bool, size_t&, size_t&);
-    // inline void fill_minimiser_buffer(std::vector<uint64_t>&, std::vector<size_t>&, size_t, size_t);
+    inline void fill_buffer(std::vector<uint64_t>&, std::vector<SkmerInfo> &, size_t, size_t);
+    inline bool lookup_serial(std::vector<uint64_t> &, std::vector<SkmerInfo> &, const uint64_t,  const uint64_t, size_t &, bool &, size_t &, size_t &);
+    inline bool extend_in_text(size_t&, size_t, size_t, bool, const uint64_t, const uint64_t, uint64_t&, uint64_t&);
 
 
 public:
     RSHash2();
     RSHash2(uint8_t const k, uint8_t const m1, uint8_t const m_thres1,
-                 uint8_t const m2, uint8_t const m_thres2, size_t const span);
+                 uint8_t const m2, uint8_t const m_thres2);
     uint8_t getk() { return k; }
     uint64_t number_unitigs() { return endpoints.rank(endpoints.size()); }
     size_t unitig_size(uint64_t unitig_id) { return endpoints.select(unitig_id+1) - endpoints.select(unitig_id) - k + 1; }
@@ -209,7 +209,7 @@ public:
     uint64_t access(const uint64_t, const size_t);
     uint64_t lookup(const std::vector<uint64_t>&, bool verbose);
     int build(const std::vector<std::vector<seqan3::dna4>>&);
-    uint64_t streaming_query(const std::vector<seqan3::dna4>&, uint64_t&);
+    uint64_t streaming_query(const std::vector<seqan3::dna4>&, uint64_t&, uint64_t&, uint64_t&, uint64_t&);
     uint64_t streaming_query(const std::vector<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
     int save(const std::filesystem::path&);
     int load(const std::filesystem::path&);
@@ -221,7 +221,7 @@ class RSHash3
 private:
     uint8_t k, m1, m2, m3, m_thres1, m_thres2;
     uint16_t m_thres3;
-    size_t span;
+    size_t span1, span2, span3;
     sd_vector<> r1;
     rank_support_sd<> r1_rank;
     sd_vector<> r2;
@@ -249,13 +249,16 @@ private:
     template<int level>
     inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t);
     template<int level>
-    inline void fill_buffer(std::vector<uint64_t>&, const uint64_t, size_t, size_t);
+    inline void fill_buffer(std::vector<uint64_t>&, std::vector<SkmerInfo>&, size_t, size_t);
+    inline bool lookup_serial(std::vector<uint64_t> &, std::vector<SkmerInfo> &, const uint64_t,  const uint64_t, size_t &, bool &, size_t &, size_t &);
+    inline bool extend_in_text(size_t&, size_t, size_t, bool, const uint64_t, const uint64_t);
+
 
 
 public:
     RSHash3();
     RSHash3(uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3,
-        uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3, size_t const span);
+        uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3);
     uint8_t getk() { return k; }
     uint64_t number_unitigs() { return endpoints.rank(endpoints.size()); }
     size_t unitig_size(uint64_t unitig_id) { return endpoints.select(unitig_id+1) - endpoints.select(unitig_id) - k + 1; }

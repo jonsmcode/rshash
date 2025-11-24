@@ -27,9 +27,9 @@ RSHash3::RSHash3() : endpoints(std::vector<uint64_t>{}, 1) {}
 
 RSHash3::RSHash3(
     uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3,
-    uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3, size_t const span)
+    uint8_t const m_thres1, uint8_t const m_thres2, uint16_t const m_thres3)
     : k(k), m1(m1), m2(m2), m3(m3),
-      m_thres1(m_thres1), m_thres2(m_thres2), m_thres3(m_thres3), span(span),
+      m_thres1(m_thres1), m_thres2(m_thres2), m_thres3(m_thres3), span1(k-m1+2), span2(k-m2+2), span3(k-m3+2),
       endpoints(std::vector<uint64_t>{}, 1)
 {}
 
@@ -77,10 +77,10 @@ int RSHash3::build(const std::vector<std::vector<seqan3::dna4>> &input)
     uint64_t n = 0;
     for(auto & sequence : input) {
         for(auto && minimiser : sequence | view1) {
-            minimizers1[minimiser.minimiser_value] += minimiser.occurrences/span+1;
+            minimizers1[minimiser.minimiser_value] += minimiser.occurrences/span1+1;
             if(minimizers1[minimiser.minimiser_value] > m_thres1)
                 minimizers1[minimiser.minimiser_value] = m_thres1;
-            n += minimiser.occurrences/span+1;
+            n += minimiser.occurrences/span1+1;
         }
     }
     
@@ -138,13 +138,13 @@ int RSHash3::build(const std::vector<std::vector<seqan3::dna4>> &input)
                 size_t s = s1_select.select(i);
                 size_t o = minimiser.occurrences;
                 uint64_t j = 0;
-                while(o > span) {
-                    b1.set(s + count1[i], length + minimiser.range_position + j*span);
+                while(o > span1) {
+                    b1.set(s + count1[i], length + minimiser.range_position + j*span1);
                     count1[i]++;
-                    o -= span;
+                    o -= span1;
                     j++;
                 }
-                b1.set(s + count1[i], length + minimiser.range_position + j*span);
+                b1.set(s + count1[i], length + minimiser.range_position + j*span1);
                 count1[i]++;
             }
         }
@@ -207,7 +207,7 @@ int RSHash3::build(const std::vector<std::vector<seqan3::dna4>> &input)
 
     for(auto & skmer : freq_skmers1) {
         for(auto && minimiser : skmer | view2) {
-            minimizers2[minimiser.minimiser_value] += minimiser.occurrences/span+1;
+            minimizers2[minimiser.minimiser_value] += minimiser.occurrences/span2+1;
             if(minimizers2[minimiser.minimiser_value] > m_thres2)
                 minimizers2[minimiser.minimiser_value] = m_thres2;
         }
@@ -264,13 +264,13 @@ int RSHash3::build(const std::vector<std::vector<seqan3::dna4>> &input)
                 size_t s = s2_select.select(i);
                 size_t o = minimiser.occurrences;
                 uint64_t j = 0;
-                while(o > span) {
-                    b2.set(s + count2[i], skmer_positions[skmer_idx] + minimiser.range_position + j*span);
+                while(o > span2) {
+                    b2.set(s + count2[i], skmer_positions[skmer_idx] + minimiser.range_position + j*span2);
                     count2[i]++;
-                    o -= span;
+                    o -= span2;
                     j++;
                 }
-                b2.set(s + count2[i], skmer_positions[skmer_idx] + minimiser.range_position + j*span);
+                b2.set(s + count2[i], skmer_positions[skmer_idx] + minimiser.range_position + j*span2);
                 count2[i]++;
             }
         }
@@ -330,7 +330,7 @@ int RSHash3::build(const std::vector<std::vector<seqan3::dna4>> &input)
 
     for(auto & skmer : freq_skmers2) {
         for(auto && minimiser : skmer | view3) {
-            minimizers3[minimiser.minimiser_value] += minimiser.occurrences/span+1;
+            minimizers3[minimiser.minimiser_value] += minimiser.occurrences/span3+1;
             if(minimizers3[minimiser.minimiser_value] > m_thres3)
                 minimizers3[minimiser.minimiser_value] = m_thres3;
         }
@@ -387,13 +387,13 @@ int RSHash3::build(const std::vector<std::vector<seqan3::dna4>> &input)
                 size_t s = s3_select.select(i);
                 size_t o = minimiser.occurrences;
                 uint64_t j = 0;
-                while(o > span) {
-                    b3.set(s + count3[i], skmer_positions2[skmer_idx] + minimiser.range_position + j*span);
+                while(o > span3) {
+                    b3.set(s + count3[i], skmer_positions2[skmer_idx] + minimiser.range_position + j*span3);
                     count3[i]++;
-                    o -= span;
+                    o -= span3;
                     j++;
                 }
-                b3.set(s + count3[i], skmer_positions2[skmer_idx] + minimiser.range_position + j*span);
+                b3.set(s + count3[i], skmer_positions2[skmer_idx] + minimiser.range_position + j*span3);
                 count3[i]++;
             }
         }
@@ -577,13 +577,19 @@ inline bool RSHash3::check(const size_t p, const size_t q, const uint64_t mask,
     for(size_t i = 0; i < q-p; i++) {
 
         t0 = std::chrono::high_resolution_clock::now();
-        size_t o;
-        if constexpr (level == 1)
+        size_t o, span;
+        if constexpr (level == 1) {
             o = offsets1.access(p+i);
-        if constexpr (level == 2)
+            span = span1;
+        }
+        if constexpr (level == 2) {
             o = offsets2.access(p+i);
-        if constexpr (level == 3)
+            span = span2;
+        }
+        if constexpr (level == 3) {
             o = offsets3.access(p+i);
+            span = span3;
+        }
         t1 = std::chrono::high_resolution_clock::now();
         to += (std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)).count();
 
@@ -628,13 +634,19 @@ inline bool RSHash3::check(const size_t p, const size_t q, const uint64_t mask,
     for(size_t i = 0; i < q-p; i++) {
 
         t0 = std::chrono::high_resolution_clock::now();
-        size_t o;
-        if constexpr (level == 1)
+        size_t o, span;
+        if constexpr (level == 1) {
             o = offsets1.access(p+i);
-        if constexpr (level == 2)
+            span = span1;
+        }
+        if constexpr (level == 2) {
             o = offsets2.access(p+i);
-        if constexpr (level == 3)
+            span = span2;
+        }
+        if constexpr (level == 3) {
             o = offsets3.access(p+i);
+            span = span3;
+        }
 
         uint64_t hash = 0;
         for (size_t j=o; j < o+k; j++) {
@@ -813,20 +825,31 @@ else {
 }
 
 
+
+
+
 template<int level>
-inline void RSHash3::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t mask, size_t p, size_t q)
+inline void RSHash3::fill_buffer(std::vector<uint64_t> &buffer, std::vector<SkmerInfo> &skmers, size_t p, size_t q)
 {
     for(uint64_t i = 0; i < q-p; i++) {
         uint64_t hash = 0;
-        size_t o;
-        if constexpr (level == 1)
+        size_t o, span;
+        if constexpr (level == 1) {
             o = offsets1.access(p+i);
-        if constexpr (level == 2)
+            span = span1;
+        }
+        if constexpr (level == 2) {
             o = offsets2.access(p+i);
-        if constexpr (level == 3)
+            span = span2;
+        }
+        if constexpr (level == 3) {
             o = offsets3.access(p+i);
-        size_t next_endpoint = endpoints.select(endpoints.rank(o+1));
-        size_t e = o+k+span;
+            span = span3;
+        }
+        uint64_t next_endpoint;
+        uint64_t prev_endpoint = endpoints.select(endpoints.rank(o+1)-1, &next_endpoint);
+        size_t e = std::min(o+k+span, next_endpoint);
+        
         if(e > next_endpoint)
             e = next_endpoint;
         for (uint64_t j=o; j < o+k; j++) {
@@ -839,60 +862,57 @@ inline void RSHash3::fill_buffer(std::vector<uint64_t> &buffer, const uint64_t m
             hash = (hash >> 2) | (new_rank << 2*(k-1));
             buffer.push_back(hash);
         }
+        skmers.push_back({o, e - o - k + 1, prev_endpoint, next_endpoint});
     }
 }
 
 
-inline bool extend(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool forward) {
+
+inline bool RSHash3::lookup_serial(std::vector<uint64_t> &buffer, std::vector<SkmerInfo> &skmers,
+    const uint64_t query, const uint64_t queryrc,
+    size_t &text_pos, bool &forward, size_t &start_pos, size_t &end_pos)
+{
+    size_t s = 0, e = 0;
+    for (size_t i = 0; i < skmers.size(); i++) {
+        e += skmers[i].length;
+        for(size_t j = s; j < e; j++) {
+            if(buffer[j] == query) {
+                forward = true;
+                text_pos = skmers[i].position + (j - s) + k - 1;
+                end_pos = skmers[i].unitig_end;
+                return true;
+            }
+            if(buffer[j] == queryrc) {
+                forward = false;
+                text_pos = skmers[i].position + (j - s);
+                start_pos = skmers[i].unitig_begin;
+                return true;
+            }
+        }
+        s = e;
+    }
+    return false;
+}
+
+
+inline bool RSHash3::extend_in_text(size_t &text_pos, size_t start, size_t end,
+    bool forward, const uint64_t query, const uint64_t query_rc)
+{
     if(forward) {
-        if(last_found == array.size()-1)
-            return false;
-        if(array[last_found+1] == query) {
-            last_found++;
-            return true;
+        if(++text_pos < end) {
+            uint64_t const new_rank = seqan3::to_rank(text[text_pos]);
+            bool const found = (new_rank == (query >> (2*(k-1))));
+            return found;
         }
     }
     else {
-        if(last_found == 1)
-            return false;
-        if(array[last_found-1] == queryrc) {
-            last_found--;
-            return true;
+        if(--text_pos >= start) {
+            uint64_t const new_rank = seqan3::to_rank(text[text_pos]);
+            bool const found = (new_rank == (query_rc & 0b11));
+            return found;
         }
     }
     return false;
-}
-
-
-inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward)
-{
-    const size_t n = array.size();
-    for (int i = 0; i < n; ++i) {
-        if(array[i] == query) {
-            last_found = i;
-            forward = true;
-            return true;
-        }
-        if(array[i] == queryrc) {
-            last_found = i;
-            forward = false;
-            return true;
-        }
-    }
-    return false;
-}
-
-
-inline bool streaming_lookup(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward, uint64_t &extensions)
-{
-    if(extend(array, query, queryrc, last_found, forward)) {
-        extensions++;
-        return true;
-    }
-    else {
-        return lookup_serial(array, query, queryrc, last_found, forward);
-    }
-        
 }
 
 
@@ -908,51 +928,72 @@ uint64_t RSHash3::streaming_query(const std::vector<seqan3::dna4> &query, uint64
     std::vector<uint64_t> buffer1;
     std::vector<uint64_t> buffer2;
     std::vector<uint64_t> buffer3;
-    size_t last_found1=0;
-    size_t last_found2=0;
-    size_t last_found3=0;
+    std::vector<SkmerInfo> skmers1;
+    std::vector<SkmerInfo> skmers2;
+    std::vector<SkmerInfo> skmers3;
+    size_t unitig_begin, unitig_end;
+    size_t text_pos;
     bool forward;
+    bool found = false;
 
     for(auto && minimisers : query | view)
     {
-        if(minimisers.minimiser1_value == current_minimiser1)
-            occurences += streaming_lookup(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1, forward, extensions);
+        if(found && extend_in_text(text_pos, unitig_begin, unitig_end, forward, minimisers.window_value, minimisers.window_value_rev)) {
+            occurences++;
+            extensions++;
+        }
+        else if(minimisers.minimiser1_value == current_minimiser1) {
+            found = lookup_serial(buffer1, skmers1, minimisers.window_value, minimisers.window_value_rev, text_pos, forward, unitig_begin, unitig_end);
+            occurences += found;
+        }
         else if(r1[minimisers.minimiser1_value]) {
             uint64_t minimizer_id = r1_rank(minimisers.minimiser1_value);
             size_t p = s1_select.select(minimizer_id);
             size_t q = s1_select.select(minimizer_id+1);
 
             buffer1.clear();
-            fill_buffer<1>(buffer1, mask, p, q);
-            occurences += lookup_serial(buffer1, minimisers.window_value, minimisers.window_value_rev, last_found1, forward);
+            skmers1.clear();
+            fill_buffer<1>(buffer1, skmers1, p, q);
+            found = lookup_serial(buffer1, skmers1, minimisers.window_value, minimisers.window_value_rev, text_pos, forward, unitig_begin, unitig_end);
+            occurences += found;
             current_minimiser1 = minimisers.minimiser1_value;
         }
-        else if(minimisers.minimiser2_value == current_minimiser2)
-            occurences += streaming_lookup(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2, forward, extensions);
+        else if(minimisers.minimiser2_value == current_minimiser2) {
+            found = lookup_serial(buffer2, skmers2, minimisers.window_value, minimisers.window_value_rev, text_pos, forward, unitig_begin, unitig_end);
+            occurences += found;
+        }
         else if(r2[minimisers.minimiser2_value]) {
             uint64_t minimizer_id = r2_rank(minimisers.minimiser2_value);
             size_t p = s2_select.select(minimizer_id);
             size_t q = s2_select.select(minimizer_id+1);
 
             buffer2.clear();
-            fill_buffer<2>(buffer2, mask, p, q);
-            occurences += lookup_serial(buffer2, minimisers.window_value, minimisers.window_value_rev, last_found2, forward);
+            skmers2.clear();
+            fill_buffer<2>(buffer2, skmers2, p, q);
+            found = lookup_serial(buffer2, skmers2, minimisers.window_value, minimisers.window_value_rev, text_pos, forward, unitig_begin, unitig_end);
+            occurences += found;
             current_minimiser2 = minimisers.minimiser2_value;
         }
-        else if(minimisers.minimiser3_value == current_minimiser3)
-            occurences += streaming_lookup(buffer3, minimisers.window_value, minimisers.window_value_rev, last_found3, forward, extensions);
+        else if(minimisers.minimiser3_value == current_minimiser3) {
+            found = lookup_serial(buffer3, skmers3, minimisers.window_value, minimisers.window_value_rev, text_pos, forward, unitig_begin, unitig_end);
+            occurences += found;
+        }
         else if(r3[minimisers.minimiser3_value]) {
             uint64_t minimizer_id = r3_rank(minimisers.minimiser3_value);
             size_t p = s3_select.select(minimizer_id);
             size_t q = s3_select.select(minimizer_id+1);
 
             buffer3.clear();
-            fill_buffer<3>(buffer3, mask, p, q);
-            occurences += lookup_serial(buffer3, minimisers.window_value, minimisers.window_value_rev, last_found3, forward);
+            skmers3.clear();
+            fill_buffer<3>(buffer3, skmers3, p, q);
+            found = lookup_serial(buffer3, skmers3, minimisers.window_value, minimisers.window_value_rev, text_pos, forward, unitig_begin, unitig_end);
+            occurences += found;
             current_minimiser3 = minimisers.minimiser3_value;
         }
-        else
+        else {
             occurences += hashmap.contains(std::min<uint64_t>(minimisers.window_value, minimisers.window_value_rev));
+            found = false;
+        }
     }
     
     return occurences;
@@ -965,7 +1006,6 @@ int RSHash3::save(const std::filesystem::path &filepath) {
     seqan3::contrib::sdsl::serialize(this->m1, out);
     seqan3::contrib::sdsl::serialize(this->m2, out);
     seqan3::contrib::sdsl::serialize(this->m3, out);
-    seqan3::contrib::sdsl::serialize(this->span, out);
     seqan3::contrib::sdsl::serialize(r1, out);
     seqan3::contrib::sdsl::serialize(r2, out);
     seqan3::contrib::sdsl::serialize(r3, out);
@@ -991,7 +1031,6 @@ int RSHash3::load(const std::filesystem::path &filepath) {
     seqan3::contrib::sdsl::load(this->m1, in);
     seqan3::contrib::sdsl::load(this->m2, in);
     seqan3::contrib::sdsl::load(this->m3, in);
-    seqan3::contrib::sdsl::load(this->span, in);
     seqan3::contrib::sdsl::load(r1, in);
     seqan3::contrib::sdsl::load(r2, in);
     seqan3::contrib::sdsl::load(r3, in);
@@ -1006,6 +1045,10 @@ int RSHash3::load(const std::filesystem::path &filepath) {
     archive(this->offsets3);
     archive(this->text);
     archive(this->hashmap);
+
+    this->span1 = k-m1+2;
+    this->span2 = k-m2+2;
+    this->span3 = k-m3+2;
 
     std::cout << "loaded index...\n";
 

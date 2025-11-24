@@ -26,9 +26,9 @@ static inline constexpr uint64_t compute_mask(uint64_t const size)
 RSHash1::RSHash1() : endpoints(std::vector<uint64_t>{}, 1) {}
 
 RSHash1::RSHash1(
-    uint8_t const k, uint8_t const m1, uint8_t const m_thres1, size_t const span)
+    uint8_t const k, uint8_t const m1, uint8_t const m_thres1)
     : k(k), m1(m1),
-      m_thres1(m_thres1), span(span),
+      m_thres1(m_thres1), span(k-m1+2),
       endpoints(std::vector<uint64_t>{}, 1)
 {}
 
@@ -379,11 +379,13 @@ int RSHash1::build(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "text: " << (double) 2*N/kmers << "\n";
     std::cout << "endpoints: " << (double) endpoints.bitCount()/kmers << "\n";
     std::cout << "offsets1: " << (double) n1*offset_width/kmers << "\n";
-    std::cout << "Hashtable: " << (double) 64*hashmap.size()/kmers << "\n";
-    std::cout << "R_1: " << (double) 8*size_in_bytes(r1)/kmers << "\n";
-    std::cout << "S_1: " << (double) (n1+1)/kmers << "\n";
+    // std::cout << "Hashtable: " << (double) 64*hashmap.size()/kmers << "\n";
+    std::cout << "Hashtable: " << (double) 65*hashmap.bucket_count()/kmers << "\n";
+    std::cout << "R_1: " << (double) (8*size_in_bytes(r1))/kmers << "\n";
+    std::cout << "S_1: " << (double) (n1+1 + s1_select.bitCount())/kmers << "\n";
 
-    std::cout << "total: " << (double) (n1*offset_width+2*N+8*size_in_bytes(r1)+n1+1+endpoints.bitCount()+64*hashmap.size())/kmers << "\n";
+
+    std::cout << "total: " << (double) (n1*offset_width+2*N+8*size_in_bytes(r1)+n1+1+s1_select.bitCount()+endpoints.bitCount()+65*hashmap.bucket_count())/kmers << "\n";
 
     return 0;
 }
@@ -619,13 +621,15 @@ else {
 
 
 
+
 inline bool RSHash1::extend_in_text(size_t &text_pos, size_t start, size_t end,
-    bool forward, const uint64_t query, const uint64_t query_rc)
+    bool forward, const uint64_t query, const uint64_t query_rc, uint64_t &fwd_extensions, uint64_t &rev_extensions)
 {
     if(forward) {
         if(++text_pos < end) {
             uint64_t const new_rank = seqan3::to_rank(text[text_pos]);
             bool const found = (new_rank == (query >> (2*(k-1))));
+            fwd_extensions++;
             return found;
         }
     }
@@ -633,6 +637,7 @@ inline bool RSHash1::extend_in_text(size_t &text_pos, size_t start, size_t end,
         if(--text_pos >= start) {
             uint64_t const new_rank = seqan3::to_rank(text[text_pos]);
             bool const found = (new_rank == (query_rc & 0b11));
+            rev_extensions++;
             return found;
         }
     }
@@ -640,17 +645,20 @@ inline bool RSHash1::extend_in_text(size_t &text_pos, size_t start, size_t end,
 }
 
 
-inline bool extend_in_buffer(std::vector<uint64_t> &skmers, const uint64_t query, const uint64_t queryrc, size_t &skmer_pos, bool forward)
+inline bool extend_in_buffer(std::vector<uint64_t> &buffer, const uint64_t query, const uint64_t queryrc,
+    size_t &skmer_pos, bool forward, uint64_t &fwd_extensions, uint64_t &rev_extensions)
 {
     if(forward) {
-        if(skmers[skmer_pos+1] == query) {
+        if(buffer[skmer_pos+1] == query) {
             skmer_pos++;
+            fwd_extensions++;
             return true;
         }
     }
     else {
-        if(skmers[skmer_pos-1] == queryrc) {
+        if(buffer[skmer_pos-1] == queryrc) {
             skmer_pos--;
+            rev_extensions++;
             return true;
         }
     }
@@ -666,7 +674,8 @@ inline void RSHash1::fill_buffer(std::vector<uint64_t> &buffer, std::vector<Skme
         uint64_t prev_endpoint = endpoints.select(endpoints.rank(o+1)-1, &next_endpoint);
         size_t e = std::min(o+k+span, next_endpoint);
 
-        // todo: let buffer be bitvector text[o,..,e]
+        // todo: get 256 chars around o in one cache line
+        // todo: let buffer be bits text[max(o-126,s),...,o,...,min(o+126,e)]
         // check kmer at position p in skmer with reinterpret_cast<uint64_t*>(buffer+2*p)[0] >> (64 - 2*k);
         uint64_t hash = 0;
         for (size_t j=o; j < o+k; j++) {
@@ -693,18 +702,14 @@ inline bool RSHash1::lookup_serial(std::vector<uint64_t> &buffer, std::vector<Sk
         e += skmers[i].length;
         for(size_t j = s; j < e; j++) {
             if(buffer[j] == query) {
-                skmer_pos = j;
                 forward = true;
-                kmers_left = e - j - 1;
-                text_pos = skmers[i].position + k + skmers[i].length - 2;
+                text_pos = skmers[i].position + (j - s) + k - 1;
                 end_pos = skmers[i].unitig_end;
                 return true;
             }
             if(buffer[j] == queryrc) {
-                skmer_pos = j;
                 forward = false;
-                kmers_left = j - s;
-                text_pos = skmers[i].position;
+                text_pos = skmers[i].position + (j - s);
                 start_pos = skmers[i].unitig_begin;
                 return true;
             }
@@ -715,7 +720,8 @@ inline bool RSHash1::lookup_serial(std::vector<uint64_t> &buffer, std::vector<Sk
 }
 
 
-uint64_t RSHash1::streaming_query(const std::vector<seqan3::dna4> &query, uint64_t &extensions)
+uint64_t RSHash1::streaming_query(const std::vector<seqan3::dna4> &query,
+    uint64_t &buffer_fwd_extensions, uint64_t &buffer_rev_extensions, uint64_t &text_fwd_extensions, uint64_t &text_rev_extensions)
 {
     auto view = srindex::views::xor_minimiser_and_window({.minimiser_size = m1, .window_size = k, .seed=seed1});
 
@@ -725,27 +731,18 @@ uint64_t RSHash1::streaming_query(const std::vector<seqan3::dna4> &query, uint64
     std::vector<SkmerInfo> skmers;
     size_t unitig_begin, unitig_end;
     size_t skmer_pos;
-    size_t kmers_left;
+    size_t kmers_left = 0;
     size_t text_pos;
     bool forward;
     bool found = false;
 
     for(auto && minimisers : query | view)
     {
-        if(found && kmers_left == 0 && extend_in_text(text_pos, unitig_begin, unitig_end, forward, minimisers.window_value, minimisers.window_value_rev)) {
-            extensions++;
+        if(found && extend_in_text(text_pos, unitig_begin, unitig_end, forward, minimisers.window_value, minimisers.window_value_rev, text_fwd_extensions, text_rev_extensions))
             occurences++;
-        }
         else if(minimisers.minimiser_value == current_minimiser) {
-            if(kmers_left > 0 && extend_in_buffer(buffer, minimisers.window_value, minimisers.window_value_rev, skmer_pos, forward)) {
-                kmers_left--;
-                extensions++;
-                occurences++;
-            }
-            else {
-                found = lookup_serial(buffer, skmers, minimisers.window_value, minimisers.window_value_rev, text_pos, skmer_pos, forward, kmers_left, unitig_begin, unitig_end);
-                occurences += found;
-            }
+            found = lookup_serial(buffer, skmers, minimisers.window_value, minimisers.window_value_rev, text_pos, skmer_pos, forward, kmers_left, unitig_begin, unitig_end);
+            occurences += found;
         }
         else if(r1[minimisers.minimiser_value]) {
             uint64_t minimizer_id = r1_rank(minimisers.minimiser_value);
