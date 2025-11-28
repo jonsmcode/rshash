@@ -2359,8 +2359,8 @@ private:
     void update_cache()
     {
         cached.minimiser_value = current.minimiser_value;
-        // cached.range_position = range_position - params.window_size - current.occurrences;
-        cached.range_position = range_position - params.window_size - current.occurrences;
+        // cached.range_position = range_position - params.window_size - current.occurrences + current.range_position; // minimiser position
+        cached.range_position = range_position - params.window_size - current.occurrences; // skmer position
         cached.occurrences = current.occurrences + 1;
     }
 
@@ -2381,10 +2381,6 @@ private:
         {
             update_cache();
             find_minimiser_in_window();
-            // bool const same_value = current.minimiser_value == cached.minimiser_value;
-            // current.occurrences *= same_value;
-            // current.occurrences += same_value;
-            // return !same_value;
             current.occurrences = 0;
             return true;
         }

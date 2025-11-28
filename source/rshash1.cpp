@@ -74,10 +74,11 @@ int RSHash1::build(const std::vector<std::vector<seqan3::dna4>> &input)
     uint64_t n = 0;
     for(auto & sequence : input) {
         for(auto && minimiser : sequence | view1) {
-            minimizers1[minimiser.minimiser_value] += (minimiser.occurrences+span-1)/span;
+            // minimizers1[minimiser.minimiser_value] += (minimiser.occurrences+span-1)/span;
+            minimizers1[minimiser.minimiser_value]++;
             if(minimizers1[minimiser.minimiser_value] > m_thres1)
                 minimizers1[minimiser.minimiser_value] = m_thres1;
-            n += (minimiser.occurrences+span-1)/span;
+            n++;
         }
     }
     

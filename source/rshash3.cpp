@@ -77,10 +77,11 @@ int RSHash3::build(const std::vector<std::vector<seqan3::dna4>> &input)
     uint64_t n = 0;
     for(auto & sequence : input) {
         for(auto && minimiser : sequence | view1) {
-            minimizers1[minimiser.minimiser_value] += (minimiser.occurrences+span1-1)/span1;
+            // minimizers1[minimiser.minimiser_value] += (minimiser.occurrences+span1-1)/span1;
+            minimizers1[minimiser.minimiser_value]++;
             if(minimizers1[minimiser.minimiser_value] > m_thres1)
                 minimizers1[minimiser.minimiser_value] = m_thres1;
-            n += (minimiser.occurrences+span1-1)/span1;
+            n++;
         }
     }
     
@@ -199,7 +200,8 @@ int RSHash3::build(const std::vector<std::vector<seqan3::dna4>> &input)
 
     for(auto & skmer : freq_skmers1) {
         for(auto && minimiser : skmer | view2) {
-            minimizers2[minimiser.minimiser_value] += (minimiser.occurrences+span2-1)/span2;
+            // minimizers2[minimiser.minimiser_value] += (minimiser.occurrences+span2-1)/span2;
+            minimizers2[minimiser.minimiser_value]++;
             if(minimizers2[minimiser.minimiser_value] > m_thres2)
                 minimizers2[minimiser.minimiser_value] = m_thres2;
         }
@@ -314,7 +316,8 @@ int RSHash3::build(const std::vector<std::vector<seqan3::dna4>> &input)
 
     for(auto & skmer : freq_skmers2) {
         for(auto && minimiser : skmer | view3) {
-            minimizers3[minimiser.minimiser_value] += (minimiser.occurrences+span3-1)/span3;
+            // minimizers3[minimiser.minimiser_value] += (minimiser.occurrences+span3-1)/span3;
+            minimizers3[minimiser.minimiser_value]++;
             if(minimizers3[minimiser.minimiser_value] > m_thres3)
                 minimizers3[minimiser.minimiser_value] = m_thres3;
         }
