@@ -28,7 +28,7 @@ RSHash2::RSHash2() : endpoints(std::vector<uint64_t>{}, 1) {}
 RSHash2::RSHash2(
     uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m_thres1, uint8_t const m_thres2)
     : k(k), m1(m1), m_thres1(m_thres1), m2(m2),
-      m_thres2(m_thres2), span1(k-m1+2), span2(k-m2+2),
+      m_thres2(m_thres2), span1(k-m1+1), span2(k-m2+1),
       endpoints(std::vector<uint64_t>{}, 1)
 {}
 
@@ -73,10 +73,10 @@ int RSHash2::build(const std::vector<std::vector<seqan3::dna4>> &input)
     uint64_t n = 0;
     for(auto & sequence : input) {
         for(auto && minimiser : sequence | view1) {
-            minimizers1[minimiser.minimiser_value] += minimiser.occurrences/span1+1;
+            minimizers1[minimiser.minimiser_value] += (minimiser.occurrences+span1-1)/span1;
             if(minimizers1[minimiser.minimiser_value] > m_thres1)
                 minimizers1[minimiser.minimiser_value] = m_thres1;
-            n += minimiser.occurrences/span1+1;
+            n += (minimiser.occurrences+span1-1)/span1;
         }
     }
     
@@ -132,15 +132,7 @@ int RSHash2::build(const std::vector<std::vector<seqan3::dna4>> &input)
             if(r1[minimiser.minimiser_value]) {
                 size_t i = r1_rank(minimiser.minimiser_value);
                 size_t s = s1_select.select(i);
-                size_t o = minimiser.occurrences;
-                size_t j = 0;
-                while(o > span1) {
-                    b1.set(s + count1[i], length + minimiser.range_position + j*span1);
-                    count1[i]++;
-                    o -= span1;
-                    j++;
-                }
-                b1.set(s + count1[i], length + minimiser.range_position + j*span1);
+                b1.set(s + count1[i], length + minimiser.range_position);
                 count1[i]++;
             }
         }
@@ -185,13 +177,13 @@ int RSHash2::build(const std::vector<std::vector<seqan3::dna4>> &input)
         length += sequence.size();
     }
 
-    uint64_t freq_kmers = 0;
-    for(auto & sequence : input) {
-        for(auto && minimiser : sequence | view3) {
-            freq_kmers += !r1[minimiser.minimiser_value];
-        }
-    }
-    std::cout << "frequent k-mers: " << freq_kmers << " (" << (double) freq_kmers/kmers*100 << "%)\n";
+    // uint64_t freq_kmers = 0;
+    // for(auto & sequence : input) {
+    //     for(auto && minimiser : sequence | view3) {
+    //         freq_kmers += !r1[minimiser.minimiser_value];
+    //     }
+    // }
+    // std::cout << "frequent k-mers: " << freq_kmers << " (" << (double) freq_kmers/kmers*100 << "%)\n";
     
     size_t rem_kmers1 = 0;
     for(auto & skmer : freq_skmers1)
@@ -206,7 +198,7 @@ int RSHash2::build(const std::vector<std::vector<seqan3::dna4>> &input)
 
     for(auto & skmer : freq_skmers1) {
         for(auto && minimiser : skmer | view2) {
-            minimizers2[minimiser.minimiser_value] += minimiser.occurrences/span2+1;
+            minimizers2[minimiser.minimiser_value] += (minimiser.occurrences+span2-1)/span2;
             if(minimizers2[minimiser.minimiser_value] > m_thres2)
                 minimizers2[minimiser.minimiser_value] = m_thres2;
         }
@@ -263,15 +255,7 @@ int RSHash2::build(const std::vector<std::vector<seqan3::dna4>> &input)
             if(r2[minimiser.minimiser_value]) {
                 size_t i = r2_rank(minimiser.minimiser_value);
                 size_t s = s2_select.select(i);
-                size_t o = minimiser.occurrences;
-                size_t j = 0;
-                while(o > span2) {
-                    b2.set(s + count2[i], skmer_positions[skmer_idx] + minimiser.range_position + j*span2);
-                    count2[i]++;
-                    o -= span2;
-                    j++;
-                }
-                b2.set(s + count2[i], skmer_positions[skmer_idx] + minimiser.range_position + j*span2);
+                b2.set(s + count2[i], skmer_positions[skmer_idx] + minimiser.range_position);
                 count2[i]++;
             }
         }
@@ -317,13 +301,13 @@ int RSHash2::build(const std::vector<std::vector<seqan3::dna4>> &input)
         skmer_idx++;
     }
 
-    freq_kmers = 0;
-    for(auto & sequence : freq_skmers1) {
-        for(auto && minimiser : sequence | view4) {
-            freq_kmers += !r2[minimiser.minimiser_value];
-        }
-    }
-    std::cout << "frequent k-mers: " << freq_kmers << " (" << (double) freq_kmers/kmers*100 << "%)\n";
+    // freq_kmers = 0;
+    // for(auto & sequence : freq_skmers1) {
+    //     for(auto && minimiser : sequence | view4) {
+    //         freq_kmers += !r2[minimiser.minimiser_value];
+    //     }
+    // }
+    // std::cout << "frequent k-mers: " << freq_kmers << " (" << (double) freq_kmers/kmers*100 << "%)\n";
     
     size_t rem_kmers2 = 0;
     for(auto & skmer : freq_skmers2)
@@ -468,27 +452,6 @@ uint64_t RSHash2::lookup(const std::vector<uint64_t> &kmers, bool verbose)
 
 
 
-// inline bool extend(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool forward) {
-//     if(forward) {
-//         // if(last_found == array.size()-1)
-//         //     return false;
-//         if(array[last_found+1] == query) {
-//             last_found++;
-//             return true;
-//         }
-//     }
-//     else {
-//         // if(last_found == 1)
-//         //     return false;
-//         if(array[last_found-1] == queryrc) {
-//             last_found--;
-//             return true;
-//         }
-//     }
-//     return false;
-// }
-
-
 inline bool RSHash2::extend_in_text(size_t &text_pos, size_t start, size_t end,
     bool forward, const uint64_t query, const uint64_t query_rc, uint64_t &fwd_extensions, uint64_t &rev_extensions)
 {
@@ -506,27 +469,6 @@ inline bool RSHash2::extend_in_text(size_t &text_pos, size_t start, size_t end,
             bool const found = (new_rank == (query_rc & 0b11));
             rev_extensions++;
             return found;
-        }
-    }
-    return false;
-}
-
-
-inline bool extend_in_buffer(std::vector<uint64_t> &buffer, const uint64_t query, const uint64_t queryrc,
-    size_t &skmer_pos, bool forward, uint64_t &fwd_extensions, uint64_t &rev_extensions)
-{
-    if(forward) {
-        if(buffer[skmer_pos+1] == query) {
-            skmer_pos++;
-            fwd_extensions++;
-            return true;
-        }
-    }
-    else {
-        if(buffer[skmer_pos-1] == queryrc) {
-            skmer_pos--;
-            rev_extensions++;
-            return true;
         }
     }
     return false;
@@ -596,37 +538,6 @@ inline bool RSHash2::lookup_serial(std::vector<uint64_t> &buffer, std::vector<Sk
     return false;
 }
 
-
-// inline bool lookup_serial(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward)
-// {
-//     const size_t n = array.size();
-//     for (int i = 0; i < n; ++i) {
-//         if(array[i] == query) {
-//             last_found = i;
-//             forward = true;
-//             return true;
-//         }
-//         if(array[i] == queryrc) {
-//             last_found = i;
-//             forward = false;
-//             return true;
-//         }
-//     }
-//     return false;
-// }
-
-
-// inline bool streaming_lookup(std::vector<uint64_t> &array, uint64_t query, uint64_t queryrc, size_t &last_found, bool &forward, uint64_t &extensions)
-// {
-//     if(extend(array, query, queryrc, last_found, forward)) {
-//         extensions++;
-//         return true;
-//     }
-//     else {
-//         return lookup_serial(array, query, queryrc, last_found, forward);
-//     }
-        
-// }
 
 uint64_t RSHash2::streaming_query(const std::vector<seqan3::dna4> &query,
     uint64_t &buffer_fwd_extensions, uint64_t &buffer_rev_extensions, uint64_t &text_fwd_extensions, uint64_t &text_rev_extensions)
@@ -732,8 +643,8 @@ int RSHash2::load(const std::filesystem::path &filepath) {
     archive(this->text);
     archive(this->hashmap);
 
-    this->span1 = k - m1 + 2;
-    this->span2 = k - m2 + 2;
+    this->span1 = k - m1 + 1;
+    this->span2 = k - m2 + 1;
 
     std::cout << "loaded index...\n";
 
