@@ -287,16 +287,14 @@ public:
 
     basic_iterator & operator++() noexcept
     {
-        while (!next_minimiser_is_new())
-        {}
+        next_minimiser();
         return *this;
     }
 
     basic_iterator operator++(int) noexcept
     {
         basic_iterator tmp{*this};
-        while (!next_minimiser_is_new())
-        {}
+        next_minimiser();
         return tmp;
     }
 
@@ -314,11 +312,6 @@ private:
 
     void rolling_hash()
     {
-        // uint64_t const new_rank = seqan3::to_rank(*range_it);
-        // current.window_value = ((current.window_value << 2) | new_rank) & window_mask;
-        // kmer_value = current.window_value & kmer_mask;
-        // current.window_value_rev = (current.window_value_rev >> 2) | ((new_rank^0b11) << 2*(window_size-1));
-        // kmer_value_rev = current.window_value_rev >> 2*(window_size - minimiser_size);
         uint64_t const new_rank = seqan3::to_rank(*range_it);
         current.window_value = (current.window_value >> 2) | (new_rank << 2*(window_size-1));
         kmer_value = current.window_value >> 2*(window_size - minimiser_size);
@@ -338,10 +331,8 @@ private:
             kmer_values_in_window.pop_front();
         }
 
-        // const uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev) ^ seed;
-        // const uint64_t kmerhash = murmurhash2_64::hash(std::min<uint64_t>(kmer_value, kmer_value_rev), seed) & kmer_mask;
-        // const uint64_t kmerhash = std::min<uint64_t>(murmurhash2_64::hash(kmer_value, seed), murmurhash2_64::hash(kmer_value_rev, seed));
-        const uint64_t kmerhash = std::min<uint64_t>(m_hasher.hash(kmer_value), m_hasher.hash(kmer_value_rev)) & kmer_mask;
+        // const uint64_t kmerhash = std::min<uint64_t>(m_hasher.hash(kmer_value), m_hasher.hash(kmer_value_rev)) & kmer_mask;
+        const uint64_t kmerhash = std::min<uint64_t>(m_hasher.hash(kmer_value) & kmer_mask, m_hasher.hash(kmer_value_rev) & kmer_mask);
         kmer_values_in_window.push_back(kmerhash);
     }
 
@@ -375,44 +366,37 @@ private:
         kmer_value = current.window_value >> 2*(window_size - minimiser_size);
         kmer_value_rev = current.window_value_rev & kmer_mask;
 
-        // const uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev) ^ seed;
-        // const uint64_t kmerhash = murmurhash2_64::hash(std::min<uint64_t>(kmer_value, kmer_value_rev), seed)  & kmer_mask;
-        // const uint64_t kmerhash = std::min<uint64_t>(murmurhash2_64::hash(kmer_value, seed), murmurhash2_64::hash(kmer_value_rev, seed));
-        const uint64_t kmerhash = std::min<uint64_t>(m_hasher.hash(kmer_value), m_hasher.hash(kmer_value_rev)) & kmer_mask;
+        // const uint64_t kmerhash = std::min<uint64_t>(m_hasher.hash(kmer_value), m_hasher.hash(kmer_value_rev)) & kmer_mask;
+        const uint64_t kmerhash = std::min<uint64_t>(m_hasher.hash(kmer_value) & kmer_mask, m_hasher.hash(kmer_value_rev) & kmer_mask);
         kmer_values_in_window.push_back(kmerhash);
 
         for (size_t i = minimiser_size; i < window_size; ++i)
             next_window<pop_first::no>();
 
-        // for(uint64_t minimiser : kmer_values_in_window)
-        //     seqan3::debug_stream << minimiser << " ";
-        // seqan3::debug_stream << "\n";
-
         find_minimiser_in_window();
     }
 
-    bool next_minimiser_is_new()
+    void next_minimiser()
     {
-        if (range_position + 1 == range_size)
-            return ++range_position;
+        if (range_position + 1 == range_size) {
+            ++range_position;
+            return;
+        }
 
         next_window<pop_first::yes>();
 
-        if (current.minimiser_position == 0)
-        {
+        if (current.minimiser_position == 0) {
             find_minimiser_in_window();
-            return true;
+            return;
         }
 
-        if (uint64_t new_kmer_hash = kmer_values_in_window.back(); new_kmer_hash < current.minimiser_value)
-        {
+        if (uint64_t new_kmer_hash = kmer_values_in_window.back(); new_kmer_hash < current.minimiser_value) {
             current.minimiser_value = new_kmer_hash;
             current.minimiser_position = minimisers_in_window;
-            return true;
+            return;
         }
 
         --current.minimiser_position;
-        return true;
     }
 };
 
@@ -1324,6 +1308,8 @@ struct xor_minimiser_and_window2_result
     uint64_t window_value;
     uint64_t window_value_rev;
     uint64_t minimiser_value;
+    size_t left_minimiser_position;
+    size_t right_minimiser_position;
 };
 
 }
@@ -1419,19 +1405,9 @@ private:
     size_t range_size{};
     size_t range_position{};
 
-    uint64_t minimiser_fwd_value{};
-    uint64_t minimiser_rc_value{};
-    uint64_t minimiser_fwd_hash{};
-    uint64_t minimiser_rc_hash{};
-    size_t minimiser_fwd_position{};
-    size_t minimiser_rc_position{};
-
     value_type current{};
 
     std::deque<uint64_t> kmer_hashs_in_window{};
-    std::deque<uint64_t> kmer_rc_hashs_in_window{};
-    std::deque<uint64_t> kmer_values_in_window{};
-    std::deque<uint64_t> kmer_rc_values_in_window{};
 
     static inline constexpr uint64_t compute_mask(uint64_t const size)
     {
@@ -1463,16 +1439,7 @@ public:
         range_size{it.range_size},
         range_position{it.range_position},
         current{it.current},
-        kmer_hashs_in_window{it.kmer_hashs_in_window},
-        kmer_rc_hashs_in_window{it.kmer_rc_hashs_in_window},
-        kmer_values_in_window{it.kmer_values_in_window},
-        kmer_rc_values_in_window{it.kmer_rc_values_in_window},
-        minimiser_fwd_value{it.minimiser_fwd_value},
-        minimiser_fwd_hash{it.minimiser_fwd_hash},
-        minimiser_rc_value{it.minimiser_rc_value},
-        minimiser_rc_hash{it.minimiser_rc_hash},
-        minimiser_fwd_position{it.minimiser_fwd_position},
-        minimiser_rc_position{it.minimiser_rc_position}
+        kmer_hashs_in_window{it.kmer_hashs_in_window}
     {}
 
     basic_iterator(range_iterator_t range_iterator,
@@ -1501,16 +1468,14 @@ public:
 
     basic_iterator & operator++() noexcept
     {
-        while (!next_minimiser_is_new())
-        {}
+        next_minimiser();
         return *this;
     }
 
     basic_iterator operator++(int) noexcept
     {
         basic_iterator tmp{*this};
-        while (!next_minimiser_is_new())
-        {}
+        next_minimiser();
         return tmp;
     }
 
@@ -1545,39 +1510,27 @@ private:
 
         if constexpr (pop == pop_first::yes) {
             kmer_hashs_in_window.pop_front();
-            kmer_rc_hashs_in_window.pop_front();
-            kmer_values_in_window.pop_front();
-            kmer_rc_values_in_window.pop_front();
         }
 
-        kmer_hashs_in_window.push_back(m_hasher.hash(kmer_value));
-        kmer_rc_hashs_in_window.push_back(m_hasher.hash(kmer_value_rev));
-        kmer_values_in_window.push_back(kmer_value);
-        kmer_rc_values_in_window.push_back(kmer_value_rev);
+        kmer_hashs_in_window.push_back(std::min<uint64_t>(m_hasher.hash(kmer_value) & kmer_mask, m_hasher.hash(kmer_value_rev) & kmer_mask));
     }
 
-    void find_minimiser_in_window()
-    {
-        find_minimiser_fwd_in_window();
-        find_minimiser_rc_in_window();
+    void find_minimiser_in_window() {
+        current.minimiser_value = kmer_hashs_in_window[0];
+        current.left_minimiser_position = 0;
+        current.right_minimiser_position = minimisers_in_window;
 
-        current.minimiser_value = std::min<uint64_t>(minimiser_fwd_value, minimiser_rc_value);
-    }
-
-    void find_minimiser_fwd_in_window()
-    {
-        auto minimiser_it = std::ranges::min_element(kmer_hashs_in_window, std::less_equal<uint64_t>{});
-        minimiser_fwd_hash = *minimiser_it;
-        minimiser_fwd_position = std::distance(std::begin(kmer_hashs_in_window), minimiser_it);
-        minimiser_fwd_value = kmer_values_in_window[minimiser_fwd_position];
-    }
-
-    void find_minimiser_rc_in_window()
-    {
-        auto minimiser_rc_it = std::ranges::min_element(kmer_rc_hashs_in_window, std::less_equal<uint64_t>{}); // todo: rightmost?
-        minimiser_rc_position = std::distance(std::begin(kmer_rc_hashs_in_window), minimiser_rc_it);
-        minimiser_rc_hash = *minimiser_rc_it;
-        minimiser_rc_value = kmer_rc_values_in_window[minimiser_rc_position];
+        for (size_t i = 1; i <= minimisers_in_window; ++i) {
+            const uint64_t kmer = kmer_hashs_in_window[i];
+            if(kmer < current.minimiser_value) {
+                current.minimiser_value = kmer;
+                current.left_minimiser_position = i;
+                current.right_minimiser_position = minimisers_in_window-i;
+            }
+            else if (kmer == current.minimiser_value) {
+                current.right_minimiser_position = minimisers_in_window-i;
+            }
+        }
     }
 
     void init(xor_minimiser_and_window2_parameters const & params)
@@ -1589,26 +1542,19 @@ private:
         minimisers_in_window = window_size - minimiser_size;
 
         uint64_t new_rank = seqan3::to_rank(*range_it);
-        current.window_value >>= 2;
-        current.window_value |= new_rank << (2 * (window_size - 1));
-        current.window_value_rev <<= 2;
-        current.window_value_rev |= new_rank^0b11;
+        current.window_value = (current.window_value >> 2) | (new_rank << 2*(window_size-1));
+        current.window_value_rev = ((current.window_value_rev << 2) | (new_rank^0b11));
         for (size_t i = 1u; i < params.minimiser_size; ++i) {
             ++range_position;
             ++range_it;
             new_rank = seqan3::to_rank(*range_it);
-            current.window_value >>= 2;
-            current.window_value |= new_rank << (2 * (window_size - 1));
-            current.window_value_rev <<= 2;
-            current.window_value_rev |= new_rank^0b11;
+            current.window_value = (current.window_value >> 2) | (new_rank << 2*(window_size-1));
+            current.window_value_rev = ((current.window_value_rev << 2) | (new_rank^0b11));
         }
         kmer_value = current.window_value >> 2*(window_size - minimiser_size);
         kmer_value_rev = current.window_value_rev & kmer_mask;
 
-        kmer_hashs_in_window.push_back(m_hasher.hash(kmer_value));
-        kmer_rc_hashs_in_window.push_back(m_hasher.hash(kmer_value_rev));
-        kmer_values_in_window.push_back(kmer_value);
-        kmer_rc_values_in_window.push_back(kmer_value_rev);
+        kmer_hashs_in_window.push_back(std::min<uint64_t>(m_hasher.hash(kmer_value) & kmer_mask, m_hasher.hash(kmer_value_rev) & kmer_mask));
 
         for (size_t i = minimiser_size; i < window_size; ++i)
             next_window<pop_first::no>();
@@ -1616,36 +1562,35 @@ private:
         find_minimiser_in_window();
     }
 
-    bool next_minimiser_is_new()
+    void next_minimiser()
     {
-        if (range_position + 1 >= range_size)
-        {
+        if (range_position + 1 >= range_size) {
             ++range_position;
-            return true;
+            return;
         }
 
         next_window<pop_first::yes>();
 
-        if(minimiser_fwd_position-- == 0)
-            find_minimiser_fwd_in_window();
-        if(minimiser_rc_position-- == 0)
-            find_minimiser_rc_in_window();
-
-        if (uint64_t new_kmer_hash = kmer_hashs_in_window.back(); new_kmer_hash < minimiser_fwd_hash) {
-            minimiser_fwd_hash = new_kmer_hash;
-            minimiser_fwd_value = kmer_values_in_window.back();
-            minimiser_fwd_position = minimisers_in_window;
-        }
-        if (uint64_t new_kmer_rc_hash = kmer_rc_hashs_in_window.back(); new_kmer_rc_hash < minimiser_rc_hash) {
-            minimiser_rc_hash = new_kmer_rc_hash;
-            minimiser_rc_value = kmer_rc_values_in_window.back();
-            minimiser_rc_position = minimisers_in_window;
+        if(current.left_minimiser_position-- == 0) {
+            find_minimiser_in_window();
+            return;
         }
 
-        current.minimiser_value = std::min<uint64_t>(minimiser_fwd_value, minimiser_rc_value);
-        
-        return true;
+        const uint64_t new_kmer_hash = kmer_hashs_in_window.back();
+        if(new_kmer_hash < current.minimiser_value) {
+            current.minimiser_value = new_kmer_hash;
+            current.left_minimiser_position = minimisers_in_window;
+            current.right_minimiser_position = 0;
+            return;
+        }
+        else if(new_kmer_hash == current.minimiser_value) {
+            current.right_minimiser_position = 0;
+            return;
+        }
+
+        current.right_minimiser_position++;
     }
+
 };
 
 
@@ -1708,7 +1653,6 @@ struct xor_minimiser_and_positions2_result
 {
     uint64_t minimiser_value;
     size_t range_position;
-    size_t occurrences;
 };
 
 }
@@ -1793,7 +1737,7 @@ private:
     uint64_t kmer_mask{std::numeric_limits<uint64_t>::max()};
     uint64_t seed{};
     mixer_64 m_hasher;
-    uint8_t minimisers_in_window{};
+    size_t minimisers_in_window{};
     uint64_t minimiser_size{};
     uint64_t window_size{};
 
@@ -1802,21 +1746,18 @@ private:
 
     size_t range_size{};
     size_t range_position{};
+    size_t occurrences{};
 
-    uint64_t minimiser_fwd_value{};
-    uint64_t minimiser_rc_value{};
-    uint64_t minimiser_fwd_hash{};
-    uint64_t minimiser_rc_hash{};
+    uint64_t minimiser_fwd{};
+    uint64_t minimiser_rc{};
     size_t minimiser_fwd_position{};
     size_t minimiser_rc_position{};
 
     value_type current{};
     value_type cached{};
 
-    std::deque<uint64_t> kmer_hashs_in_window{};
-    std::deque<uint64_t> kmer_rc_hashs_in_window{};
-    std::deque<uint64_t> kmer_values_in_window{};
-    std::deque<uint64_t> kmer_rc_values_in_window{};
+    std::deque<uint64_t> kmers_in_window{};
+    std::deque<uint64_t> kmers_rc_in_window{};
 
     static inline constexpr uint64_t compute_mask(uint64_t const size)
     {
@@ -1846,16 +1787,13 @@ public:
         kmer_value_rev{it.kmer_value_rev},
         range_size{it.range_size},
         range_position{it.range_position},
+        occurrences{it.occurrences},
         current{it.current},
         cached{it.cached},
-        kmer_hashs_in_window{it.kmer_hashs_in_window},
-        kmer_rc_hashs_in_window{it.kmer_rc_hashs_in_window},
-        kmer_values_in_window{it.kmer_values_in_window},
-        kmer_rc_values_in_window{it.kmer_rc_values_in_window},
-        minimiser_fwd_value{it.minimiser_fwd_value},
-        minimiser_fwd_hash{it.minimiser_fwd_hash},
-        minimiser_rc_value{it.minimiser_rc_value},
-        minimiser_rc_hash{it.minimiser_rc_hash},
+        kmers_in_window{it.kmer_hashs_in_window},
+        kmers_rc_in_window{it.kmer_rc_hashs_in_window},
+        minimiser_fwd{it.minimiser_fwd},
+        minimiser_rc{it.minimiser_rc},
         minimiser_fwd_position{it.minimiser_fwd_position},
         minimiser_rc_position{it.minimiser_rc_position}
     {}
@@ -1926,16 +1864,12 @@ private:
         rolling_hash();
 
         if constexpr (pop == pop_first::yes) {
-            kmer_hashs_in_window.pop_front();
-            kmer_rc_hashs_in_window.pop_front();
-            kmer_values_in_window.pop_front();
-            kmer_rc_values_in_window.pop_front();
+            kmers_in_window.pop_front();
+            kmers_rc_in_window.pop_back();
         }
 
-        kmer_hashs_in_window.push_back(m_hasher.hash(kmer_value));
-        kmer_rc_hashs_in_window.push_back(m_hasher.hash(kmer_value_rev));
-        kmer_values_in_window.push_back(kmer_value);
-        kmer_rc_values_in_window.push_back(kmer_value_rev);
+        kmers_in_window.push_back(m_hasher.hash(kmer_value) & kmer_mask);
+        kmers_rc_in_window.push_front(m_hasher.hash(kmer_value_rev) & kmer_mask);
     }
 
     void find_minimiser_in_window()
@@ -1943,26 +1877,22 @@ private:
         find_minimiser_fwd_in_window();
         find_minimiser_rc_in_window();
 
-        uint64_t cur_minimizer = std::min<uint64_t>(minimiser_fwd_value, minimiser_rc_value);
-        current.minimiser_value = cur_minimizer;
-        // current.range_position = (cur_minimizer == minimiser_fwd_value) ? minimiser_fwd_position : minimiser_rc_position;
-        current.occurrences = 0;
+        current.minimiser_value = std::min<uint64_t>(minimiser_fwd, minimiser_rc);
+        occurrences=0;
     }
 
     void find_minimiser_fwd_in_window()
     {
-        auto minimiser_it = std::ranges::min_element(kmer_hashs_in_window, std::less_equal<uint64_t>{});
-        minimiser_fwd_hash = *minimiser_it;
-        minimiser_fwd_position = std::distance(std::begin(kmer_hashs_in_window), minimiser_it);
-        minimiser_fwd_value = kmer_values_in_window[minimiser_fwd_position];
+        auto minimiser_it = std::ranges::min_element(kmers_in_window, std::less_equal<uint64_t>{});
+        minimiser_fwd = *minimiser_it;
+        minimiser_fwd_position = std::distance(std::begin(kmers_in_window), minimiser_it);
     }
 
     void find_minimiser_rc_in_window()
     {
-        auto minimiser_rc_it = std::ranges::min_element(kmer_rc_hashs_in_window, std::less_equal<uint64_t>{});
-        minimiser_rc_hash = *minimiser_rc_it;
-        minimiser_rc_position = std::distance(std::begin(kmer_rc_hashs_in_window), minimiser_rc_it);
-        minimiser_rc_value = kmer_rc_values_in_window[minimiser_rc_position];
+        auto minimiser_rc_it = std::ranges::min_element(kmers_rc_in_window, std::less_equal<uint64_t>{});
+        minimiser_rc = *minimiser_rc_it;
+        minimiser_rc_position = std::distance(std::begin(kmers_rc_in_window), minimiser_rc_it);
     }
 
     void init(xor_minimiser_and_positions2_parameters const & params)
@@ -1986,10 +1916,8 @@ private:
             kmer_value_rev |= new_rank^0b11;
         }
 
-        kmer_hashs_in_window.push_back(m_hasher.hash(kmer_value));
-        kmer_rc_hashs_in_window.push_back(m_hasher.hash(kmer_value_rev));
-        kmer_values_in_window.push_back(kmer_value);
-        kmer_rc_values_in_window.push_back(kmer_value_rev);
+        kmers_in_window.push_back(m_hasher.hash(kmer_value) & kmer_mask);
+        kmers_rc_in_window.push_front(m_hasher.hash(kmer_value_rev) & kmer_mask);
 
         for (size_t i = minimiser_size; i < window_size; ++i)
             next_window<pop_first::no>();
@@ -2000,48 +1928,53 @@ private:
         {}
     }
 
+    void update_cache() {
+        cached.minimiser_value = current.minimiser_value;
+        if(minimiser_fwd < minimiser_rc)
+            cached.range_position = range_position - window_size + minimiser_fwd_position;
+        else
+            cached.range_position = range_position - minimiser_size - minimiser_rc_position;
+    }
+
     bool next_minimiser_is_new()
     {
         if (range_position + 1 >= range_size) {
             ++range_position;
-            cached.minimiser_value = current.minimiser_value;
-            cached.range_position = range_position - window_size - current.occurrences;
-            cached.occurrences = current.occurrences + 1;
+            update_cache();
             return true;
         }
 
         next_window<pop_first::yes>();
 
-        if(minimiser_fwd_position-- == 0)
+        if(minimiser_fwd_position-- == 0) {
+            update_cache();
             find_minimiser_fwd_in_window();
-        if(minimiser_rc_position-- == 0)
+        }
+        if(minimiser_rc_position++ == minimisers_in_window) {
+            update_cache();
             find_minimiser_rc_in_window();
+        }
 
-        if (uint64_t new_kmer_hash = kmer_hashs_in_window.back(); new_kmer_hash < minimiser_fwd_hash) {
-            minimiser_fwd_hash = new_kmer_hash;
-            minimiser_fwd_value = kmer_values_in_window.back();
+        if (uint64_t new_kmer_hash = kmers_in_window.back(); new_kmer_hash < minimiser_fwd) {
+            update_cache();
+            minimiser_fwd = new_kmer_hash;
             minimiser_fwd_position = minimisers_in_window;
         }
-        if (uint64_t new_kmer_rc_hash = kmer_rc_hashs_in_window.back(); new_kmer_rc_hash < minimiser_rc_hash) {
-            minimiser_rc_hash = new_kmer_rc_hash;
-            minimiser_rc_value = kmer_rc_values_in_window.back();
-            minimiser_rc_position = minimisers_in_window;
+        if (uint64_t new_kmer_rc_hash = kmers_rc_in_window.front(); new_kmer_rc_hash <= minimiser_rc) {
+            update_cache();
+            minimiser_rc = new_kmer_rc_hash;
+            minimiser_rc_position = 0;
         }
 
-        if(uint64_t cur_minimizer = std::min<uint64_t>(minimiser_fwd_value, minimiser_rc_value); cur_minimizer != current.minimiser_value) {
-            cached.minimiser_value = current.minimiser_value;
-            cached.range_position = range_position - window_size - current.occurrences;
-            cached.occurrences = current.occurrences + 1;
+        if(uint64_t cur_minimizer = std::min<uint64_t>(minimiser_fwd, minimiser_rc); cur_minimizer != current.minimiser_value) {
             current.minimiser_value = cur_minimizer;
-            // current.range_position = (cur_minimizer == minimiser_fwd_value) ? minimiser_fwd_position : minimiser_rc_position;
-            current.occurrences = 0;
+            occurrences = 0;
             return true;
         }
 
-        // --current.range_position;
-        ++current.occurrences;
-        return false;
+        return occurrences++ == minimisers_in_window;
     }
+
 };
 
 
@@ -2305,11 +2238,8 @@ private:
             kmer_values_in_window.pop_front();
         }
 
-        // const uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev) ^ seed;
-        // const uint64_t kmerhash = murmurhash2_64::hash(std::min<uint64_t>(kmer_value, kmer_value_rev), seed)  & kmer_mask;
-        // const uint64_t kmerhash = std::min<uint64_t>(murmurhash2_64::hash(kmer_value, seed), murmurhash2_64::hash(kmer_value_rev, seed)) & kmer_mask;
-        // const uint64_t kmerhash = std::min<uint64_t>(murmurhash2_64::hash(kmer_value, seed), murmurhash2_64::hash(kmer_value_rev, seed));
-        const uint64_t kmerhash = std::min<uint64_t>(m_hasher.hash(kmer_value), m_hasher.hash(kmer_value_rev)) & kmer_mask;
+        // const uint64_t kmerhash = std::min<uint64_t>(m_hasher.hash(kmer_value), m_hasher.hash(kmer_value_rev)) & kmer_mask;
+        const uint64_t kmerhash = std::min<uint64_t>(m_hasher.hash(kmer_value) & kmer_mask, m_hasher.hash(kmer_value_rev) & kmer_mask);
 
         kmer_values_in_window.push_back(kmerhash);
     }
@@ -2339,11 +2269,8 @@ private:
             kmer_value_rev = ((kmer_value_rev << 2) | new_rank^(0b11)) & kmer_mask;
         }
 
-        // const uint64_t kmerhash = std::min<uint64_t>(kmer_value, kmer_value_rev) ^ seed;
-        // const uint64_t kmerhash = murmurhash2_64::hash(std::min<uint64_t>(kmer_value, kmer_value_rev), seed) & kmer_mask;
-        // const uint64_t kmerhash = std::min<uint64_t>(murmurhash2_64::hash(kmer_value, seed), murmurhash2_64::hash(kmer_value_rev, seed)) & kmer_mask;
-        // const uint64_t kmerhash = std::min<uint64_t>(murmurhash2_64::hash(kmer_value, seed), murmurhash2_64::hash(kmer_value_rev, seed));
-        const uint64_t kmerhash = std::min<uint64_t>(m_hasher.hash(kmer_value), m_hasher.hash(kmer_value_rev)) & kmer_mask;
+        // const uint64_t kmerhash = std::min<uint64_t>(m_hasher.hash(kmer_value), m_hasher.hash(kmer_value_rev)) & kmer_mask;
+        const uint64_t kmerhash = std::min<uint64_t>(m_hasher.hash(kmer_value) & kmer_mask, m_hasher.hash(kmer_value_rev) & kmer_mask);
         
         kmer_values_in_window.push_back(kmerhash);
 
@@ -2359,8 +2286,7 @@ private:
     void update_cache()
     {
         cached.minimiser_value = current.minimiser_value;
-        // cached.range_position = range_position - params.window_size - current.occurrences + current.range_position; // minimiser position
-        cached.range_position = range_position - params.window_size - current.occurrences; // skmer position
+        cached.range_position = range_position - params.window_size + current.range_position; // minimiser position
         cached.occurrences = current.occurrences + 1;
     }
 
@@ -2436,6 +2362,351 @@ namespace srindex::views
 inline constexpr auto xor_minimiser_and_positions = srindex::detail::xor_minimiser_and_positions_fn{};
 
 }
+
+
+
+namespace srindex
+{
+
+struct xor_minimiser_and_skmer_positions_parameter
+{
+    size_t minimiser_size{};
+    size_t window_size{};
+    uint64_t seed{};
+};
+
+struct xor_minimiser_and_skmer_positions_result
+{
+    uint64_t minimiser_value;
+    size_t range_position;
+    size_t occurrences;
+};
+
+}
+
+namespace srindex::detail
+{
+
+template <std::ranges::view range_t>
+    requires std::ranges::input_range<range_t> && std::ranges::sized_range<range_t>
+class xor_minimiser_and_skmer_positions : public std::ranges::view_interface<xor_minimiser_and_skmer_positions<range_t>>
+{
+private:
+    range_t range{};
+    xor_minimiser_and_skmer_positions_parameter params{};
+
+    template <bool range_is_const>
+    class basic_iterator;
+
+public:
+    xor_minimiser_and_skmer_positions()
+        requires std::default_initializable<range_t>
+    = default;
+    xor_minimiser_and_skmer_positions(xor_minimiser_and_skmer_positions const & rhs) = default;
+    xor_minimiser_and_skmer_positions(xor_minimiser_and_skmer_positions && rhs) = default;
+    xor_minimiser_and_skmer_positions & operator=(xor_minimiser_and_skmer_positions const & rhs) = default;
+    xor_minimiser_and_skmer_positions & operator=(xor_minimiser_and_skmer_positions && rhs) = default;
+    ~xor_minimiser_and_skmer_positions() = default;
+
+    explicit xor_minimiser_and_skmer_positions(range_t range, xor_minimiser_and_skmer_positions_parameter params) :
+        range{std::move(range)},
+        params{std::move(params)}
+    {}
+
+    basic_iterator<false> begin()
+    {
+        return {std::ranges::begin(range), std::ranges::size(range), params};
+    }
+
+    basic_iterator<true> begin() const
+        requires std::ranges::view<range_t const> && std::ranges::input_range<range_t const>
+    {
+        return {std::ranges::begin(range), std::ranges::size(range), params};
+    }
+
+    auto end() noexcept
+    {
+        return std::default_sentinel;
+    }
+
+    auto end() const noexcept
+        requires std::ranges::view<range_t const> && std::ranges::input_range<range_t const>
+    {
+        return std::default_sentinel;
+    }
+};
+
+template <std::ranges::view range_t>
+    requires std::ranges::input_range<range_t> && std::ranges::sized_range<range_t>
+template <bool range_is_const>
+class xor_minimiser_and_skmer_positions<range_t>::basic_iterator
+{
+private:
+    template <bool>
+    friend class basic_iterator;
+
+    using maybe_const_range_t = std::conditional_t<range_is_const, range_t const, range_t>;
+    using range_iterator_t = std::ranges::iterator_t<maybe_const_range_t>;
+
+public:
+    using difference_type = std::ranges::range_difference_t<maybe_const_range_t>;
+    using value_type = xor_minimiser_and_skmer_positions_result;
+    using pointer = void;
+    using reference = value_type;
+    using iterator_category = std::conditional_t<std::ranges::forward_range<maybe_const_range_t>,
+                                                 std::forward_iterator_tag,
+                                                 std::input_iterator_tag>;
+    using iterator_concept = iterator_category;
+
+private:
+    range_iterator_t range_it{};
+
+    uint64_t kmer_mask{std::numeric_limits<uint64_t>::max()};
+    uint64_t kmer_value{};
+    uint64_t kmer_value_rev{};
+    uint64_t seed{};
+    mixer_64 m_hasher;
+
+    uint64_t minimiser_size{};
+
+    size_t range_size{};
+    size_t range_position{};
+
+    xor_minimiser_and_skmer_positions_parameter params{};
+    value_type current{}; // range_position -> position in the window
+    value_type cached{};  // range_position -> position in the range
+
+    std::deque<uint64_t> kmer_values_in_window{};
+
+    static inline constexpr uint64_t compute_mask(uint64_t const size) {
+        assert(size > 0u);
+        assert(size <= 64u);
+
+        if (size == 64u)
+            return std::numeric_limits<uint64_t>::max();
+        else
+            return (uint64_t{1u} << (size)) - 1u;
+    }
+
+public:
+    basic_iterator() = default;
+    basic_iterator(basic_iterator const &) = default;
+    basic_iterator(basic_iterator &&) = default;
+    basic_iterator & operator=(basic_iterator const &) = default;
+    basic_iterator & operator=(basic_iterator &&) = default;
+    ~basic_iterator() = default;
+
+    basic_iterator(basic_iterator<!range_is_const> const & it)
+        requires range_is_const
+        :
+        range_it{it.range_it},
+        kmer_mask{it.kmer_mask},
+        kmer_value{it.kmer_value},
+        range_size{it.range_size},
+        range_position{it.range_position},
+        params{it.params},
+        current{it.current},
+        cached{it.cached},
+        kmer_values_in_window{it.kmer_values_in_window}
+    {}
+
+    basic_iterator(range_iterator_t range_iterator,
+                   size_t const range_size,
+                   xor_minimiser_and_skmer_positions_parameter params) :
+        range_it{std::move(range_iterator)},
+        kmer_mask{compute_mask(2u * params.minimiser_size)},
+        minimiser_size{params.minimiser_size},
+        range_size{range_size},
+        params{std::move(params)}
+    {
+        if (range_size < params.window_size)
+            range_position = range_size + 1u;
+        else
+            init();
+    }
+
+    friend bool operator==(basic_iterator const & lhs, basic_iterator const & rhs)
+    {
+        return lhs.range_it == rhs.range_it;
+    }
+
+    friend bool operator==(basic_iterator const & lhs, std::default_sentinel_t const &)
+    {
+        return lhs.range_position > lhs.range_size;
+    }
+
+    basic_iterator & operator++() noexcept
+    {
+        while (!next_minimiser_is_new())
+        {}
+        return *this;
+    }
+
+    basic_iterator operator++(int) noexcept
+    {
+        basic_iterator tmp{*this};
+        while (!next_minimiser_is_new())
+        {}
+        return tmp;
+    }
+
+    value_type operator*() const noexcept
+    {
+        return cached;
+    }
+
+private:
+    enum class pop_first : bool
+    {
+        no,
+        yes
+    };
+
+    void rolling_hash()
+    {
+        uint64_t const new_rank = seqan3::to_rank(*range_it);
+        kmer_value = (kmer_value >> 2) | (new_rank << 2*(minimiser_size-1));
+        kmer_value_rev = ((kmer_value_rev << 2) | new_rank^(0b11)) & kmer_mask;
+    }
+
+    template <pop_first pop>
+    void next_window()
+    {
+        ++range_position;
+        ++range_it;
+
+        rolling_hash();
+
+        if constexpr (pop == pop_first::yes) {
+            kmer_values_in_window.pop_front();
+        }
+
+        // const uint64_t kmerhash = std::min<uint64_t>(m_hasher.hash(kmer_value), m_hasher.hash(kmer_value_rev)) & kmer_mask;
+        const uint64_t kmerhash = std::min<uint64_t>(m_hasher.hash(kmer_value) & kmer_mask, m_hasher.hash(kmer_value_rev) & kmer_mask);
+
+        kmer_values_in_window.push_back(kmerhash);
+    }
+
+    void find_minimiser_in_window()
+    {
+        auto minimiser_it = std::ranges::min_element(kmer_values_in_window, std::less_equal<uint64_t>{});
+        current.range_position = std::distance(std::begin(kmer_values_in_window), minimiser_it);
+        current.minimiser_value = *minimiser_it;
+    }
+
+    void init()
+    {
+        seed = params.seed;
+        m_hasher.seed(seed);
+        minimiser_size = params.minimiser_size;
+
+        uint64_t new_rank = seqan3::to_rank(*range_it);
+        kmer_value = new_rank << 2*(minimiser_size-1);
+        kmer_value_rev = new_rank^(0b11);
+        for (size_t i = 1u; i < minimiser_size; ++i) {
+            ++range_position;
+            ++range_it;
+
+            new_rank = seqan3::to_rank(*range_it);
+            kmer_value = (kmer_value >> 2) | (new_rank << 2*(minimiser_size-1));
+            kmer_value_rev = ((kmer_value_rev << 2) | new_rank^(0b11)) & kmer_mask;
+        }
+
+        // const uint64_t kmerhash = std::min<uint64_t>(m_hasher.hash(kmer_value), m_hasher.hash(kmer_value_rev)) & kmer_mask;
+        const uint64_t kmerhash = std::min<uint64_t>(m_hasher.hash(kmer_value) & kmer_mask, m_hasher.hash(kmer_value_rev) & kmer_mask);
+        
+        kmer_values_in_window.push_back(kmerhash);
+
+        for (size_t i = minimiser_size; i < params.window_size; ++i)
+            next_window<pop_first::no>();
+
+        find_minimiser_in_window();
+
+        while (!next_minimiser_is_new())
+        {}
+    }
+
+    void update_cache()
+    {
+        cached.minimiser_value = current.minimiser_value;
+        cached.range_position = range_position - params.window_size - current.occurrences; // skmer position
+        cached.occurrences = current.occurrences + 1;
+    }
+
+    bool next_minimiser_is_new()
+    {
+        // If we reached the end of the range, we are done.
+        if (range_position + 1 >= range_size)
+        {
+            ++range_position;
+            update_cache();
+            return true;
+        }
+
+        next_window<pop_first::yes>();
+
+        // The minimiser left the window.
+        if (current.range_position == 0)
+        {
+            update_cache();
+            find_minimiser_in_window();
+            current.occurrences = 0;
+            return true;
+        }
+
+        if (uint64_t new_kmer_hash = kmer_values_in_window.back(); new_kmer_hash < current.minimiser_value)
+        {
+            update_cache();
+            current.minimiser_value = new_kmer_hash;
+            current.range_position = kmer_values_in_window.size() - 1u;
+            current.occurrences = 0;
+            return true;
+        }
+
+        --current.range_position;
+        ++current.occurrences;
+        return false;
+    }
+};
+
+template <std::ranges::viewable_range rng_t>
+xor_minimiser_and_skmer_positions(rng_t &&, xor_minimiser_and_skmer_positions_parameter &&)
+    -> xor_minimiser_and_skmer_positions<std::views::all_t<rng_t>>;
+
+struct xor_minimiser_and_skmer_positions_fn
+{
+    constexpr auto operator()(xor_minimiser_and_skmer_positions_parameter params) const
+    {
+        return seqan3::detail::adaptor_from_functor{*this, std::move(params)};
+    }
+
+    template <std::ranges::range range_t>
+    constexpr auto operator()(range_t && range, xor_minimiser_and_skmer_positions_parameter params) const
+    {
+        static_assert(std::same_as<std::ranges::range_value_t<range_t>, seqan3::dna4>, "Only dna4 supported.");
+        static_assert(std::ranges::sized_range<range_t>, "Input range must be a std::ranges::sized_range.");
+
+        if (params.minimiser_size == 0u)
+            throw std::invalid_argument{"minimiser_size must be > 0."};
+        if (params.minimiser_size > 32u)
+            throw std::invalid_argument{"minimiser_size must be <= 32."};
+        if (params.window_size < params.minimiser_size)
+            throw std::invalid_argument{"window_size must be >= minimiser_size."};
+
+        return xor_minimiser_and_skmer_positions{std::forward<range_t>(range), std::move(params)};
+    }
+};
+
+}
+
+namespace srindex::views
+{
+
+inline constexpr auto xor_minimiser_and_skmer_positions = srindex::detail::xor_minimiser_and_skmer_positions_fn{};
+
+}
+
+
 
 
 namespace srindex

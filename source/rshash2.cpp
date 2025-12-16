@@ -35,8 +35,10 @@ RSHash2::RSHash2(
 
 int RSHash2::build(const std::vector<std::vector<seqan3::dna4>> &input)
 {
-    auto view1 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
-    auto view2 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m2, .window_size = k, .seed=seed2});
+    // auto view1 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
+    // auto view2 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m2, .window_size = k, .seed=seed2});
+    auto view1 = srindex::views::xor_minimiser_and_skmer_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
+    auto view2 = srindex::views::xor_minimiser_and_skmer_positions({.minimiser_size = m2, .window_size = k, .seed=seed2});
     auto view3 = srindex::views::xor_minimiser_and_window({.minimiser_size = m1, .window_size = k, .seed=seed1});
     auto view4 = srindex::views::xor_minimiser_and_window({.minimiser_size = m2, .window_size = k, .seed=seed2});
 
@@ -323,11 +325,11 @@ int RSHash2::build(const std::vector<std::vector<seqan3::dna4>> &input)
 
     // todo: simple kmer view
     // todo: hashmap.reserve(rem_kmers2);
-    for(auto & sequence : freq_skmers2) {
-        for(auto && minimiser : sequence | view3) {
-            hashmap.insert(std::min<uint64_t>(minimiser.window_value, minimiser.window_value_rev));
-        }
-    }
+    // for(auto & sequence : freq_skmers2) {
+    //     for(auto && minimiser : sequence | view3) {
+    //         hashmap.insert(std::min<uint64_t>(minimiser.window_value, minimiser.window_value_rev));
+    //     }
+    // }
 
     std::cout << "copy text...\n";
     for(auto & record : input) {
@@ -358,9 +360,9 @@ int RSHash2::build(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "endpoints: " << (double) endpoints.bitCount()/kmers << "\n";
     std::cout << "offsets1: " << (double) n1*offset_width/kmers << "\n";
     std::cout << "offsets2: " << (double) n2*offset_width/kmers << "\n";
-    std::cout << "Hashtable: " << (double) 64*hashmap.size()/kmers << "\n";
+    // std::cout << "Hashtable: " << (double) 64*hashmap.size()/kmers << "\n";
     // std::cout << "Hashtable: " << (double) 64*hashmap.bucket_count()/kmers << "\n";
-    std::cout << "Hashtable mem: " << (double) 65*hashmap.bucket_count()/kmers << "\n";
+    std::cout << "Hashtable: " << (double) 65*hashmap.bucket_count()/kmers << "\n";
     std::cout << "R_1: " << (double) 8*size_in_bytes(r1)/kmers << "\n";
     std::cout << "R_2: " << (double) 8*size_in_bytes(r2)/kmers << "\n";
     std::cout << "S_1: " << (double) (n1+1)/kmers << "\n";
@@ -477,6 +479,51 @@ inline bool RSHash2::extend_in_text(size_t &text_pos, size_t start, size_t end,
 }
 
 
+// static inline uint64_t read_kmer(seqan3::bitpacked_sequence<seqan3::dna4> const &text, uint64_t o, uint8_t k)
+// {
+//     auto const &vec = text.raw_data();
+//     auto const *data = vec.data();
+
+//     uint64_t pos = o * 2;
+
+//     size_t block = pos >> 6;
+//     size_t shift = pos & 63;
+//     uint64_t word = data[block] >> shift;
+//     if (shift && block + 1 < (vec.bit_size() + 63) >> 6) word |= data[block + 1] << (64 - shift);
+
+//     word &= ((1ULL << 2*k) - 1);
+//     return word;
+// }
+
+
+// static inline uint64_t load_word64(uint64_t const *data, uint64_t bit_start, uint64_t num_words)
+// {
+//     uint64_t block = bit_start >> 6;
+//     uint64_t shift = bit_start & 63;
+
+//     uint64_t w = data[block] >> shift;
+
+//     if (shift && block + 1 < num_words) w |= data[block + 1] << (64 - shift);
+
+//     return w;
+// }
+
+
+// static inline uint64_t read_kmer64(seqan3::bitpacked_sequence<seqan3::dna4> const &text, uint64_t o, uint8_t k)
+// {
+//     auto const &vec = text.raw_data();
+//     auto const *data = vec.data();
+
+//     uint64_t bit_start = o * 2;
+//     uint64_t word = load_word64(data, bit_start, (vec.bit_size() + 63) >> 6);
+
+//     if (2*k < 64)
+//         word &= ((1ULL << (2*k)) - 1);
+
+//     return word;
+// }
+
+
 template<int level>
 inline void RSHash2::fill_buffer(std::vector<uint64_t> &buffer, std::vector<SkmerInfo> &skmers, size_t p, size_t q)
 {
@@ -495,9 +542,6 @@ inline void RSHash2::fill_buffer(std::vector<uint64_t> &buffer, std::vector<Skme
         uint64_t prev_endpoint = endpoints.select(endpoints.rank(o+1)-1, &next_endpoint);
         size_t e = std::min(o+k+span, next_endpoint);
 
-        // todo: get 256 chars around o in one cache line
-        // todo: let buffer be bits text[max(o-126,s),...,o,...,min(o+126,e)]
-        // check kmer at position p in skmer with reinterpret_cast<uint64_t*>(buffer+2*p)[0] >> (64 - 2*k);
         uint64_t hash = 0;
         for (size_t j=o; j < o+k; j++) {
             uint64_t const new_rank = seqan3::to_rank(text[j]);
@@ -509,6 +553,7 @@ inline void RSHash2::fill_buffer(std::vector<uint64_t> &buffer, std::vector<Skme
             hash = (hash >> 2) | (new_rank << 2*(k-1));
             buffer.push_back(hash);
         }
+
         skmers.push_back({o, e - o - k + 1, prev_endpoint, next_endpoint});
     }
 }
@@ -578,24 +623,25 @@ uint64_t RSHash2::streaming_query(const std::vector<seqan3::dna4> &query,
             occurences += found;
             current_minimiser1 = minimisers.minimiser1_value;
         }
-        else if(minimisers.minimiser2_value == current_minimiser2) {
-            found = lookup_serial(buffer2, skmers2, minimisers.window_value, minimisers.window_value_rev, text_pos, forward, unitig_begin, unitig_end);
-            occurences += found;
-        }
-        else if(r2[minimisers.minimiser2_value]) {
-            uint64_t minimizer_id = r2_rank(minimisers.minimiser2_value);
-            size_t p = s2_select.select(minimizer_id);
-            size_t q = s2_select.select(minimizer_id+1);
+        // else if(minimisers.minimiser2_value == current_minimiser2) {
+        //     found = lookup_serial(buffer2, skmers2, minimisers.window_value, minimisers.window_value_rev, text_pos, forward, unitig_begin, unitig_end);
+        //     occurences += found;
+        // }
+        // else if(r2[minimisers.minimiser2_value]) {
+        //     uint64_t minimizer_id = r2_rank(minimisers.minimiser2_value);
+        //     size_t p = s2_select.select(minimizer_id);
+        //     size_t q = s2_select.select(minimizer_id+1);
 
-            buffer2.clear();
-            skmers2.clear();
-            fill_buffer<2>(buffer2, skmers2, p, q);
-            found = lookup_serial(buffer2, skmers2, minimisers.window_value, minimisers.window_value_rev, text_pos, forward, unitig_begin, unitig_end);
-            occurences += found;
-            current_minimiser2 = minimisers.minimiser2_value;
-        }
+        //     buffer2.clear();
+        //     skmers2.clear();
+        //     fill_buffer<2>(buffer2, skmers2, p, q);
+        //     found = lookup_serial(buffer2, skmers2, minimisers.window_value, minimisers.window_value_rev, text_pos, forward, unitig_begin, unitig_end);
+        //     occurences += found;
+        //     current_minimiser2 = minimisers.minimiser2_value;
+        // }
         else {
-            occurences += hashmap.contains(std::min<uint64_t>(minimisers.window_value, minimisers.window_value_rev));
+            occurences += std::min<uint64_t>(minimisers.window_value, minimisers.window_value_rev) == minimisers.minimiser2_value;
+            // occurences += hashmap.contains(std::min<uint64_t>(minimisers.window_value, minimisers.window_value_rev));
             found = false;
         }
 
