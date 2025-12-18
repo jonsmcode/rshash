@@ -554,7 +554,7 @@ inline void RSHash2::fill_buffer(std::vector<uint64_t> &buffer, std::vector<Skme
             buffer.push_back(hash);
         }
 
-        skmers.push_back({o, e - o - k + 1, prev_endpoint, next_endpoint});
+        skmers.push_back({o, prev_endpoint, next_endpoint});
     }
 }
 
@@ -565,7 +565,7 @@ inline bool RSHash2::lookup_serial(std::vector<uint64_t> &buffer, std::vector<Sk
 {
     size_t s = 0, e = 0;
     for (size_t i = 0; i < skmers.size(); i++) {
-        e += skmers[i].length;
+        e += 1;
         for(size_t j = s; j < e; j++) {
             if(buffer[j] == query) {
                 forward = true;
@@ -623,25 +623,24 @@ uint64_t RSHash2::streaming_query(const std::vector<seqan3::dna4> &query,
             occurences += found;
             current_minimiser1 = minimisers.minimiser1_value;
         }
-        // else if(minimisers.minimiser2_value == current_minimiser2) {
-        //     found = lookup_serial(buffer2, skmers2, minimisers.window_value, minimisers.window_value_rev, text_pos, forward, unitig_begin, unitig_end);
-        //     occurences += found;
-        // }
-        // else if(r2[minimisers.minimiser2_value]) {
-        //     uint64_t minimizer_id = r2_rank(minimisers.minimiser2_value);
-        //     size_t p = s2_select.select(minimizer_id);
-        //     size_t q = s2_select.select(minimizer_id+1);
+        else if(minimisers.minimiser2_value == current_minimiser2) {
+            found = lookup_serial(buffer2, skmers2, minimisers.window_value, minimisers.window_value_rev, text_pos, forward, unitig_begin, unitig_end);
+            occurences += found;
+        }
+        else if(r2[minimisers.minimiser2_value]) {
+            uint64_t minimizer_id = r2_rank(minimisers.minimiser2_value);
+            size_t p = s2_select.select(minimizer_id);
+            size_t q = s2_select.select(minimizer_id+1);
 
-        //     buffer2.clear();
-        //     skmers2.clear();
-        //     fill_buffer<2>(buffer2, skmers2, p, q);
-        //     found = lookup_serial(buffer2, skmers2, minimisers.window_value, minimisers.window_value_rev, text_pos, forward, unitig_begin, unitig_end);
-        //     occurences += found;
-        //     current_minimiser2 = minimisers.minimiser2_value;
-        // }
+            buffer2.clear();
+            skmers2.clear();
+            fill_buffer<2>(buffer2, skmers2, p, q);
+            found = lookup_serial(buffer2, skmers2, minimisers.window_value, minimisers.window_value_rev, text_pos, forward, unitig_begin, unitig_end);
+            occurences += found;
+            current_minimiser2 = minimisers.minimiser2_value;
+        }
         else {
-            occurences += std::min<uint64_t>(minimisers.window_value, minimisers.window_value_rev) == minimisers.minimiser2_value;
-            // occurences += hashmap.contains(std::min<uint64_t>(minimisers.window_value, minimisers.window_value_rev));
+            occurences += hashmap.contains(std::min<uint64_t>(minimisers.window_value, minimisers.window_value_rev));
             found = false;
         }
 

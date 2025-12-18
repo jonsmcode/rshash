@@ -841,7 +841,7 @@ inline void RSHash3::fill_buffer(std::vector<uint64_t> &buffer, std::vector<Skme
             hash = (hash >> 2) | (new_rank << 2*(k-1));
             buffer.push_back(hash);
         }
-        skmers.push_back({o, e - o - k + 1, prev_endpoint, next_endpoint});
+        skmers.push_back({o, prev_endpoint, next_endpoint});
     }
 }
 
@@ -853,7 +853,7 @@ inline bool RSHash3::lookup_serial(std::vector<uint64_t> &buffer, std::vector<Sk
 {
     size_t s = 0, e = 0;
     for (size_t i = 0; i < skmers.size(); i++) {
-        e += skmers[i].length;
+        e += 1;
         for(size_t j = s; j < e; j++) {
             if(buffer[j] == query) {
                 forward = true;
