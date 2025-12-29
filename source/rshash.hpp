@@ -33,7 +33,8 @@ class RSHash1
 {
 private:
     uint8_t k, m1, m_thres1;
-    size_t span;
+    // size_t span;
+    uint64_t span;
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> r1;
     bit_vector s1;
     // sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s1_select;
@@ -43,14 +44,13 @@ private:
     // sd_vector<> r2;
     // rank_support_sd<> r2_rank;
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> endpoints;
-    // seqan3::bitpacked_sequence<seqan3::dna4> text;
     std::vector<uint64_t> text;
-    // bits::bitvector text;
     inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, double &, double &, double &);
     inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t);
+    inline bool check_minimiser_pos(std::vector<uint64_t> &, SkmerInfo, const uint64_t, const uint64_t, const size_t, const size_t, const size_t, bool &, size_t &, size_t &, size_t &);
     inline void refill_buffer(std::vector<uint64_t>&, std::vector<SkmerInfo> &, size_t, size_t, const uint64_t, const uint64_t);
     inline bool lookup_buffer(std::vector<uint64_t> &, std::vector<SkmerInfo> &, const uint64_t, const uint64_t, size_t &, const size_t, const size_t, bool &, size_t &, size_t &);
-    // inline bool lookup_buffer(std::vector<uint64_t> &, std::vector<SkmerInfo> &, const uint64_t, const uint64_t, size_t &, const size_t, bool &, size_t &, size_t &);
+    // inline bool lookup_buffer(std::vector<uint64_t> &, std::vector<SkmerInfo> &, const uint64_t, const uint64_t, size_t &, bool &, size_t &, size_t &);
     inline bool extend_in_text(size_t&, size_t, size_t, bool, const uint64_t, const uint64_t, uint64_t&, uint64_t&, const uint64_t);
     const inline uint64_t get_word64(uint64_t pos);
     const inline uint64_t get_base(uint64_t pos);

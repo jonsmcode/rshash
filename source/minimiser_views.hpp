@@ -1527,7 +1527,7 @@ private:
                 current.left_minimiser_position = i;
                 current.right_minimiser_position = minimisers_in_window-i;
             }
-            else if (kmer == current.minimiser_value) {
+            else if(kmer == current.minimiser_value) {
                 current.right_minimiser_position = minimisers_in_window-i;
             }
         }
@@ -1746,18 +1746,12 @@ private:
 
     size_t range_size{};
     size_t range_position{};
-    size_t occurrences{};
-
-    uint64_t minimiser_fwd{};
-    uint64_t minimiser_rc{};
-    size_t minimiser_fwd_position{};
-    size_t minimiser_rc_position{};
 
     value_type current{};
     value_type cached{};
 
     std::deque<uint64_t> kmers_in_window{};
-    std::deque<uint64_t> kmers_rc_in_window{};
+    std::deque<size_t> minimiser_in_window{};
 
     static inline constexpr uint64_t compute_mask(uint64_t const size)
     {
@@ -1787,15 +1781,10 @@ public:
         kmer_value_rev{it.kmer_value_rev},
         range_size{it.range_size},
         range_position{it.range_position},
-        occurrences{it.occurrences},
         current{it.current},
         cached{it.cached},
-        kmers_in_window{it.kmer_hashs_in_window},
-        kmers_rc_in_window{it.kmer_rc_hashs_in_window},
-        minimiser_fwd{it.minimiser_fwd},
-        minimiser_rc{it.minimiser_rc},
-        minimiser_fwd_position{it.minimiser_fwd_position},
-        minimiser_rc_position{it.minimiser_rc_position}
+        kmers_in_window{it.kmers_in_window},
+        minimisers_in_window{it.minimisers_in_window}
     {}
 
     basic_iterator(range_iterator_t range_iterator,
@@ -1823,7 +1812,7 @@ public:
 
     basic_iterator & operator++() noexcept
     {
-        while (!next_minimiser_is_new())
+        while (!next_minimiser())
         {}
         return *this;
     }
@@ -1831,7 +1820,7 @@ public:
     basic_iterator operator++(int) noexcept
     {
         basic_iterator tmp{*this};
-        while (!next_minimiser_is_new())
+        while (!next_minimiser())
         {}
         return tmp;
     }
@@ -1865,34 +1854,26 @@ private:
 
         if constexpr (pop == pop_first::yes) {
             kmers_in_window.pop_front();
-            kmers_rc_in_window.pop_back();
         }
 
-        kmers_in_window.push_back(m_hasher.hash(kmer_value) & kmer_mask);
-        kmers_rc_in_window.push_front(m_hasher.hash(kmer_value_rev) & kmer_mask);
+        kmers_in_window.push_back(std::min<uint64_t>(m_hasher.hash(kmer_value) & kmer_mask, m_hasher.hash(kmer_value_rev) & kmer_mask));
     }
 
-    void find_minimiser_in_window()
+    void find_minimisers_in_window()
     {
-        find_minimiser_fwd_in_window();
-        find_minimiser_rc_in_window();
-
-        current.minimiser_value = std::min<uint64_t>(minimiser_fwd, minimiser_rc);
-        occurrences=0;
-    }
-
-    void find_minimiser_fwd_in_window()
-    {
-        auto minimiser_it = std::ranges::min_element(kmers_in_window, std::less_equal<uint64_t>{});
-        minimiser_fwd = *minimiser_it;
-        minimiser_fwd_position = std::distance(std::begin(kmers_in_window), minimiser_it);
-    }
-
-    void find_minimiser_rc_in_window()
-    {
-        auto minimiser_rc_it = std::ranges::min_element(kmers_rc_in_window, std::less_equal<uint64_t>{});
-        minimiser_rc = *minimiser_rc_it;
-        minimiser_rc_position = std::distance(std::begin(kmers_rc_in_window), minimiser_rc_it);
+        current.minimiser_value = kmers_in_window[0];
+        current.range_position = 0;
+        for(size_t i = 1; i <= minimisers_in_window; ++i) {
+            if(kmers_in_window[i] < current.minimiser_value) {
+                current.minimiser_value = kmers_in_window[i];
+                current.range_position = i;
+            }
+        }
+        for(size_t i = 0; i <= minimisers_in_window; ++i) {
+            if(kmers_in_window[i] == current.minimiser_value)
+                minimiser_in_window.push_back(i);
+        }
+        minimiser_in_window.pop_front();
     }
 
     void init(xor_minimiser_and_positions2_parameters const & params)
@@ -1916,29 +1897,33 @@ private:
             kmer_value_rev |= new_rank^0b11;
         }
 
-        kmers_in_window.push_back(m_hasher.hash(kmer_value) & kmer_mask);
-        kmers_rc_in_window.push_front(m_hasher.hash(kmer_value_rev) & kmer_mask);
+        kmers_in_window.push_back(std::min<uint64_t>(m_hasher.hash(kmer_value) & kmer_mask, m_hasher.hash(kmer_value_rev) & kmer_mask));
 
         for (size_t i = minimiser_size; i < window_size; ++i)
             next_window<pop_first::no>();
 
-        find_minimiser_in_window();
+        find_minimisers_in_window();
 
-        while (!next_minimiser_is_new())
-        {}
+        while (!next_minimiser()) {}
     }
 
     void update_cache() {
         cached.minimiser_value = current.minimiser_value;
-        if(minimiser_fwd < minimiser_rc)
-            cached.range_position = range_position - window_size + minimiser_fwd_position;
-        else
-            cached.range_position = range_position - minimiser_size - minimiser_rc_position;
+        cached.range_position = range_position - window_size + current.range_position;
     }
 
-    bool next_minimiser_is_new()
+    bool next_minimiser()
     {
-        if (range_position + 1 >= range_size) {
+        if(!minimiser_in_window.empty()) {
+            cached.range_position = range_position + 1 - window_size + current.range_position;
+            current.range_position = minimiser_in_window.front();
+            minimiser_in_window.pop_front();
+            // std::cout << cached.range_position << " " << range_position << " " << current.range_position;
+            // std::cout << " -> " << current.range_position << "\n";
+            return true;
+        }
+        
+        if(range_position + 1 >= range_size) {
             ++range_position;
             update_cache();
             return true;
@@ -1946,33 +1931,21 @@ private:
 
         next_window<pop_first::yes>();
 
-        if(minimiser_fwd_position-- == 0) {
+        if(current.range_position == 0) {
             update_cache();
-            find_minimiser_fwd_in_window();
-        }
-        if(minimiser_rc_position++ == minimisers_in_window) {
-            update_cache();
-            find_minimiser_rc_in_window();
-        }
-
-        if (uint64_t new_kmer_hash = kmers_in_window.back(); new_kmer_hash < minimiser_fwd) {
-            update_cache();
-            minimiser_fwd = new_kmer_hash;
-            minimiser_fwd_position = minimisers_in_window;
-        }
-        if (uint64_t new_kmer_rc_hash = kmers_rc_in_window.front(); new_kmer_rc_hash <= minimiser_rc) {
-            update_cache();
-            minimiser_rc = new_kmer_rc_hash;
-            minimiser_rc_position = 0;
-        }
-
-        if(uint64_t cur_minimizer = std::min<uint64_t>(minimiser_fwd, minimiser_rc); cur_minimizer != current.minimiser_value) {
-            current.minimiser_value = cur_minimizer;
-            occurrences = 0;
+            find_minimisers_in_window();
             return true;
         }
 
-        return occurrences++ == minimisers_in_window;
+        if(uint64_t new_kmer_hash = kmers_in_window.back(); new_kmer_hash <= current.minimiser_value) {
+            update_cache();
+            current.minimiser_value = new_kmer_hash;
+            current.range_position = minimisers_in_window;
+            return true;
+        }
+
+        current.range_position--;
+        return false;
     }
 
 };
