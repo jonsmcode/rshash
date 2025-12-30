@@ -48,8 +48,9 @@ private:
     inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, double &, double &, double &);
     inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t);
     inline bool check_minimiser_pos(std::vector<uint64_t> &, SkmerInfo, const uint64_t, const uint64_t, const size_t, const size_t, const size_t, bool &, size_t &, size_t &, size_t &);
-    inline void refill_buffer(std::vector<uint64_t>&, std::vector<SkmerInfo> &, size_t, size_t, const uint64_t, const uint64_t);
-    inline bool lookup_buffer(std::vector<uint64_t> &, std::vector<SkmerInfo> &, const uint64_t, const uint64_t, size_t &, const size_t, const size_t, bool &, size_t &, size_t &);
+    // inline void refill_buffer(std::vector<uint64_t>&, std::vector<SkmerInfo> &, size_t, size_t, const uint64_t, const uint64_t);
+    inline void refill_buffer(uint64_t*, SkmerInfo*, size_t, size_t, const uint64_t, const uint64_t);
+    inline bool lookup_buffer(std::vector<uint64_t> &, std::vector<SkmerInfo> &, const size_t, const uint64_t, const uint64_t, size_t &, const size_t, const size_t, bool &, size_t &, size_t &);
     // inline bool lookup_buffer(std::vector<uint64_t> &, std::vector<SkmerInfo> &, const uint64_t, const uint64_t, size_t &, bool &, size_t &, size_t &);
     inline bool extend_in_text(size_t&, size_t, size_t, bool, const uint64_t, const uint64_t, uint64_t&, uint64_t&, const uint64_t);
     const inline uint64_t get_word64(uint64_t pos);

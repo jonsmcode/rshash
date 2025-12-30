@@ -559,13 +559,9 @@ const inline uint64_t RSHash1::get_base(uint64_t pos) {
 }
 
 
-inline void RSHash1::refill_buffer(std::vector<uint64_t> &buffer, std::vector<SkmerInfo> &skmers, size_t p, size_t q, const uint64_t mask, const uint64_t shift)
+inline void RSHash1::refill_buffer(uint64_t *out, SkmerInfo *skmers, size_t p, size_t N, const uint64_t mask, const uint64_t shift)
 {
     constexpr uint64_t INF = std::numeric_limits<uint64_t>::max();
-    const uint64_t N = q - p;
-    buffer.resize(N * span);
-    skmers.resize(N);
-    uint64_t *out = buffer.data();
     for(uint64_t i = 0; i < N; i++)
     {
         const uint64_t o = offsets1.access(p+i);
@@ -605,32 +601,6 @@ inline void RSHash1::refill_buffer(std::vector<uint64_t> &buffer, std::vector<Sk
 }
 
 
-std::string kmer_to_string(uint64_t kmer, size_t const kmer_size) {
-    std::string result(kmer_size, 'N');
-    for (size_t i = 0; i < kmer_size; ++i) {
-        uint8_t rank = kmer & 0b11;
-        result[kmer_size - 1 - i] = seqan3::to_char(seqan3::dna4{}.assign_rank(rank));
-        kmer >>= 2;
-    }
-    return result;
-}
-
-std::string skmer_to_string(std::vector<uint64_t> &kmers, size_t const s, size_t const e, size_t const kmer_size) {
-    // std::string result = kmer_to_string(kmers[s], kmer_size);
-    // for (size_t i = s+1; i < e; ++i) {
-    //     uint8_t rank = kmers[i] >> 2*(kmer_size-1);
-    //     result.push_back(seqan3::to_char(seqan3::dna4{}.assign_rank(rank)));
-    // }
-    // return result;
-    std::string result;
-    for (size_t i = s; i < e; ++i) {
-        result += kmer_to_string(kmers[i], kmer_size);
-        result += ' ';
-    }
-    return result;
-}
-
-
 inline bool RSHash1::check_minimiser_pos(std::vector<uint64_t> &buffer, SkmerInfo skmer,
     const uint64_t query, const uint64_t queryrc,
     const size_t s, const size_t e, const size_t minimiser_pos,
@@ -665,7 +635,7 @@ inline bool RSHash1::check_minimiser_pos(std::vector<uint64_t> &buffer, SkmerInf
 }
 
 
-inline bool RSHash1::lookup_buffer(std::vector<uint64_t> &buffer, std::vector<SkmerInfo> &skmers,
+inline bool RSHash1::lookup_buffer(std::vector<uint64_t> &buffer, std::vector<SkmerInfo> &skmers, const size_t no_skmers,
     const uint64_t query, const uint64_t queryrc,
     size_t &text_pos, const size_t left_minimiser_pos, const size_t right_minimiser_pos,
     bool &forward, size_t &start_pos, size_t &end_pos)
@@ -673,7 +643,7 @@ inline bool RSHash1::lookup_buffer(std::vector<uint64_t> &buffer, std::vector<Sk
     size_t s = 0, e = 0;
 
     if(left_minimiser_pos != k-m1-right_minimiser_pos) {
-        for(size_t i = 0; i < skmers.size(); i++) {
+        for(size_t i = 0; i < no_skmers; i++) {
             e += span;
             if(check_minimiser_pos(buffer, skmers[i], query, queryrc, s, e, left_minimiser_pos, forward, text_pos, start_pos, end_pos))
                 return true;
@@ -683,7 +653,7 @@ inline bool RSHash1::lookup_buffer(std::vector<uint64_t> &buffer, std::vector<Sk
         }
     }
     else {
-        for(size_t i = 0; i < skmers.size(); i++) {
+        for(size_t i = 0; i < no_skmers; i++) {
             e += span;   
             if(check_minimiser_pos(buffer, skmers[i], query, queryrc, s, e, left_minimiser_pos, forward, text_pos, start_pos, end_pos))
                 return true;
@@ -694,6 +664,7 @@ inline bool RSHash1::lookup_buffer(std::vector<uint64_t> &buffer, std::vector<Sk
     return false;
 }
 
+
 uint64_t RSHash1::streaming_query(const std::vector<seqan3::dna4> &query,
     uint64_t &buffer_fwd_extensions, uint64_t &buffer_rev_extensions, uint64_t &text_fwd_extensions, uint64_t &text_rev_extensions)
 {
@@ -702,10 +673,12 @@ uint64_t RSHash1::streaming_query(const std::vector<seqan3::dna4> &query,
 
     uint64_t occurences = 0;
     uint64_t current_minimiser=std::numeric_limits<uint64_t>::max();
+    uint64_t minimiser_notin_text=std::numeric_limits<uint64_t>::max();
     const uint64_t mask = compute_mask(2u * k);
     const uint64_t shift = 2*(k-1);
-    std::vector<uint64_t> buffer;
-    std::vector<SkmerInfo> skmers;
+    std::vector<uint64_t> buffer((m_thres1-1) * span);
+    std::vector<SkmerInfo> skmers(m_thres1-1);
+    size_t no_skmers;
     size_t unitig_begin, unitig_end;
     size_t text_pos;
     bool forward;
@@ -716,23 +689,30 @@ uint64_t RSHash1::streaming_query(const std::vector<seqan3::dna4> &query,
         if(found && extend_in_text(text_pos, unitig_begin, unitig_end, forward, minimisers.window_value, minimisers.window_value_rev, text_fwd_extensions, text_rev_extensions, shift))
             occurences++;
         else if(minimisers.minimiser_value == current_minimiser) {
-            found = lookup_buffer(buffer, skmers, minimisers.window_value, minimisers.window_value_rev, text_pos, minimisers.left_minimiser_position, minimisers.right_minimiser_position, forward, unitig_begin, unitig_end);
+            found = lookup_buffer(buffer, skmers, no_skmers, minimisers.window_value, minimisers.window_value_rev, text_pos, minimisers.left_minimiser_position, minimisers.right_minimiser_position, forward, unitig_begin, unitig_end);
             // found = lookup_buffer(buffer, skmers, minimisers.window_value, minimisers.window_value_rev, text_pos, forward, unitig_begin, unitig_end);
             occurences += found;
         }
-        else if(uint64_t minimizer_id = r1.rank(minimisers.minimiser_value);
-                r1.rank(minimisers.minimiser_value+1)-minimizer_id)
-        {
-            // size_t p = s1_select.select(minimizer_id);
-            // size_t q = s1_select.select(minimizer_id+1);
-            size_t p = s1_select->select(minimizer_id);
-            size_t q = s1_select->select(minimizer_id+1);
+        else if(minimisers.minimiser_value != minimiser_notin_text) {
+            const uint64_t minimizer_id = r1.rank(minimisers.minimiser_value);
+            if(r1.rank(minimisers.minimiser_value+1)-minimizer_id) {
+                // size_t p = s1_select.select(minimizer_id);
+                // size_t q = s1_select.select(minimizer_id+1);
+                size_t p = s1_select->select(minimizer_id);
+                size_t q = s1_select->select(minimizer_id+1);
+                no_skmers = q - p;
 
-            refill_buffer(buffer, skmers, p, q, mask, shift);
-            found = lookup_buffer(buffer, skmers, minimisers.window_value, minimisers.window_value_rev, text_pos, minimisers.left_minimiser_position, minimisers.right_minimiser_position, forward, unitig_begin, unitig_end);
-            // found = lookup_buffer(buffer, skmers, minimisers.window_value, minimisers.window_value_rev, text_pos, forward, unitig_begin, unitig_end);
-            occurences += found;
-            current_minimiser = minimisers.minimiser_value;
+                refill_buffer(buffer.data(), skmers.data(), p, no_skmers, mask, shift);
+                found = lookup_buffer(buffer, skmers, no_skmers, minimisers.window_value, minimisers.window_value_rev, text_pos, minimisers.left_minimiser_position, minimisers.right_minimiser_position, forward, unitig_begin, unitig_end);
+                // found = lookup_buffer(buffer, skmers, minimisers.window_value, minimisers.window_value_rev, text_pos, forward, unitig_begin, unitig_end);
+                occurences += found;
+                current_minimiser = minimisers.minimiser_value;
+            }
+            else {
+                occurences += hashmap.contains(std::min<uint64_t>(minimisers.window_value, minimisers.window_value_rev));
+                found = false;
+                minimiser_notin_text = minimisers.minimiser_value;
+            }
         }
         else {
             occurences += hashmap.contains(std::min<uint64_t>(minimisers.window_value, minimisers.window_value_rev));
@@ -749,6 +729,7 @@ int RSHash1::save(const std::filesystem::path &filepath) {
     std::ofstream out(filepath, std::ios::binary);
     seqan3::contrib::sdsl::serialize(this->k, out);
     seqan3::contrib::sdsl::serialize(this->m1, out);
+    seqan3::contrib::sdsl::serialize(this->m_thres1, out);
     seqan3::contrib::sdsl::serialize(s1, out);
 
     cereal::BinaryOutputArchive archive(out);
@@ -766,6 +747,7 @@ int RSHash1::load(const std::filesystem::path &filepath) {
     std::ifstream in(filepath, std::ios::binary);
     seqan3::contrib::sdsl::load(this->k, in);
     seqan3::contrib::sdsl::load(this->m1, in);
+    seqan3::contrib::sdsl::load(this->m_thres1, in);
     seqan3::contrib::sdsl::load(s1, in);
 
     cereal::BinaryInputArchive archive(in);
