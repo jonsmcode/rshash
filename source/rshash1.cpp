@@ -142,8 +142,8 @@ int RSHash1::build(const std::vector<std::vector<seqan3::dna4>> &input)
         j += minimizers1[minimizer];
         s1[j] = 1;
     }
-    // s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), n1+1, 3);
-    s1_select = std::make_unique<sux::bits::Rank9Sel<>>(reinterpret_cast<uint64_t*>(s1.data()), n1 + 1);
+    s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), n1+1, 3);
+    // s1_select = std::make_unique<sux::bits::Rank9Sel<>>(reinterpret_cast<uint64_t*>(s1.data()), n1 + 1);
 
     minimizers1.clear();
     unfreq_minimizers1.clear();
@@ -160,8 +160,8 @@ int RSHash1::build(const std::vector<std::vector<seqan3::dna4>> &input)
     for(auto & sequence : input) {
         for (auto && minimiser : sequence | view1) {
             if(uint64_t i = r1.rank(minimiser.minimiser_value); r1.rank(minimiser.minimiser_value+1)-i) {
-                // size_t s = s1_select.select(i);
-                size_t s = s1_select->select(i);
+                size_t s = s1_select.select(i);
+                // size_t s = s1_select->select(i);
                 b1.set(s + count1[i], length + minimiser.range_position);
                 count1[i]++;
             }
@@ -272,18 +272,20 @@ int RSHash1::build(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "no kmers HT: " << hashmap.size() << " " << (double) hashmap.size()/kmers*100 << "%\n";
 
     std::cout << "density r1: " << (double) c1/M1*100 << "%\n";
-    std::cout << "density s1: " << (double) s1_select->bitCount()/(n1+1)*100 <<  "%\n";
+    // std::cout << "density s1: " << (double) s1_select->bitCount()/(n1+1)*100 <<  "%\n";
+    std::cout << "density s1: " << (double) s1_select.bitCount()/(n1+1)*100 <<  "%\n";
     std::cout << "\nspace per kmer in bit:\n";
     std::cout << "text: " << (double) 2*N/kmers << "\n";
     std::cout << "endpoints: " << (double) endpoints.bitCount()/kmers << "\n";
     std::cout << "offsets1: " << (double) n1*offset_width/kmers << "\n";
     std::cout << "R_1: " << (double) r1.bitCount()/kmers << "\n";
-    std::cout << "S_1: " << (double) (n1+1 + s1_select->bitCount())/kmers << "\n";
+    // std::cout << "S_1: " << (double) (n1+1 + s1_select->bitCount())/kmers << "\n";
+    std::cout << "S_1: " << (double) (n1+1 + s1_select.bitCount())/kmers << "\n";
     // std::cout << "R_2: " << (double) (8*size_in_bytes(r2))/kmers << "\n";
     std::cout << "Hashtable: " << (double) 65*hashmap.bucket_count()/kmers << "\n";
 
     // std::cout << "total: " << (double) (n1*offset_width+2*N+8*size_in_bytes(r1)+n1+1+s1_select.bitCount()+endpoints.bitCount()+8*size_in_bytes(r2))/kmers << "\n";
-    std::cout << "total: " << (double) (n1*offset_width+2*N+r1.bitCount()+n1+1+s1_select->bitCount()+endpoints.bitCount()+65*hashmap.bucket_count())/kmers << "\n";
+    std::cout << "total: " << (double) (n1*offset_width+2*N+r1.bitCount()+n1+1+s1_select.bitCount()+endpoints.bitCount()+65*hashmap.bucket_count())/kmers << "\n";
 
     return 0;
 }
@@ -454,10 +456,10 @@ uint64_t RSHash1::lookup(const std::vector<uint64_t> &kmers, bool verbose)
 //         t6 = std::chrono::high_resolution_clock::now();
 //         if(r1[minimisers.minimiser1]) {
 //             t0 = std::chrono::high_resolution_clock::now();
-//             uint64_t minimizer_id = r1_rank(minimisers.minimiser1);
+//             uint64_t minimiser_rank = r1_rank(minimisers.minimiser1);
 //             t1 = std::chrono::high_resolution_clock::now();
-//             size_t p = s1_select.select(minimizer_id);
-//             size_t q = s1_select.select(minimizer_id+1);
+//             size_t p = s1_select.select(minimiser_rank);
+//             size_t q = s1_select.select(minimiser_rank+1);
 //             t2 = std::chrono::high_resolution_clock::now();
 
 //             occurences += check(p, q, mask, minimisers.window, minimisers.window_rev, to, th, te);
@@ -501,9 +503,9 @@ uint64_t RSHash1::lookup(const std::vector<uint64_t> &kmers, bool verbose)
 //         minimisers.compute(kmer);
 
 //         if(r1[minimisers.minimiser1]) {
-//             uint64_t minimizer_id = r1_rank(minimisers.minimiser1);
-//             size_t p = s1_select.select(minimizer_id);
-//             size_t q = s1_select.select(minimizer_id+1);
+//             uint64_t minimiser_rank = r1_rank(minimisers.minimiser1);
+//             size_t p = s1_select.select(minimiser_rank);
+//             size_t q = s1_select.select(minimiser_rank+1);
 
 //             occurences += check(p, q, mask, minimisers.window, minimisers.window_rev);
 //         }
@@ -522,22 +524,18 @@ return 0;
 
 
 inline bool RSHash1::extend_in_text(size_t &text_pos, size_t start, size_t end,
-    bool forward, const uint64_t query, const uint64_t query_rc, uint64_t &fwd_extensions, uint64_t &rev_extensions, const uint64_t shift)
+    bool forward, const uint64_t query, const uint64_t query_rc, const uint64_t shift)
 {
     if(forward) {
         if(++text_pos < end) {
             uint64_t const new_rank = get_base(text_pos);
-            bool const found = (new_rank == (query >> shift));
-            fwd_extensions++;
-            return found;
+            return new_rank == (query >> shift);
         }
     }
     else {
         if(--text_pos >= start) {
             uint64_t const new_rank = get_base(text_pos);
-            bool const found = (new_rank == (query_rc & 0b11));
-            rev_extensions++;
-            return found;
+            return new_rank == (query_rc & 0b11);
         }
     }
     return false;
@@ -641,7 +639,6 @@ inline bool RSHash1::lookup_buffer(std::vector<uint64_t> &buffer, std::vector<Sk
     bool &forward, size_t &start_pos, size_t &end_pos)
 {
     size_t s = 0, e = 0;
-
     if(left_minimiser_pos != k-m1-right_minimiser_pos) {
         for(size_t i = 0; i < no_skmers; i++) {
             e += span;
@@ -665,18 +662,16 @@ inline bool RSHash1::lookup_buffer(std::vector<uint64_t> &buffer, std::vector<Sk
 }
 
 
-uint64_t RSHash1::streaming_query(const std::vector<seqan3::dna4> &query,
-    uint64_t &buffer_fwd_extensions, uint64_t &buffer_rev_extensions, uint64_t &text_fwd_extensions, uint64_t &text_rev_extensions)
+uint64_t RSHash1::streaming_query(const std::vector<seqan3::dna4> &query, uint64_t &extensions)
 {
-    // auto view = srindex::views::xor_minimiser_and_window({.minimiser_size = m1, .window_size = k, .seed=seed1});
     auto view = srindex::views::xor_minimiser_and_window2({.minimiser_size = m1, .window_size = k, .seed=seed1});
 
     uint64_t occurences = 0;
-    uint64_t current_minimiser=std::numeric_limits<uint64_t>::max();
-    uint64_t minimiser_notin_text=std::numeric_limits<uint64_t>::max();
+    uint64_t current_pos_minimiser=std::numeric_limits<uint64_t>::max();
+    uint64_t current_neg_minimiser=std::numeric_limits<uint64_t>::max();
     const uint64_t mask = compute_mask(2u * k);
     const uint64_t shift = 2*(k-1);
-    std::vector<uint64_t> buffer((m_thres1-1) * span);
+    std::vector<uint64_t> kmer_buffer((m_thres1-1) * span);
     std::vector<SkmerInfo> skmers(m_thres1-1);
     size_t no_skmers;
     size_t unitig_begin, unitig_end;
@@ -684,39 +679,37 @@ uint64_t RSHash1::streaming_query(const std::vector<seqan3::dna4> &query,
     bool forward;
     bool found = false;
 
-    for(auto && minimisers : query | view)
+    for(auto && window : query | view)
     {
-        if(found && extend_in_text(text_pos, unitig_begin, unitig_end, forward, minimisers.window_value, minimisers.window_value_rev, text_fwd_extensions, text_rev_extensions, shift))
+        if(found && extend_in_text(text_pos, unitig_begin, unitig_end, forward, window.window_value, window.window_value_rev, shift)) {
             occurences++;
-        else if(minimisers.minimiser_value == current_minimiser) {
-            found = lookup_buffer(buffer, skmers, no_skmers, minimisers.window_value, minimisers.window_value_rev, text_pos, minimisers.left_minimiser_position, minimisers.right_minimiser_position, forward, unitig_begin, unitig_end);
-            // found = lookup_buffer(buffer, skmers, minimisers.window_value, minimisers.window_value_rev, text_pos, forward, unitig_begin, unitig_end);
+            extensions++;
+        }
+        else if(window.minimiser_value == current_pos_minimiser) {
+            found = lookup_buffer(kmer_buffer, skmers, no_skmers, window.window_value, window.window_value_rev, text_pos, window.left_minimiser_position, window.right_minimiser_position, forward, unitig_begin, unitig_end);
             occurences += found;
         }
-        else if(minimisers.minimiser_value != minimiser_notin_text) {
-            const uint64_t minimizer_id = r1.rank(minimisers.minimiser_value);
-            if(r1.rank(minimisers.minimiser_value+1)-minimizer_id) {
-                // size_t p = s1_select.select(minimizer_id);
-                // size_t q = s1_select.select(minimizer_id+1);
-                size_t p = s1_select->select(minimizer_id);
-                size_t q = s1_select->select(minimizer_id+1);
+        else if(window.minimiser_value != current_neg_minimiser)
+        {
+            const uint64_t minimiser_rank = r1.rank(window.minimiser_value);
+            if(r1.rank(window.minimiser_value + 1) - minimiser_rank) {
+                size_t p = s1_select.select(minimiser_rank);
+                size_t q = s1_select.select(minimiser_rank+1);
                 no_skmers = q - p;
 
-                refill_buffer(buffer.data(), skmers.data(), p, no_skmers, mask, shift);
-                found = lookup_buffer(buffer, skmers, no_skmers, minimisers.window_value, minimisers.window_value_rev, text_pos, minimisers.left_minimiser_position, minimisers.right_minimiser_position, forward, unitig_begin, unitig_end);
-                // found = lookup_buffer(buffer, skmers, minimisers.window_value, minimisers.window_value_rev, text_pos, forward, unitig_begin, unitig_end);
+                refill_buffer(kmer_buffer.data(), skmers.data(), p, no_skmers, mask, shift);
+                found = lookup_buffer(kmer_buffer, skmers, no_skmers, window.window_value, window.window_value_rev, text_pos, window.left_minimiser_position, window.right_minimiser_position, forward, unitig_begin, unitig_end);
                 occurences += found;
-                current_minimiser = minimisers.minimiser_value;
+                current_pos_minimiser = window.minimiser_value;
             }
             else {
-                occurences += hashmap.contains(std::min<uint64_t>(minimisers.window_value, minimisers.window_value_rev));
+                occurences += hashmap.contains(std::min<uint64_t>(window.window_value, window.window_value_rev));
                 found = false;
-                minimiser_notin_text = minimisers.minimiser_value;
+                current_neg_minimiser = window.minimiser_value;
             }
         }
         else {
-            occurences += hashmap.contains(std::min<uint64_t>(minimisers.window_value, minimisers.window_value_rev));
-            // occurences += r2[std::min<uint64_t>(minimisers.window_value, minimisers.window_value_rev)];
+            occurences += hashmap.contains(std::min<uint64_t>(window.window_value, window.window_value_rev));
             found = false;
         }
     }
@@ -763,8 +756,8 @@ int RSHash1::load(const std::filesystem::path &filepath) {
 
     in.close();
 
-    // this->s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), s1.size(), 3);
-    s1_select = std::make_unique<sux::bits::Rank9Sel<>>(reinterpret_cast<uint64_t*>(s1.data()), s1.size());
+    this->s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), s1.size(), 3);
+    // s1_select = std::make_unique<sux::bits::Rank9Sel<>>(reinterpret_cast<uint64_t*>(s1.data()), s1.size());
 
     std::cout << "built rank and select ds...\n";
     

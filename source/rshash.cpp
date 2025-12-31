@@ -138,7 +138,7 @@ int main(int argc, char** argv)
 
             std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
             for (auto query : queries) {
-                found += index.streaming_query(query, buffer_fwd_extensions, buffer_rev_extensions, text_fwd_extensions, text_rev_extensions);
+                found += index.streaming_query(query, extensions);
                 kmers += query.size() - index.getk() + 1;
             }
             std::chrono::high_resolution_clock::time_point t_stop = std::chrono::high_resolution_clock::now();
@@ -179,10 +179,7 @@ int main(int argc, char** argv)
         std::cout << "num_kmers = " << kmers << '\n';
         std::cout << "num_positive_kmers = " << found << " (" << (double) found/kmers*100 << "%)\n";
         std::cout << "time_per_kmer = " << ns_per_kmer << '\n';
-        std::cout << "buffer_fwd_extensions = " << buffer_fwd_extensions << '\n';
-        std::cout << "buffer_rev_extensions = " << buffer_rev_extensions << '\n';
-        std::cout << "text_fwd_extensions = " << text_fwd_extensions << '\n';
-        std::cout << "text_rev_extensions = " << text_rev_extensions << '\n';
+        std::cout << "extensions = " << extensions << '\n';
     }
     else if(args.cmd == "lookup") {
         std::cout << "loading dict...\n";

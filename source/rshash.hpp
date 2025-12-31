@@ -37,8 +37,8 @@ private:
     uint64_t span;
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> r1;
     bit_vector s1;
-    // sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s1_select;
-    std::unique_ptr<sux::bits::Rank9Sel<>> s1_select;
+    sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s1_select;
+    // std::unique_ptr<sux::bits::Rank9Sel<>> s1_select;
     pthash::compact_vector offsets1;
     gtl::flat_hash_set<uint64_t> hashmap;
     // sd_vector<> r2;
@@ -52,7 +52,7 @@ private:
     inline void refill_buffer(uint64_t*, SkmerInfo*, size_t, size_t, const uint64_t, const uint64_t);
     inline bool lookup_buffer(std::vector<uint64_t> &, std::vector<SkmerInfo> &, const size_t, const uint64_t, const uint64_t, size_t &, const size_t, const size_t, bool &, size_t &, size_t &);
     // inline bool lookup_buffer(std::vector<uint64_t> &, std::vector<SkmerInfo> &, const uint64_t, const uint64_t, size_t &, bool &, size_t &, size_t &);
-    inline bool extend_in_text(size_t&, size_t, size_t, bool, const uint64_t, const uint64_t, uint64_t&, uint64_t&, const uint64_t);
+    inline bool extend_in_text(size_t&, size_t, size_t, bool, const uint64_t, const uint64_t, const uint64_t);
     const inline uint64_t get_word64(uint64_t pos);
     const inline uint64_t get_base(uint64_t pos);
 
@@ -67,7 +67,7 @@ public:
     uint64_t access(const uint64_t, const size_t);
     uint64_t lookup(const std::vector<uint64_t>&, bool verbose);
     int build(const std::vector<std::vector<seqan3::dna4>>&);
-    uint64_t streaming_query(const std::vector<seqan3::dna4>&, uint64_t&, uint64_t&, uint64_t&, uint64_t&);
+    uint64_t streaming_query(const std::vector<seqan3::dna4>&, uint64_t&);
     uint64_t streaming_query(const std::vector<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
     int save(const std::filesystem::path&);
     int load(const std::filesystem::path&);
