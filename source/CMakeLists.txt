@@ -5,16 +5,9 @@
 #target_link_libraries (rshash PRIVATE seqan3::seqan3 sharg::sharg)
 
 
-add_executable (rshashtmp rshash.cpp rshash3.cpp rshash2.cpp rshash1.cpp)
+add_executable (rshashtmp rshash.cpp rshash3.cpp rshash3comp.cpp rshash2.cpp rshash1.cpp)
 target_compile_options(rshashtmp PRIVATE -O3 -march=native -Wno-interference-size)
 target_include_directories(rshashtmp PRIVATE ${CMAKE_SOURCE_DIR}/sux)
 target_compile_definitions(rshashtmp PRIVATE PARSEARCH)
 target_include_directories(rshashtmp PRIVATE ${CMAKE_SOURCE_DIR}/gtl)
 target_link_libraries (rshashtmp PRIVATE seqan3::seqan3 sharg::sharg)
-
-
-add_executable (ef ef.cpp)
-target_compile_options(ef PRIVATE -O3 -march=native -mavx2 -mbmi2 -Wno-interference-size)
-target_include_directories(ef PRIVATE ${CMAKE_SOURCE_DIR}/sux)
-target_include_directories(ef PRIVATE ${CMAKE_SOURCE_DIR}/gtl)
-target_link_libraries (ef PRIVATE seqan3::seqan3 sharg::sharg)

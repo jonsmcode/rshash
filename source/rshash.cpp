@@ -3,7 +3,23 @@
 #include <seqan3/io/sequence_file/all.hpp>
 
 #include "rshash.hpp"
-#include "bench.hpp"
+
+
+std::vector<uint64_t> rand_kmers(const uint64_t n, const uint64_t k) {
+    const uint64_t mask = compute_mask(2u * k);
+
+    std::uniform_int_distribution<uint64_t> distr;
+    std::mt19937_64 m_rand(1);
+    std::vector<uint64_t> kmers;
+    kmers.reserve(n);
+
+    for (uint64_t i = 0; i < n; ++i) {
+        const uint64_t kmer = distr(m_rand) & mask;
+        kmers.push_back(kmer);
+    }
+
+    return kmers;
+}
 
 
 struct cmd_arguments {
@@ -11,15 +27,15 @@ struct cmd_arguments {
     std::filesystem::path i{};
     std::filesystem::path q{};
     std::filesystem::path d{};
-    uint8_t k{};
-    uint8_t l{3};
-    uint8_t m1{14};
-    uint8_t m2{16};
-    uint8_t m3{17};
-    uint8_t t1{32};
-    uint8_t t2{64};
-    uint16_t t3{256};
-    size_t s{31};
+    uint8_t k{31};
+    uint8_t l{2};
+    uint8_t m1{16};
+    uint8_t m2{18};
+    uint8_t m3{20};
+    uint8_t t1{65};
+    uint8_t t2{65};
+    uint16_t t3{65};
+    bool c{false};
 };
 
 void initialise_argument_parser(sharg::parser &parser, cmd_arguments &args) {
@@ -35,6 +51,7 @@ void initialise_argument_parser(sharg::parser &parser, cmd_arguments &args) {
     parser.add_option(args.t1, sharg::config{.long_id = "t1", .description = "threshold1"});
     parser.add_option(args.t2, sharg::config{.long_id = "t2", .description = "threshold2"});
     parser.add_option(args.t3, sharg::config{.long_id = "t3", .description = "threshold3"});
+    parser.add_flag(args.c, sharg::config{.short_id = 'c', .long_id = "comp", .description = "compress first level"});
 }
 
 int check_arguments(sharg::parser &parser, cmd_arguments &args) {
@@ -116,9 +133,18 @@ int main(int argc, char** argv)
             index.save(args.d);
         }
         else if(args.l == 3) {
-            RSHash3 index = RSHash3(args.k, args.m1, args.m2, args.m3, args.t1, args.t2, args.t3);
-            index.build(text);
-            index.save(args.d);
+            if(args.c) {
+                RSHash3C index = RSHash3C(args.k, args.m1, args.m2, args.m3, args.t1, args.t2, args.t3);
+                index.build(text);
+                index.save(args.d);
+                return 0;
+            }
+            else {
+                RSHash3 index = RSHash3(args.k, args.m1, args.m2, args.m3, args.t1, args.t2, args.t3);
+                index.build(text);
+                index.save(args.d);
+                return 0;
+            }
         }
     }
     else if(args.cmd == "query") {
@@ -129,7 +155,7 @@ int main(int argc, char** argv)
         uint64_t kmers = 0;
         uint64_t found = 0;
         uint64_t extensions = 0;
-        uint64_t buffer_fwd_extensions = 0, buffer_rev_extensions = 0, text_fwd_extensions = 0, text_rev_extensions = 0;        std::chrono::nanoseconds elapsed;
+        std::chrono::nanoseconds elapsed;
         if(args.l == 1) {
             std::cout << "loading dict...\n";
             RSHash1 index = RSHash1();
@@ -153,25 +179,41 @@ int main(int argc, char** argv)
 
             std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
             for (auto query : queries) {
-                found += index.streaming_query(query, buffer_fwd_extensions, buffer_rev_extensions, text_fwd_extensions, text_rev_extensions);
+                found += index.streaming_query(query, extensions);
                 kmers += query.size() - index.getk() + 1;
             }
             std::chrono::high_resolution_clock::time_point t_stop = std::chrono::high_resolution_clock::now();
             elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
         }
         else if(args.l == 3) {
-            std::cout << "loading dict...\n";
-            RSHash3 index = RSHash3();
-            index.load(args.d);
-            std::cout << "querying...\n";
+            if(args.c) {
+                std::cout << "loading dict...\n";
+                RSHash3C index = RSHash3C();
+                index.load(args.d);
+                std::cout << "querying...\n";
 
-            std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
-            for (auto query : queries) {
-                found += index.streaming_query(query, extensions);
-                kmers += query.size() - index.getk() + 1;
+                std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
+                for (auto query : queries) {
+                    found += index.streaming_query(query, extensions);
+                    kmers += query.size() - index.getk() + 1;
+                }
+                std::chrono::high_resolution_clock::time_point t_stop = std::chrono::high_resolution_clock::now();
+                elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
             }
-            std::chrono::high_resolution_clock::time_point t_stop = std::chrono::high_resolution_clock::now();
-            elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
+            else {
+                std::cout << "loading dict...\n";
+                RSHash3 index = RSHash3();
+                index.load(args.d);
+                std::cout << "querying...\n";
+
+                std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
+                for (auto query : queries) {
+                    found += index.streaming_query(query, extensions);
+                    kmers += query.size() - index.getk() + 1;
+                }
+                std::chrono::high_resolution_clock::time_point t_stop = std::chrono::high_resolution_clock::now();
+                elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
+            }
         }
         double ns_per_kmer = (double) elapsed.count() / kmers;
         

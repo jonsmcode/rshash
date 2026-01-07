@@ -10,47 +10,6 @@
 #include "minimiser_views.hpp"
 
 
-static inline constexpr uint64_t compute_mask(uint64_t const size)
-{
-    assert(size > 0u);
-    assert(size <= 64u);
-
-    if (size == 64u)
-        return std::numeric_limits<uint64_t>::max();
-    else
-        return (uint64_t{1u} << size) - 1u;
-}
-
-std::vector<uint64_t> pack_dna4_to_uint64(
-    const std::vector<std::vector<seqan3::dna4>> & input)
-{
-    auto ranks = input | std::views::join | seqan3::views::to_rank;
-
-    std::vector<uint64_t> packed;
-    uint64_t word = 0;
-    size_t shift = 0;
-
-    for (uint8_t r : ranks)
-    {
-        word |= uint64_t(r) << shift; // pack 2 bits per base
-        shift += 2;
-
-        if (shift == 64)
-        {
-            packed.push_back(word);
-            word = 0;
-            shift = 0;
-        }
-    }
-
-    if (shift != 0) // last partial word
-        packed.push_back(word);
-
-    packed.push_back(0);
-
-    return packed;
-}
-
 
 RSHash1::RSHash1() :
     endpoints(std::vector<uint64_t>{}, 1),
@@ -143,7 +102,6 @@ int RSHash1::build(const std::vector<std::vector<seqan3::dna4>> &input)
         s1[j] = 1;
     }
     s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), n1+1, 3);
-    // s1_select = std::make_unique<sux::bits::Rank9Sel<>>(reinterpret_cast<uint64_t*>(s1.data()), n1 + 1);
 
     minimizers1.clear();
     unfreq_minimizers1.clear();
@@ -161,7 +119,6 @@ int RSHash1::build(const std::vector<std::vector<seqan3::dna4>> &input)
         for (auto && minimiser : sequence | view1) {
             if(uint64_t i = r1.rank(minimiser.minimiser_value); r1.rank(minimiser.minimiser_value+1)-i) {
                 size_t s = s1_select.select(i);
-                // size_t s = s1_select->select(i);
                 b1.set(s + count1[i], length + minimiser.range_position);
                 count1[i]++;
             }
@@ -288,28 +245,6 @@ int RSHash1::build(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "total: " << (double) (n1*offset_width+2*N+r1.bitCount()+n1+1+s1_select.bitCount()+endpoints.bitCount()+65*hashmap.bucket_count())/kmers << "\n";
 
     return 0;
-}
-
-
-
-
-static inline constexpr uint64_t crc(uint64_t x, uint64_t k) {
-    // assert(k <= 32);
-    uint64_t c = ~x;
-
-    /* swap byte order */
-    uint64_t res = __builtin_bswap64(c);
-
-    /* Swap nuc order in bytes */
-    const uint64_t c1 = 0x0f0f0f0f0f0f0f0f;              // ...0000.1111.0000.1111
-    const uint64_t c2 = 0x3333333333333333;              // ...0011.0011.0011.0011
-    res = ((res & c1) << 4) | ((res & (c1 << 4)) >> 4);  // swap 2-nuc order in bytes
-    res = ((res & c2) << 2) | ((res & (c2 << 2)) >> 2);  // swap nuc order in 2-nuc
-
-    /* Realign to the right */
-    res >>= 64 - 2 * k;
-
-    return res;
 }
 
 
@@ -557,7 +492,7 @@ const inline uint64_t RSHash1::get_base(uint64_t pos) {
 }
 
 
-inline void RSHash1::refill_buffer(uint64_t *out, SkmerInfo *skmers, size_t p, size_t N, const uint64_t mask, const uint64_t shift)
+inline void RSHash1::refill_buffer(uint64_t *buffer, SkmerInfo *skmers, size_t p, size_t N, const uint64_t mask, const uint64_t shift)
 {
     constexpr uint64_t INF = std::numeric_limits<uint64_t>::max();
     for(uint64_t i = 0; i < N; i++)
@@ -571,35 +506,36 @@ inline void RSHash1::refill_buffer(uint64_t *out, SkmerInfo *skmers, size_t p, s
         const uint64_t s1 = o + 1 - delta;
         const uint64_t s2 = std::max<uint64_t>(s1, prev_endpoint);
         const uint64_t e = std::min<uint64_t>(o+k, next_endpoint);
+
+        skmers[i] = {s1, prev_endpoint, next_endpoint};
         
         const uint64_t pad_front = span - delta;
-        std::fill(out, out + pad_front, INF);
-        out += pad_front;
+        std::fill(buffer, buffer + pad_front, INF);
+        buffer += pad_front;
         if(prev_endpoint > s1) {
             const uint64_t pad_front2 = prev_endpoint - s1;
-            std::fill(out, out + pad_front2, INF);
-            out += pad_front2;
+            std::fill(buffer, buffer + pad_front2, INF);
+            buffer += pad_front2;
         }
         
         uint64_t kmer = get_word64(s2) & mask;
         uint64_t bits = get_word64(s2 + k);
-        *out++ = kmer;
+        *buffer++ = kmer;
         for(uint64_t j=s2+k; j < e; j++) {
             uint64_t const next_base = bits & 3ULL;
             bits >>= 2;
             kmer = (kmer >> 2) | (next_base << shift);
-            *out++ = kmer;
+            *buffer++ = kmer;
         }
 
-        std::fill(out, out + (o + k - e), INF);
-        out += (o + k - e);
-
-        skmers[i] = {s1, prev_endpoint, next_endpoint};
+        const uint64_t pad_back = o + k - e;
+        std::fill(buffer, buffer + pad_back, INF);
+        buffer += pad_back;
     }
 }
 
 
-inline bool RSHash1::check_minimiser_pos(std::vector<uint64_t> &buffer, SkmerInfo skmer,
+inline bool RSHash1::check_minimiser_pos(uint64_t *buffer, const SkmerInfo &skmer,
     const uint64_t query, const uint64_t queryrc,
     const size_t s, const size_t e, const size_t minimiser_pos,
     bool &forward, size_t &text_pos, size_t &start_pos, size_t &end_pos)
@@ -633,7 +569,7 @@ inline bool RSHash1::check_minimiser_pos(std::vector<uint64_t> &buffer, SkmerInf
 }
 
 
-inline bool RSHash1::lookup_buffer(std::vector<uint64_t> &buffer, std::vector<SkmerInfo> &skmers, const size_t no_skmers,
+inline bool RSHash1::lookup_buffer(uint64_t *buffer, SkmerInfo *skmers, const size_t no_skmers,
     const uint64_t query, const uint64_t queryrc,
     size_t &text_pos, const size_t left_minimiser_pos, const size_t right_minimiser_pos,
     bool &forward, size_t &start_pos, size_t &end_pos)
@@ -671,8 +607,8 @@ uint64_t RSHash1::streaming_query(const std::vector<seqan3::dna4> &query, uint64
     uint64_t current_neg_minimiser=std::numeric_limits<uint64_t>::max();
     const uint64_t mask = compute_mask(2u * k);
     const uint64_t shift = 2*(k-1);
-    std::vector<uint64_t> kmer_buffer((m_thres1-1) * span);
-    std::vector<SkmerInfo> skmers(m_thres1-1);
+    uint64_t* kmer_buffer = new uint64_t[(m_thres1-1) * span];
+    SkmerInfo* skmers = new SkmerInfo[m_thres1-1];
     size_t no_skmers;
     size_t unitig_begin, unitig_end;
     size_t text_pos;
@@ -689,30 +625,28 @@ uint64_t RSHash1::streaming_query(const std::vector<seqan3::dna4> &query, uint64
             found = lookup_buffer(kmer_buffer, skmers, no_skmers, window.window_value, window.window_value_rev, text_pos, window.left_minimiser_position, window.right_minimiser_position, forward, unitig_begin, unitig_end);
             occurences += found;
         }
-        else if(window.minimiser_value != current_neg_minimiser)
-        {
-            const uint64_t minimiser_rank = r1.rank(window.minimiser_value);
-            if(r1.rank(window.minimiser_value + 1) - minimiser_rank) {
-                size_t p = s1_select.select(minimiser_rank);
-                size_t q = s1_select.select(minimiser_rank+1);
-                no_skmers = q - p;
+        else if(window.minimiser_value == current_neg_minimiser) {
+            occurences += hashmap.contains(std::min<uint64_t>(window.window_value, window.window_value_rev));
+            found = false;
+        }
+        else if(uint64_t minimiser_rank = r1.rank(window.minimiser_value); r1.rank(window.minimiser_value + 1) - minimiser_rank) {
+            const size_t p = s1_select.select(minimiser_rank);
+            no_skmers = s1_select.select(minimiser_rank+1) - p;
 
-                refill_buffer(kmer_buffer.data(), skmers.data(), p, no_skmers, mask, shift);
-                found = lookup_buffer(kmer_buffer, skmers, no_skmers, window.window_value, window.window_value_rev, text_pos, window.left_minimiser_position, window.right_minimiser_position, forward, unitig_begin, unitig_end);
-                occurences += found;
-                current_pos_minimiser = window.minimiser_value;
-            }
-            else {
-                occurences += hashmap.contains(std::min<uint64_t>(window.window_value, window.window_value_rev));
-                found = false;
-                current_neg_minimiser = window.minimiser_value;
-            }
+            refill_buffer(kmer_buffer, skmers, p, no_skmers, mask, shift);
+            found = lookup_buffer(kmer_buffer, skmers, no_skmers, window.window_value, window.window_value_rev, text_pos, window.left_minimiser_position, window.right_minimiser_position, forward, unitig_begin, unitig_end);
+            occurences += found;
+            current_pos_minimiser = window.minimiser_value;
         }
         else {
             occurences += hashmap.contains(std::min<uint64_t>(window.window_value, window.window_value_rev));
             found = false;
+            current_neg_minimiser = window.minimiser_value;
         }
     }
+
+    delete[] kmer_buffer;
+    delete[] skmers;
     
     return occurences;
 }
@@ -757,7 +691,6 @@ int RSHash1::load(const std::filesystem::path &filepath) {
     in.close();
 
     this->s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), s1.size(), 3);
-    // s1_select = std::make_unique<sux::bits::Rank9Sel<>>(reinterpret_cast<uint64_t*>(s1.data()), s1.size());
 
     std::cout << "built rank and select ds...\n";
     

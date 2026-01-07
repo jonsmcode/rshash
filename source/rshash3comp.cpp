@@ -11,32 +11,37 @@
 #include "minimiser_views.hpp"
 
 
-RSHash2::RSHash2() :
+RSHash3C::RSHash3C() :
     endpoints(std::vector<uint64_t>{}, 1),
     r1(std::vector<uint64_t>{}, 1),
-    r2(std::vector<uint64_t>{}, 1)
+    r2(std::vector<uint64_t>{}, 1),
+    r3(std::vector<uint64_t>{}, 1)
 {}
 
-RSHash2::RSHash2(
-    uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m_thres1, uint8_t const m_thres2)
-    : k(k), m1(m1), m_thres1(m_thres1), m2(m2),
-      m_thres2(m_thres2), span1(k-m1+1), span2(k-m2+1),
+RSHash3C::RSHash3C(
+    uint8_t const k, uint8_t const m1, uint8_t const m2, uint8_t const m3, uint8_t const m_thres1, uint8_t const m_thres2, uint8_t const m_thres3)
+    : k(k), m1(m1), m_thres1(m_thres1), m2(m2), m3(m3),
+      m_thres2(m_thres2), m_thres3(m_thres3), span1(k-m1+1), span2(k-m2+1), span3(k-m3+1),
       endpoints(std::vector<uint64_t>{}, 1),
       r1(std::vector<uint64_t>{}, 1),
-      r2(std::vector<uint64_t>{}, 1)
+      r2(std::vector<uint64_t>{}, 1),
+      r3(std::vector<uint64_t>{}, 1)
 {}
 
 
-int RSHash2::build(const std::vector<std::vector<seqan3::dna4>> &input)
+int RSHash3C::build(const std::vector<std::vector<seqan3::dna4>> &input)
 {
     auto minimiserview1 = srindex::views::xor_minimiser_and_positions2({.minimiser_size = m1, .window_size = k, .seed=seed1});
     auto minimiserview2 = srindex::views::xor_minimiser_and_positions2({.minimiser_size = m2, .window_size = k, .seed=seed2});
+    auto minimiserview3 = srindex::views::xor_minimiser_and_positions2({.minimiser_size = m3, .window_size = k, .seed=seed3});
     auto skmerview1 = srindex::views::xor_minimiser_and_skmer_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
     auto skmerview2 = srindex::views::xor_minimiser_and_skmer_positions({.minimiser_size = m2, .window_size = k, .seed=seed2});
+    auto skmerview3 = srindex::views::xor_minimiser_and_skmer_positions({.minimiser_size = m3, .window_size = k, .seed=seed3});
     auto kmerview = srindex::views::xor_minimiser_and_window({.minimiser_size = m1, .window_size = k, .seed=seed1});
 
     const uint64_t M1 = 1ULL << (m1+m1);
     const uint64_t M2 = 1ULL << (m2+m2);
+    const uint64_t M3 = 1ULL << (m3+m3);
 
     std::cout << "scan text...\n";
     size_t N = 0;
@@ -275,16 +280,119 @@ int RSHash2::build(const std::vector<std::vector<seqan3::dna4>> &input)
     size_t rem_kmers2 = 0;
     for(auto & skmer : freq_skmers2)
         rem_kmers2 += skmer.size() - k + 1;
-    // std::cout << "skmers: " << skmers << " minimizer: " << n << " unfrequent minimizers: " << unfreq_minimizers1.size() << " (" << (double) unfreq_minimizers1.size()/minimizers1.size()*100 << "%) \n";
-    // std::cout << "remaining superkmers " << freq_skmers1.size() << " (" << (double) freq_skmers1.size()/skmers*100 << "%) ";
     std::cout << "remaining kmers: " << rem_kmers2 << " (" << (double) rem_kmers2/kmers*100 << "%)\n";
 
 
-    std::cout << "build level 3, HT...\n";
+    std::cout << "build level 3...\n";
+
+    std::cout << "count minimizers3...\n";
+    std::unordered_map<uint64_t, uint8_t> minimizers3;
+
+    for(auto & skmer : freq_skmers2) {
+        for(auto && minimiser : skmer | minimiserview3) {
+            minimizers3[minimiser.minimiser_value]++;
+            if(minimizers3[minimiser.minimiser_value] > m_thres3)
+                minimizers3[minimiser.minimiser_value] = m_thres3;
+        }
+    }
+    
+    std::cout << "extract unfrequent minimizers...\n";
+    uint64_t n3 = 0;
+    std::vector<uint64_t> unfreq_minimizers3;
+    for(auto const& [minimizer, count] : minimizers3) {
+        if(count < m_thres3) {
+            unfreq_minimizers3.push_back(minimizer);
+            n3 += count;
+        }
+    }
+
+    size_t c3 = minimizers3.size();
+    size_t c3tmp = unfreq_minimizers3.size();
+
+    std::cout << "unfrequent minimizers: " << unfreq_minimizers3.size() << " (" << (double) unfreq_minimizers3.size()/minimizers3.size()*100 << "%)\n";
+
+    std::cout << "build R_3...\n";
+    std::sort(unfreq_minimizers3.begin(), unfreq_minimizers3.end());
+    r3 = sux::bits::EliasFano(unfreq_minimizers3, M3);
+
+    std::cout << "filling bitvector S_3...\n";
+    s3 = bit_vector(n3+1, 0);
+    s3[0] = 1;
+    j = 0;
+    for(uint64_t minimizer : unfreq_minimizers3) {
+        j += minimizers3[minimizer];
+        s3[j] = 1;
+    }
+    s3_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s3.data()), n3+1, 3);
+
+    minimizers3.clear();
+    unfreq_minimizers3.clear();
+
+    std::cout << "filling offsets_3...\n";
+    pthash::compact_vector::builder b3;
+    b3.resize(n3, offset_width);
+
+    uint8_t* count3 = new uint8_t[c3tmp];
+    std::memset(count3, 0, c3tmp*sizeof(uint8_t));
+    skmer_idx = 0;
+    for(auto & skmer : freq_skmers2) {
+        for (auto && minimiser : skmer | minimiserview3) {
+            if(uint64_t i = r3.rank(minimiser.minimiser_value); r3.rank(minimiser.minimiser_value+1)-i) {
+                size_t s = s3_select.select(i);
+                b3.set(s + count3[i], skmer_positions2[skmer_idx] + minimiser.range_position);
+                count3[i]++;
+            }
+        }
+        skmer_idx++;
+    }
+    b3.build(offsets3);
+
+    delete[] count3;
+
+    std::cout << "get frequent skmers...\n";
+    std::vector<std::vector<seqan3::dna4>> freq_skmers3;
+    std::vector<size_t> skmer_positions3;
+    skmer_idx = 0;
+    for(auto & sequence : freq_skmers2) {
+        size_t start_position = 0;
+        bool cur_freq, freq;
+
+        for(auto && minimiser : sequence | skmerview3) {
+            freq = r3.rank(minimiser.minimiser_value+1)-r3.rank(minimiser.minimiser_value);
+            break;
+        }
+        for(auto && minimiser : sequence | skmerview3) {
+            cur_freq = r3.rank(minimiser.minimiser_value+1)-r3.rank(minimiser.minimiser_value);
+            if(freq && !cur_freq)
+                start_position = minimiser.range_position;
+            if(!freq && cur_freq) {
+                std::vector<seqan3::dna4> skmer;
+                for(size_t i=start_position; i < minimiser.range_position-1+k; i++)
+                    skmer.push_back(sequence[i]);
+                freq_skmers3.push_back(skmer);
+                skmer_positions3.push_back(skmer_positions2[skmer_idx] + start_position);
+            }
+            freq = cur_freq;
+        }
+        if(!cur_freq) {
+            std::vector<seqan3::dna4> skmer;
+            for(size_t i=start_position; i < sequence.size(); i++)
+                skmer.push_back(sequence[i]);
+            freq_skmers3.push_back(skmer);
+            skmer_positions3.push_back(skmer_positions2[skmer_idx] + start_position);
+        }
+
+        skmer_idx++;
+    }
+    
+    size_t rem_kmers3 = 0;
+    for(auto & skmer : freq_skmers3)
+        rem_kmers3 += skmer.size() - k + 1;
+    std::cout << "remaining kmers: " << rem_kmers3 << " (" << (double) rem_kmers3/kmers*100 << "%)\n";
+
 
     // todo: simple kmer view
-    // todo: hashmap.reserve(rem_kmers2);
-    for(auto & sequence : freq_skmers2) {
+    for(auto & sequence : freq_skmers3) {
         for(auto && minimiser : sequence | kmerview) {
             hashmap.insert(std::min<uint64_t>(minimiser.window_value, minimiser.window_value_rev));
         }
@@ -295,7 +403,7 @@ int RSHash2::build(const std::vector<std::vector<seqan3::dna4>> &input)
 
     std::cout << "====== report ======\n";
     std::cout << "text length: " << N << "\n";
-    std::cout << "text kmers: " << kmers <<  '\n';
+    std::cout << "textkmers: " << kmers <<  '\n';
     
     std::cout << "no minimiser: " << n << "\n";
     std::cout << "no distinct minimiser: " << c1tmp << "\n";
@@ -306,30 +414,38 @@ int RSHash2::build(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "no minimiser2: " << n2 << "\n";
     std::cout << "no distinct minimiser2: " << c2 << "\n";
     std::cout << "avg superkmers2: " << (double) n2/c2 <<  '\n';
+    std::cout << "no minimiser3: " << n3 << "\n";
+    std::cout << "no distinct minimiser3: " << c3 << "\n";
+    std::cout << "avg superkmers3: " << (double) n3/c3 <<  '\n';
     std::cout << "no kmers HT: " << hashmap.size() << " " << (double) hashmap.size()/kmers*100 << "%\n";
 
     std::cout << "density r1: " << (double) c1/M1*100 << "%\n";
     std::cout << "density r2: " << (double) c2/M2*100 << "%\n";
+    std::cout << "density r3: " << (double) c3/M3*100 << "%\n";
     std::cout << "density s1: " << (double) s1_select.bitCount()/(n1+1)*100 <<  "%\n";
     std::cout << "density s2: " << (double) s2_select.bitCount()/(n2+1)*100 <<  "%\n";
+    std::cout << "density s3: " << (double) s3_select.bitCount()/(n3+1)*100 <<  "%\n";
     std::cout << "\nspace per kmer in bit:\n";
     std::cout << "text: " << (double) 2*N/kmers << "\n";
     std::cout << "endpoints: " << (double) endpoints.bitCount()/kmers << "\n";
     std::cout << "offsets1: " << (double) n1*offset_width/kmers << "\n";
     std::cout << "offsets2: " << (double) n2*offset_width/kmers << "\n";
+    std::cout << "offsets3: " << (double) n3*offset_width/kmers << "\n";
     std::cout << "Hashtable: " << (double) 65*hashmap.bucket_count()/kmers << "\n";
     std::cout << "R_1: " << (double) r1.bitCount()/kmers << "\n";
     std::cout << "R_2: " << (double) r2.bitCount()/kmers << "\n";
+    std::cout << "R_3: " << (double) r3.bitCount()/kmers << "\n";
     std::cout << "S_1: " << (double) (n1+1)/kmers << "\n";
     std::cout << "S_2: " << (double) (n2+1)/kmers << "\n";
-    
-    std::cout << "total: " << (double) (n1*offset_width+n2*offset_width+2*N+r1.bitCount()+r2.bitCount()+n1+1+n2+1+endpoints.bitCount()+65*hashmap.bucket_count())/kmers << "\n";
+    std::cout << "S_3: " << (double) (n3+1)/kmers << "\n";
+
+    std::cout << "total: " << (double) (n1*offset_width+n2*offset_width+n3*offset_width+2*N+r1.bitCount()+r2.bitCount()+r3.bitCount()+n1+1+n2+1+n3+1+endpoints.bitCount()+65*hashmap.bucket_count())/kmers << "\n";
 
     return 0;
 }
 
 
-std::vector<uint64_t> RSHash2::rand_text_kmers(const uint64_t n) {
+std::vector<uint64_t> RSHash3C::rand_text_kmers(const uint64_t n) {
     std::uniform_int_distribution<uint32_t> distr;
     std::mt19937 m_rand(1);
     std::vector<std::uint64_t> kmers;
@@ -352,7 +468,7 @@ std::vector<uint64_t> RSHash2::rand_text_kmers(const uint64_t n) {
 
 
 
-uint64_t RSHash2::access(const uint64_t unitig_id, const size_t offset)
+uint64_t RSHash3C::access(const uint64_t unitig_id, const size_t offset)
 {
     size_t offset_text = endpoints.select(unitig_id) + offset;
 
@@ -367,7 +483,7 @@ uint64_t RSHash2::access(const uint64_t unitig_id, const size_t offset)
 }
 
 template<int level>
-inline bool RSHash2::check(const size_t p, const size_t q, const uint64_t mask,
+inline bool RSHash3C::check(const size_t p, const size_t q, const uint64_t mask,
     const uint64_t kmer, const uint64_t kmer_rc,
     double &to, double &th, double &te)
 {
@@ -375,20 +491,20 @@ inline bool RSHash2::check(const size_t p, const size_t q, const uint64_t mask,
 }
 
 template<int level>
-inline bool RSHash2::check(const size_t p, const size_t q, const uint64_t mask,
+inline bool RSHash3C::check(const size_t p, const size_t q, const uint64_t mask,
     const uint64_t kmer, const uint64_t kmer_rc)
 {
     return false;
 }
 
-uint64_t RSHash2::lookup(const std::vector<uint64_t> &kmers, bool verbose)
+uint64_t RSHash3C::lookup(const std::vector<uint64_t> &kmers, bool verbose)
 {
     uint64_t occurences = 0;
     return occurences;
 }
 
 
-const inline uint64_t RSHash2::get_word64(uint64_t pos) {
+const inline uint64_t RSHash3C::get_word64(uint64_t pos) {
     uint64_t block = pos >> 5;
     uint64_t shift = (pos & 31) << 1;
     uint64_t lo = text[block];
@@ -398,13 +514,13 @@ const inline uint64_t RSHash2::get_word64(uint64_t pos) {
     return (lo >> shift) | ((hi << (64 - shift)) & shift_mask);
 }
 
-const inline uint64_t RSHash2::get_base(uint64_t pos) {
+const inline uint64_t RSHash3C::get_base(uint64_t pos) {
     return (text[pos >> 5] >> ((pos & 31) << 1)) & 3ULL;
 }
 
 
 
-inline bool RSHash2::extend_in_text(size_t &text_pos, size_t start, size_t end,
+inline bool RSHash3C::extend_in_text(size_t &text_pos, size_t start, size_t end,
     bool forward, const uint64_t query, const uint64_t query_rc)
 {
     if(forward) {
@@ -426,7 +542,7 @@ inline bool RSHash2::extend_in_text(size_t &text_pos, size_t start, size_t end,
 
 
 template<int level>
-inline void RSHash2::refill_buffer(uint64_t *buffer, SkmerInfo *skmers, size_t p, size_t N, const uint64_t mask, const uint64_t shift)
+inline void RSHash3C::refill_buffer(uint64_t *buffer, SkmerInfo *skmers, size_t p, size_t N, const uint64_t mask, const uint64_t shift)
 {
     constexpr uint64_t INF = std::numeric_limits<uint64_t>::max();
 
@@ -439,6 +555,10 @@ inline void RSHash2::refill_buffer(uint64_t *buffer, SkmerInfo *skmers, size_t p
         if constexpr (level == 2) {
             o = offsets2.access(p+i);
             span = span2;
+        }
+        if constexpr (level == 3) {
+            o = offsets3.access(p+i);
+            span = span3;
         }
 
         uint64_t next_endpoint;
@@ -477,7 +597,7 @@ inline void RSHash2::refill_buffer(uint64_t *buffer, SkmerInfo *skmers, size_t p
     }
 }
 
-inline bool RSHash2::check_minimiser_pos(uint64_t* buffer, const SkmerInfo &skmer,
+inline bool RSHash3C::check_minimiser_pos(uint64_t* buffer, const SkmerInfo &skmer,
     const uint64_t query, const uint64_t queryrc,
     const size_t s, const size_t e, const size_t minimiser_pos,
     bool &forward, size_t &text_pos, size_t &start_pos, size_t &end_pos)
@@ -512,7 +632,7 @@ inline bool RSHash2::check_minimiser_pos(uint64_t* buffer, const SkmerInfo &skme
 
 
 template<int level>
-inline bool RSHash2::lookup_buffer(uint64_t* buffer, SkmerInfo* skmers, const size_t no_skmers,
+inline bool RSHash3C::lookup_buffer(uint64_t* buffer, SkmerInfo* skmers, const size_t no_skmers,
     const uint64_t query, const uint64_t queryrc,
     size_t &text_pos, const size_t left_minimiser_pos, const size_t right_minimiser_pos,
     bool &forward, size_t &start_pos, size_t &end_pos)
@@ -525,6 +645,10 @@ inline bool RSHash2::lookup_buffer(uint64_t* buffer, SkmerInfo* skmers, const si
     if constexpr (level == 2) {
         span = span2;
         m = m2;
+    }
+    if constexpr (level == 3) {
+        span = span3;
+        m = m3;
     }
 
     size_t s = 0, e = 0;
@@ -551,21 +675,23 @@ inline bool RSHash2::lookup_buffer(uint64_t* buffer, SkmerInfo* skmers, const si
 }
 
 
-uint64_t RSHash2::streaming_query(const std::vector<seqan3::dna4> &query, uint64_t &extensions)
+uint64_t RSHash3C::streaming_query(const std::vector<seqan3::dna4> &query, uint64_t &extensions)
 {
-    auto view = srindex::views::xor_two_minimiser_and_window2({.minimiser1_size = m1, .minimiser2_size = m2, .window_size = k, .seed1=seed1, .seed2=seed2});
+    auto view = srindex::views::xor_three_minimiser_and_window2({.minimiser1_size = m1, .minimiser2_size = m2, .minimiser3_size = m3, .window_size = k, .seed1=seed1, .seed2=seed2, .seed3=seed3});
 
     const uint64_t mask = compute_mask(2u * k);
     const uint64_t shift = 2*(k-1);
     constexpr uint64_t INF = std::numeric_limits<uint64_t>::max();
-    uint64_t current_minimiser1=INF, current_minimiser2=INF;
-    uint64_t current_neg_minimiser1=INF, current_neg_minimiser2=INF;
+    uint64_t current_minimiser1=INF, current_minimiser2=INF, current_minimiser3=INF;
+    uint64_t current_neg_minimiser1=INF, current_neg_minimiser2=INF, current_neg_minimiser3=INF;
     uint64_t* buffer1 = new uint64_t[(m_thres1-1) * span1];
     SkmerInfo* skmers1 = new SkmerInfo[m_thres1-1];
     uint64_t* buffer2 = new uint64_t[(m_thres2-1) * span2];
     SkmerInfo* skmers2 = new SkmerInfo[m_thres2-1];
-    uint64_t minimiser_rank1, minimiser_rank2;
-    size_t no_skmers1, no_skmers2;
+    uint64_t* buffer3 = new uint64_t[(m_thres3-1) * span3];
+    SkmerInfo* skmers3 = new SkmerInfo[m_thres3-1];
+    uint64_t minimiser_rank1, minimiser_rank2, minimiser_rank3;
+    size_t no_skmers1, no_skmers2, no_skmers3;
     size_t unitig_begin, unitig_end;
     size_t text_pos;
     bool forward;
@@ -605,19 +731,37 @@ uint64_t RSHash2::streaming_query(const std::vector<seqan3::dna4> &query, uint64
             current_minimiser2 = window.minimiser2_value;
             current_neg_minimiser1 = window.minimiser1_value;
         }
+        else if(window.minimiser3_value == current_minimiser3) {
+            found = lookup_buffer<3>(buffer3, skmers3, no_skmers3, window.window_value, window.window_value_rev, text_pos, window.minimiser3_left_position, window.minimiser3_right_position, forward, unitig_begin, unitig_end);
+            occurences += found;
+        }
+        else if(window.minimiser3_value != current_neg_minimiser3 && (minimiser_rank3 = r3.rank(window.minimiser3_value), r3.rank(window.minimiser3_value + 1) - minimiser_rank3)) {
+            const size_t p = s3_select.select(minimiser_rank3);
+            no_skmers3 = s3_select.select(minimiser_rank3+1) - p;
+
+            refill_buffer<3>(buffer3, skmers3, p, no_skmers3, mask, shift);
+            found = lookup_buffer<3>(buffer3, skmers3, no_skmers3, window.window_value, window.window_value_rev, text_pos, window.minimiser3_left_position, window.minimiser3_right_position, forward, unitig_begin, unitig_end);
+            occurences += found;
+            current_minimiser3 = window.minimiser3_value;
+            current_neg_minimiser1 = window.minimiser1_value;
+            current_neg_minimiser2 = window.minimiser2_value;
+        }
         else {
             occurences += hashmap.contains(std::min<uint64_t>(window.window_value, window.window_value_rev));
             found = false;
             current_neg_minimiser1 = window.minimiser1_value;
             current_neg_minimiser2 = window.minimiser2_value;
+            current_neg_minimiser3 = window.minimiser3_value;
         }
 
     }
 
     delete[] buffer1;
     delete[] buffer2;
+    delete[] buffer3;
     delete[] skmers1;
     delete[] skmers2;
+    delete[] skmers3;
     
     return occurences;
 }
@@ -625,22 +769,27 @@ uint64_t RSHash2::streaming_query(const std::vector<seqan3::dna4> &query, uint64
 
 
 
-int RSHash2::save(const std::filesystem::path &filepath) {
+int RSHash3C::save(const std::filesystem::path &filepath) {
     std::ofstream out(filepath, std::ios::binary);
     seqan3::contrib::sdsl::serialize(this->k, out);
     seqan3::contrib::sdsl::serialize(this->m1, out);
     seqan3::contrib::sdsl::serialize(this->m2, out);
+    seqan3::contrib::sdsl::serialize(this->m3, out);
     seqan3::contrib::sdsl::serialize(this->m_thres1, out);
     seqan3::contrib::sdsl::serialize(this->m_thres2, out);
+    seqan3::contrib::sdsl::serialize(this->m_thres3, out);
     seqan3::contrib::sdsl::serialize(s1, out);
     seqan3::contrib::sdsl::serialize(s2, out);
+    seqan3::contrib::sdsl::serialize(s3, out);
 
     cereal::BinaryOutputArchive archive(out);
     archive(this->endpoints);
     archive(this->r1);
     archive(this->r2);
+    archive(this->r3);
     archive(this->offsets1);
     archive(this->offsets2);
+    archive(this->offsets3);
     archive(this->text);
     archive(this->hashmap);
 
@@ -648,27 +797,33 @@ int RSHash2::save(const std::filesystem::path &filepath) {
     return 0;
 }
 
-int RSHash2::load(const std::filesystem::path &filepath) {
+int RSHash3C::load(const std::filesystem::path &filepath) {
     std::ifstream in(filepath, std::ios::binary);
     seqan3::contrib::sdsl::load(this->k, in);
     seqan3::contrib::sdsl::load(this->m1, in);
     seqan3::contrib::sdsl::load(this->m2, in);
+    seqan3::contrib::sdsl::load(this->m3, in);
     seqan3::contrib::sdsl::load(this->m_thres1, in);
     seqan3::contrib::sdsl::load(this->m_thres2, in);
+    seqan3::contrib::sdsl::load(this->m_thres3, in);
     seqan3::contrib::sdsl::load(s1, in);
     seqan3::contrib::sdsl::load(s2, in);
+    seqan3::contrib::sdsl::load(s3, in);
 
     cereal::BinaryInputArchive archive(in);
     archive(this->endpoints);
     archive(this->r1);
     archive(this->r2);
+    archive(this->r3);
     archive(this->offsets1);
     archive(this->offsets2);
+    archive(this->offsets3);
     archive(this->text);
     archive(this->hashmap);
 
     this->span1 = k - m1 + 1;
     this->span2 = k - m2 + 1;
+    this->span3 = k - m3 + 1;
 
     std::cout << "loaded index...\n";
 
@@ -676,6 +831,7 @@ int RSHash2::load(const std::filesystem::path &filepath) {
 
     this->s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), s1.size(), 3);
     this->s2_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s2.data()), s2.size(), 3);
+    this->s3_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s3.data()), s3.size(), 3);
 
     std::cout << "built rank and select ds...\n";
     
