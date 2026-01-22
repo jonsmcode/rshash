@@ -99,10 +99,10 @@ private:
     gtl::flat_hash_set<uint64_t> hashmap;
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> endpoints;
     std::vector<uint64_t> text;
-    inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, double &, double &, double &);
-    inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t);
+    inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, const uint64_t, double &, double &, double &);
+    inline bool check(uint64_t*, std::array<uint64_t, 2>*, const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, const uint64_t);
     inline bool check_minimiser_pos(uint64_t *, const SkmerInfo&, const uint64_t, const uint64_t, const size_t, const size_t, const size_t, bool &, size_t &, size_t &, size_t &);
-    inline void refill_buffer(uint64_t*, SkmerInfo*, size_t, size_t, const uint64_t, const uint64_t);
+    inline void refill_buffer(uint64_t *, uint64_t*, SkmerInfo*, size_t, size_t, const uint64_t, const uint64_t);
     inline bool lookup_buffer(uint64_t *, SkmerInfo *, const size_t, const uint64_t, const uint64_t, size_t &, const size_t, const size_t, bool &, size_t &, size_t &);
     inline bool extend_in_text(size_t&, size_t, size_t, bool, const uint64_t, const uint64_t, const uint64_t);
     const inline uint64_t get_word64(uint64_t pos);
@@ -141,7 +141,7 @@ private:
     template<int level>
     inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, double &, double &, double &);
     template<int level>
-    inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t);
+    inline bool check(uint64_t*, std::array<uint64_t, 2>*, const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, const uint64_t);
     template<int level>
     inline void refill_buffer(uint64_t *, SkmerInfo *, size_t, size_t, const uint64_t, const uint64_t);
     inline bool check_minimiser_pos(uint64_t *, const SkmerInfo&, const uint64_t, const uint64_t, const size_t, const size_t, const size_t, bool &, size_t &, size_t &, size_t &);
@@ -187,7 +187,7 @@ private:
     template<int level>
     inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, double &, double &, double &);
     template<int level>
-    inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t);
+    inline bool check(uint64_t*, std::array<uint64_t, 2>*, const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, const uint64_t);
     template<int level>
     inline void refill_buffer(uint64_t *, SkmerInfo *, size_t, size_t, const uint64_t, const uint64_t);
     inline bool check_minimiser_pos(uint64_t *, const SkmerInfo&, const uint64_t, const uint64_t, const size_t, const size_t, const size_t, bool &, size_t &, size_t &, size_t &);
@@ -231,7 +231,7 @@ private:
     template<int level>
     inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, double &, double &, double &);
     template<int level>
-    inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t);
+    inline bool check(uint64_t*, std::array<uint64_t, 2>*, const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, const uint64_t);
     template<int level>
     inline void refill_buffer(uint64_t *, SkmerInfo *, size_t, size_t, const uint64_t, const uint64_t);
     inline bool check_minimiser_pos(uint64_t *, const SkmerInfo&, const uint64_t, const uint64_t, const size_t, const size_t, const size_t, bool &, size_t &, size_t &, size_t &);

@@ -449,17 +449,27 @@ std::vector<uint64_t> RSHash3::rand_text_kmers(const uint64_t n) {
     std::mt19937 m_rand(1);
     std::vector<std::uint64_t> kmers;
     kmers.reserve(n);
+    const uint64_t l = (text.size()-1)*32;
 
     const uint64_t no_unitigs = number_unitigs();
-    for (uint64_t i = 0; i < n; ++i) {
-        const uint64_t unitig_id = distr(m_rand) % no_unitigs;
-        const uint64_t offset = distr(m_rand) % unitig_size(unitig_id);
-        const uint64_t kmer = access(unitig_id, offset);
+    for (uint64_t i = 0; i < n;) {
+        const uint64_t offset = distr(m_rand) % l;
+
+        const uint64_t r = endpoints.rank(offset+1);
+        const uint64_t next_endpoint = endpoints.select(r);
+
+        if(offset + 64 >= next_endpoint)
+            continue;
+        // const uint64_t unitig_id = distr(m_rand) % no_unitigs;
+        // const uint64_t offset = distr(m_rand) % unitig_size(unitig_id);
+        const uint64_t kmer = access(0, offset);
 
         if ((i & 1) == 0)
             kmers.push_back(crc(kmer, k));
         else
             kmers.push_back(kmer);
+
+        i++;
     }
 
     return kmers;
@@ -469,17 +479,10 @@ std::vector<uint64_t> RSHash3::rand_text_kmers(const uint64_t n) {
 
 uint64_t RSHash3::access(const uint64_t unitig_id, const size_t offset)
 {
-    size_t offset_text = endpoints.select(unitig_id) + offset;
-
-    uint64_t kmer = 0;
-    // for (size_t i=offset_text; i < offset_text+k; i++) {
-    //     uint64_t const new_rank = seqan3::to_rank(text[i]);
-    //     kmer <<= 2;
-    //     kmer |= new_rank;
-    // }
-
-    return kmer;
+    const uint64_t mask = compute_mask(2u * k);
+    return get_word64(offset) & mask;
 }
+
 
 template<int level>
 inline bool RSHash3::check(const size_t p, const size_t q, const uint64_t mask,
@@ -487,19 +490,6 @@ inline bool RSHash3::check(const size_t p, const size_t q, const uint64_t mask,
     double &to, double &th, double &te)
 {
     return false;
-}
-
-template<int level>
-inline bool RSHash3::check(const size_t p, const size_t q, const uint64_t mask,
-    const uint64_t kmer, const uint64_t kmer_rc)
-{
-    return false;
-}
-
-uint64_t RSHash3::lookup(const std::vector<uint64_t> &kmers, bool verbose)
-{
-    uint64_t occurences = 0;
-    return occurences;
 }
 
 

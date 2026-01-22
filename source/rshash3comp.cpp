@@ -450,17 +450,27 @@ std::vector<uint64_t> RSHash3C::rand_text_kmers(const uint64_t n) {
     std::mt19937 m_rand(1);
     std::vector<std::uint64_t> kmers;
     kmers.reserve(n);
+    const uint64_t l = (text.size()-1)*32;
 
     const uint64_t no_unitigs = number_unitigs();
-    for (uint64_t i = 0; i < n; ++i) {
-        const uint64_t unitig_id = distr(m_rand) % no_unitigs;
-        const uint64_t offset = distr(m_rand) % unitig_size(unitig_id);
-        const uint64_t kmer = access(unitig_id, offset);
+    for (uint64_t i = 0; i < n;) {
+        const uint64_t offset = distr(m_rand) % l;
+
+        const uint64_t r = endpoints.rank(offset+1);
+        const uint64_t next_endpoint = endpoints.select(r);
+
+        if(offset + 64 >= next_endpoint)
+            continue;
+        // const uint64_t unitig_id = distr(m_rand) % no_unitigs;
+        // const uint64_t offset = distr(m_rand) % unitig_size(unitig_id);
+        const uint64_t kmer = access(0, offset);
 
         if ((i & 1) == 0)
             kmers.push_back(crc(kmer, k));
         else
             kmers.push_back(kmer);
+
+        i++;
     }
 
     return kmers;
@@ -470,16 +480,8 @@ std::vector<uint64_t> RSHash3C::rand_text_kmers(const uint64_t n) {
 
 uint64_t RSHash3C::access(const uint64_t unitig_id, const size_t offset)
 {
-    size_t offset_text = endpoints.select(unitig_id) + offset;
-
-    uint64_t kmer = 0;
-    // for (size_t i=offset_text; i < offset_text+k; i++) {
-    //     uint64_t const new_rank = seqan3::to_rank(text[i]);
-    //     kmer <<= 2;
-    //     kmer |= new_rank;
-    // }
-
-    return kmer;
+    const uint64_t mask = compute_mask(2u * k);
+    return get_word64(offset) & mask;
 }
 
 template<int level>
@@ -491,15 +493,100 @@ inline bool RSHash3C::check(const size_t p, const size_t q, const uint64_t mask,
 }
 
 template<int level>
-inline bool RSHash3C::check(const size_t p, const size_t q, const uint64_t mask,
+inline bool RSHash3C::check(uint64_t* offsets, std::array<uint64_t, 2>* sequence_ends, const size_t p, const size_t no_kmers, const uint64_t mask, const uint64_t shift,
     const uint64_t kmer, const uint64_t kmer_rc)
 {
+    uint64_t span;
+    if constexpr (level == 1)
+        span = span1;
+    if constexpr (level == 2)
+        span = span2;
+    if constexpr (level == 3)
+        span = span3;
+
+    for(size_t i = 0; i < no_kmers; i++) {
+        if constexpr (level == 1)
+            offsets[i] = offsets1.access(p+i);
+        if constexpr (level == 2)
+            offsets[i] = offsets2.access(p+i);
+        if constexpr (level == 3)
+            offsets[i] = offsets3.access(p+i);
+    }
+    
+    for(size_t i = 0; i < no_kmers; i++) {
+        const uint64_t o = offsets[i];
+        uint64_t next_endpoint;
+        const uint64_t r = endpoints.rank(o+1);
+        const uint64_t prev_endpoint = endpoints.select(r-1, &next_endpoint);
+
+        const uint64_t delta = std::min<uint64_t>(o+1, span);
+        const uint64_t s1 = o + 1 - delta;
+        const uint64_t s2 = std::max<uint64_t>(s1, prev_endpoint);
+        const uint64_t e = std::min<uint64_t>(o+k, next_endpoint);
+
+        sequence_ends[i] = {s2, e};
+    }
+
+    for(size_t i = 0; i < no_kmers; i++) {
+        auto [s2, e] = sequence_ends[i];
+        uint64_t hash = get_word64(s2) & mask;
+        if(hash == kmer || hash == kmer_rc)
+            return true;
+
+        uint64_t bits = get_word64(s2 + k);
+        for(uint64_t j=s2+k; j < e; j++) {
+            uint64_t const next_base = bits & 3ULL;
+            bits >>= 2;
+            hash = (hash >> 2) | (next_base << shift);
+            if(hash == kmer || hash == kmer_rc)
+                return true;
+        }
+    }
+
     return false;
 }
+
 
 uint64_t RSHash3C::lookup(const std::vector<uint64_t> &kmers, bool verbose)
 {
     uint64_t occurences = 0;
+
+    const uint64_t mask = compute_mask(2u * k);
+    const uint64_t shift = 2*(k-1);
+    srindex::minimizers::Three_minimisers_hash2 minimisers = srindex::minimizers::Three_minimisers_hash2(k, m1, m2, m3, seed1, seed2, seed3);
+    uint64_t* offsets = new uint64_t[m_thres3];
+    std::array<uint64_t, 2>* sequence_ends = new std::array<uint64_t, 2>[m_thres3];
+
+    for(uint64_t kmer : kmers)
+    {
+        const uint64_t kmer_rc = crc(kmer, k);
+        minimisers.compute(kmer, kmer_rc);
+
+        if(uint64_t minimiser_rank = r1.rank(minimisers.minimiser1); r1.rank(minimisers.minimiser1 + 1) - minimiser_rank) {
+            size_t p = s1_select.select(minimiser_rank);
+            size_t no_kmers = s1_select.select(minimiser_rank+1) - p;
+
+            occurences += check<1>(offsets, sequence_ends, p, no_kmers, mask, shift, kmer, kmer_rc);
+        }
+        else if(uint64_t minimiser_rank = r2.rank(minimisers.minimiser2); r2.rank(minimisers.minimiser2 + 1) - minimiser_rank) {
+            size_t p = s2_select.select(minimiser_rank);
+            size_t no_kmers = s2_select.select(minimiser_rank+1) - p;
+
+            occurences += check<2>(offsets, sequence_ends, p, no_kmers, mask, shift, kmer, kmer_rc);
+        }
+        else if(uint64_t minimiser_rank = r3.rank(minimisers.minimiser3); r3.rank(minimisers.minimiser3 + 1) - minimiser_rank) {
+            size_t p = s3_select.select(minimiser_rank);
+            size_t no_kmers = s3_select.select(minimiser_rank+1) - p;
+
+            occurences += check<3>(offsets, sequence_ends, p, no_kmers, mask, shift, kmer, kmer_rc);
+        }
+        else
+            occurences += hashmap.contains(std::min<uint64_t>(kmer, kmer_rc));
+    }
+
+    delete[] offsets;
+    delete[] sequence_ends;
+
     return occurences;
 }
 
