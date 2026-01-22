@@ -4,6 +4,3 @@
 [submodule "sux"]
 	path = sux
 	url = https://github.com/vigna/sux.git
-[submodule "bits"]
-	path = bits
-	url = https://github.com/jermp/bits.git

@@ -2,10 +2,10 @@
 #include <seqan3/alphabet/container/bitpacked_sequence.hpp>
 #include <seqan3/contrib/sdsl-lite.hpp>
 #include <sux/bits/SimpleSelect.hpp>
-#include <sux/bits/EliasFano.hpp>
 #include <gtl/phmap.hpp>
 
 #include "compact_vector.hpp"
+#include "EliasFano.hpp"
 
 using namespace seqan3::literals;
 using namespace seqan3::contrib::sdsl;
