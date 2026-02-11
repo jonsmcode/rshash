@@ -586,26 +586,14 @@ inline void RSHash3::refill_buffer(uint64_t *buffer, SkmerInfo *skmers, size_t p
     }
 }
 
-inline bool RSHash3::check_minimiser_pos(uint64_t* buffer, const SkmerInfo &skmer,
+inline bool RSHash3::check_minimiser_pos(uint64_t *buffer, const SkmerInfo &skmer,
     const uint64_t query, const uint64_t queryrc,
     const size_t s, const size_t e, const size_t minimiser_pos,
     bool &forward, size_t &text_pos, size_t &start_pos, size_t &end_pos)
 {
-    if(buffer[s+minimiser_pos] == query) {
-        forward = true;
-        text_pos = skmer.position + minimiser_pos + k - 1;
-        end_pos = skmer.unitig_end;
-        return true;
-    }
     if(buffer[s+minimiser_pos] == queryrc) {
         forward = false;
         text_pos = skmer.position + minimiser_pos;
-        start_pos = skmer.unitig_begin;
-        return true;
-    }
-    if(buffer[e-1-minimiser_pos] == queryrc) {
-        forward = false;
-        text_pos = skmer.position + e-1-s-minimiser_pos;
         start_pos = skmer.unitig_begin;
         return true;
     }
@@ -613,6 +601,39 @@ inline bool RSHash3::check_minimiser_pos(uint64_t* buffer, const SkmerInfo &skme
         forward = true;
         text_pos = skmer.position + e-1-s-minimiser_pos + k - 1;
         end_pos = skmer.unitig_end;
+        return true;
+    }
+
+    return false;
+}
+
+inline bool RSHash3::check_minimiser_pos2(uint64_t *buffer, const SkmerInfo &skmer,
+    const uint64_t query, const uint64_t queryrc,
+    const size_t s, const size_t e, const size_t left_minimiser_pos, const size_t right_minimiser_pos,
+    bool &forward, size_t &text_pos, size_t &start_pos, size_t &end_pos)
+{
+    if(buffer[s+left_minimiser_pos] == queryrc) {
+        forward = false;
+        text_pos = skmer.position + left_minimiser_pos;
+        start_pos = skmer.unitig_begin;
+        return true;
+    }
+    if(buffer[e-1-left_minimiser_pos] == query) {
+        forward = true;
+        text_pos = skmer.position + e-1-s-left_minimiser_pos + k - 1;
+        end_pos = skmer.unitig_end;
+        return true;
+    }
+    if(buffer[s+right_minimiser_pos] == query) {
+        forward = true;
+        text_pos = skmer.position + right_minimiser_pos + k - 1;
+        end_pos = skmer.unitig_end;
+        return true;
+    }
+    if(buffer[e-1-right_minimiser_pos] == queryrc) {
+        forward = false;
+        text_pos = skmer.position + e-1-s-right_minimiser_pos;
+        start_pos = skmer.unitig_begin;
         return true;
     }
 
@@ -644,9 +665,7 @@ inline bool RSHash3::lookup_buffer(uint64_t* buffer, SkmerInfo* skmers, const si
     if(left_minimiser_pos != k-m-right_minimiser_pos) {
         for(size_t i = 0; i < no_skmers; i++) {
             e += span;
-            if(check_minimiser_pos(buffer, skmers[i], query, queryrc, s, e, left_minimiser_pos, forward, text_pos, start_pos, end_pos))
-                return true;
-            if(check_minimiser_pos(buffer, skmers[i], query, queryrc, s, e, right_minimiser_pos, forward, text_pos, start_pos, end_pos))
+            if(check_minimiser_pos2(buffer, skmers[i], query, queryrc, s, e, left_minimiser_pos, right_minimiser_pos, forward, text_pos, start_pos, end_pos))
                 return true;
             s = e;
         }
