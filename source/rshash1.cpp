@@ -645,87 +645,6 @@ inline bool RSHash1::lookup_buffer(uint64_t *buffer, SkmerInfo *skmers, const si
 }
 
 
-// uint64_t RSHash1::streaming_query(const uint64_t* query, size_t query_len, uint64_t &extensions)
-// {
-//     uint64_t occurences = 0;
-//     uint64_t current_pos_minimiser=std::numeric_limits<uint64_t>::max();
-//     uint64_t current_neg_minimiser=std::numeric_limits<uint64_t>::max();
-//     const uint64_t mask = compute_mask(2u * k);
-//     const uint64_t shift = 2*(k-1);
-//     uint64_t* offsets = new uint64_t[m_thres1-1];
-//     uint64_t* kmer_buffer = new uint64_t[(m_thres1-1) * span];
-//     SkmerInfo* skmers = new SkmerInfo[m_thres1-1];
-//     size_t no_skmers;
-//     size_t unitig_begin, unitig_end;
-//     size_t text_pos;
-//     bool forward;
-//     bool found = false;
-//     bool extend, rolling;
-
-//     size_t left_minimiser_position, right_minimiser_position;
-//     uint64_t kmer = query[0] & kmer_mask;
-//     uint64_t kmer_rc = crc(kmer, k);
-//     uint64_t mmer, mmer_rc;
-//     uint64_t minimiser = get_minimiser(kmer, kmer_rc, left_minimiser_position, right_minimiser_position);
-
-//     for(size_t i = k; i < query_len-k+1; i++) {
-//         uint64_t const new_rank = query >> (2*(query_len-1-i)) & 0b11;
-//         kmer = (kmer >> 2) | (new_rank << 2*(k-1));
-//         kmer_rc = ((kmer_rc << 2) | (new_rank^0b11)) & kmer_mask;
-
-//         if(found && extend_in_text(text_pos, unitig_begin, unitig_end, forward, kmer, kmer_rc, shift)) {
-//             occurences++;
-//             extensions++;
-//             rolling = false;
-//         }
-//         else {
-//             if(!rolling) {
-//                 // kmer = query >> (2*(query_len-1-i)) & kmer_mask;
-//                 // kmer_rc = crc(kmer, k);
-//                 minimiser = get_minimiser(minimiser, kmer, kmer_rc, mmer, mmer_rc, left_minimiser_position, right_minimiser_position);
-//                 rolling = true;
-//             }
-//             else {
-//                 // kmer = (kmer >> 2) | (new_rank << 2*(k-1));
-//                 // kmer_rc = ((kmer_rc << 2) | (new_rank^0b11)) & kmer_mask;
-//                 mmer = kmer >> 2*(k - m1);
-//                 mmer_rc = kmer_rc & mmer_mask;
-//                 minimiser = update_minimiser(kmer, kmer_rc, mmer, mmer_rc, left_minimiser_position, right_minimiser_position);
-//             }
-
-//             if(minimiser == current_pos_minimiser) {
-//                 found = lookup_buffer(kmer_buffer, skmers, no_skmers, kmer, kmer_rc, text_pos, left_minimiser_position, right_minimiser_position, forward, unitig_begin, unitig_end);
-//                 occurences += found;
-//             }
-//             else if(minimiser == current_neg_minimiser) {
-//                 occurences += hashmap.contains(std::min<uint64_t>(kmer, kmer_rc));
-//                 found = false;
-//             }
-//             else if(uint64_t minimiser_rank = r1.rank(minimiser); r1.rank(minimiser + 1) - minimiser_rank) {
-//                 const size_t p = s1_select.select(minimiser_rank);
-//                 no_skmers = s1_select.select(minimiser_rank+1) - p;
-
-//                 refill_buffer(offsets, kmer_buffer, skmers, p, no_skmers, mask, shift);
-//                 found = lookup_buffer(kmer_buffer, skmers, no_skmers, kmer, kmer_rc, text_pos, left_minimiser_position, right_minimiser_position, forward, unitig_begin, unitig_end);
-//                 occurences += found;
-//                 current_pos_minimiser = minimiser;
-//             }
-//             else {
-//                 occurences += hashmap.contains(std::min<uint64_t>(kmer, kmer_rc));
-//                 found = false;
-//                 current_neg_minimiser = minimiser;
-//             }
-//         }
-//     }
-
-//     delete[] kmer_buffer;
-//     delete[] skmers;
-//     delete[] offsets;
-    
-//     return occurences;
-// }
-
-
 inline uint64_t RSHash1::find_minimiser(const uint64_t kmer, const uint64_t kmer_rc, size_t &left_minimiser_position, size_t &right_minimiser_position, const uint64_t mmermask)
 {
     uint64_t mmer = kmer >> 2*(k - m1);
@@ -737,7 +656,7 @@ inline uint64_t RSHash1::find_minimiser(const uint64_t kmer, const uint64_t kmer
     for (size_t i = 1; i <= k-m1; ++i) {
         mmer = (kmer >> 2*(k-m1-i)) & mmermask;
         mmer_rc = (kmer_rc >> 2*i) & mmermask;
-        uint64_t mmerhash = std::min<uint64_t>(m_hasher.hash(mmer) & mmermask, m_hasher.hash(mmer_rc) & mmermask);
+        const uint64_t mmerhash = std::min<uint64_t>(m_hasher.hash(mmer) & mmermask, m_hasher.hash(mmer_rc) & mmermask);
         if(mmerhash < minimiser_value) {
             minimiser_value = mmerhash;
             left_minimiser_position = k-m1-i;
@@ -766,7 +685,7 @@ inline void RSHash1::update_minimiser(const uint64_t kmer, const uint64_t kmer_r
         right_minimiser_position = 0;
         return;
     }
-    else if(mmerhash == minimiser) {
+    if(mmerhash == minimiser) {
         right_minimiser_position = 0;
         return;
     }
@@ -792,7 +711,7 @@ uint64_t RSHash1::streaming_query(const std::vector<seqan3::dna4> &query, uint64
     size_t text_pos, unitig_begin, unitig_end;
     bool forward;
     bool found = false;
-    bool rolling_minimiser = false;
+    bool rolling = false;
     size_t left_minimiser_position, right_minimiser_position;
     uint64_t minimiser, minimiser_rank;
 
@@ -801,14 +720,14 @@ uint64_t RSHash1::streaming_query(const std::vector<seqan3::dna4> &query, uint64
         if(found && extend_in_text(text_pos, unitig_begin, unitig_end, forward, window.kmer_value, window.kmer_value_rev, shift)) {
             occurences++;
             extensions++;
-            rolling_minimiser = false;
+            rolling = false;
         }
         else {
-            if(rolling_minimiser)
+            if(rolling)
                 update_minimiser(window.kmer_value, window.kmer_value_rev, minimiser, left_minimiser_position, right_minimiser_position, mmermask);
             else {
                 minimiser = find_minimiser(window.kmer_value, window.kmer_value_rev, left_minimiser_position, right_minimiser_position, mmermask);
-                rolling_minimiser = true;
+                rolling = true;
             }
 
             if(minimiser == current_pos_minimiser) {

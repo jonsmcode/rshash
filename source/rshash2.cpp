@@ -14,7 +14,8 @@
 RSHash2::RSHash2() :
     endpoints(std::vector<uint64_t>{}, 1),
     r1(std::vector<uint64_t>{}, 1),
-    r2(std::vector<uint64_t>{}, 1)
+    r2(std::vector<uint64_t>{}, 1),
+    m_hasher1(seed1), m_hasher2(seed2)
 {}
 
 RSHash2::RSHash2(
@@ -23,7 +24,11 @@ RSHash2::RSHash2(
       m_thres2(m_thres2), span1(k-m1+1), span2(k-m2+1),
       endpoints(std::vector<uint64_t>{}, 1),
       r1(std::vector<uint64_t>{}, 1),
-      r2(std::vector<uint64_t>{}, 1)
+      r2(std::vector<uint64_t>{}, 1),
+      m_hasher1(seed1), m_hasher2(seed2),
+      kmermask(compute_mask(2u * k)),
+      mmermask1(compute_mask(2u * m1)),
+      mmermask2(compute_mask(2u * m2))
 {}
 
 
@@ -562,48 +567,6 @@ inline void RSHash2::refill_buffer(uint64_t *offsets, uint64_t *buffer, SkmerInf
 }
 
 
-inline void RSHash2::fill_first_buffer(uint64_t *offsets, uint64_t *buffer, SkmerInfo *skmers, size_t p, const uint64_t mask, const uint64_t shift)
-{
-    constexpr uint64_t INF = std::numeric_limits<uint64_t>::max();
-    uint64_t span = span1;
-    uint64_t o = offsets1.access(p);
-
-    uint64_t next_endpoint;
-    const uint64_t r = endpoints.rank(o+1);
-    const uint64_t prev_endpoint = endpoints.select(r-1, &next_endpoint);
-
-    const uint64_t delta = std::min<uint64_t>(o+1, span);
-    const uint64_t s1 = o + 1 - delta;
-    const uint64_t s2 = std::max<uint64_t>(s1, prev_endpoint);
-    const uint64_t e = std::min<uint64_t>(o+k, next_endpoint);
-
-    skmers[0] = {s1, prev_endpoint, next_endpoint};
-        
-    const uint64_t pad_front = span - delta;
-    std::fill(buffer, buffer + pad_front, INF);
-    buffer += pad_front;
-    if(prev_endpoint > s1) {
-        const uint64_t pad_front2 = prev_endpoint - s1;
-        std::fill(buffer, buffer + pad_front2, INF);
-        buffer += pad_front2;
-    }
-        
-    uint64_t kmer = get_word64(s2) & mask;
-    uint64_t bits = get_word64(s2 + k);
-    *buffer++ = kmer;
-    for(uint64_t j=s2+k; j < e; j++) {
-        uint64_t const next_base = bits & 3ULL;
-        bits >>= 2;
-        kmer = (kmer >> 2) | (next_base << shift);
-        *buffer++ = kmer;
-    }
-
-    const uint64_t pad_back = o + k - e;
-    std::fill(buffer, buffer + pad_back, INF);
-    buffer += pad_back;
-}
-
-
 inline bool RSHash2::check_minimiser_pos(uint64_t *buffer, const SkmerInfo &skmer,
     const uint64_t query, const uint64_t queryrc,
     const size_t s, const size_t e, const size_t minimiser_pos,
@@ -697,96 +660,86 @@ inline bool RSHash2::lookup_buffer(uint64_t* buffer, SkmerInfo* skmers, const si
 }
 
 
-inline bool RSHash2::lookup_first_buffer(uint64_t* buffer, SkmerInfo* skmers,
-    const uint64_t query, const uint64_t queryrc,
-    size_t &text_pos, const size_t left_minimiser_pos, const size_t right_minimiser_pos,
-    bool &forward, size_t &start_pos, size_t &end_pos)
+template<int level>
+inline void RSHash2::find_minimiser(const uint64_t kmer, const uint64_t kmer_rc, uint64_t &minimiser, size_t &left_minimiser_position, size_t &right_minimiser_position)
 {
-    if(left_minimiser_pos != k-m1-right_minimiser_pos)
-        return check_minimiser_pos2(buffer, skmers[0], query, queryrc, 0, span1, left_minimiser_pos, right_minimiser_pos, forward, text_pos, start_pos, end_pos);
-    else
-        return check_minimiser_pos(buffer, skmers[0], query, queryrc, 0, span1, left_minimiser_pos, forward, text_pos, start_pos, end_pos);
+    uint64_t m, mmermask;
+    mixer_64 m_hasher;
+    if constexpr (level == 1) {
+        m = m1;
+        mmermask = mmermask1;
+        m_hasher = m_hasher1;
+    }
+    if constexpr (level == 2) {
+        m = m2;
+        mmermask = mmermask2;
+        m_hasher = m_hasher2;
+    }
+
+    uint64_t mmer = kmer >> 2*(k - m);
+    uint64_t mmer_rc = kmer_rc & mmermask;
+    minimiser = std::min<uint64_t>(m_hasher.hash(mmer) & mmermask, m_hasher.hash(mmer_rc) & mmermask);
+    left_minimiser_position = k-m;
+    right_minimiser_position = 0;
+
+    for (size_t i = 1; i <= k-m; ++i) {
+        mmer = (kmer >> 2*(k-m-i)) & mmermask;
+        mmer_rc = (kmer_rc >> 2*i) & mmermask;
+        const uint64_t mmerhash = std::min<uint64_t>(m_hasher.hash(mmer) & mmermask, m_hasher.hash(mmer_rc) & mmermask);
+        if(mmerhash < minimiser) {
+            minimiser = mmerhash;
+            left_minimiser_position = k-m-i;
+            right_minimiser_position = i;
+        }
+        else if(mmerhash == minimiser)
+            left_minimiser_position = k-m-i;
+    }
+}
+
+template<int level>
+inline void RSHash2::update_minimiser(const uint64_t kmer, const uint64_t kmer_rc, uint64_t &minimiser, size_t &left_minimiser_position, size_t &right_minimiser_position)
+{
+    uint64_t m, mmermask;
+    mixer_64 m_hasher;
+    if constexpr (level == 1) {
+        m = m1;
+        mmermask = mmermask1;
+        m_hasher = m_hasher1;
+    }
+    if constexpr (level == 2) {
+        m = m2;
+        mmermask = mmermask2;
+        m_hasher = m_hasher2;
+    }
+
+    if(left_minimiser_position-- == 0) {
+        find_minimiser<level>(kmer, kmer_rc, minimiser, left_minimiser_position, right_minimiser_position);
+        return;
+    }
+
+    const uint64_t mmer = kmer >> 2*(k - m);
+    const uint64_t mmer_rc = kmer_rc & mmermask;
+    const uint64_t mmerhash = std::min<uint64_t>(m_hasher.hash(mmer) & mmermask, m_hasher.hash(mmer_rc) & mmermask);
+
+    if(mmerhash < minimiser) {
+        minimiser = mmerhash;
+        left_minimiser_position = k - m;
+        right_minimiser_position = 0;
+        return;
+    }
+    if(mmerhash == minimiser) {
+        right_minimiser_position = 0;
+        return;
+    }
+
+    right_minimiser_position++;
 }
 
 
-// uint64_t RSHash2::streaming_query(const std::vector<seqan3::dna4> &query, uint64_t &extensions)
-// {
-//     auto view = srindex::views::xor_two_minimiser_and_window2({.minimiser1_size = m1, .minimiser2_size = m2, .window_size = k, .seed1=seed1, .seed2=seed2});
-
-//     const uint64_t mask = compute_mask(2u * k);
-//     const uint64_t shift = 2*(k-1);
-//     constexpr uint64_t INF = std::numeric_limits<uint64_t>::max();
-//     uint64_t current_minimiser1=INF, current_minimiser2=INF;
-//     uint64_t current_neg_minimiser1=INF, current_neg_minimiser2=INF;
-//     uint64_t* offsets = new uint64_t[m_thres2-1];
-//     uint64_t* buffer1 = new uint64_t[(m_thres1-1) * span1];
-//     SkmerInfo* skmers1 = new SkmerInfo[m_thres1-1];
-//     uint64_t* buffer2 = new uint64_t[(m_thres2-1) * span2];
-//     SkmerInfo* skmers2 = new SkmerInfo[m_thres2-1];
-//     uint64_t minimiser_rank1, minimiser_rank2;
-//     size_t no_skmers1, no_skmers2;
-//     size_t unitig_begin, unitig_end;
-//     size_t text_pos;
-//     bool forward;
-//     bool found = false;
-//     uint64_t occurences = 0;
-
-//     for(auto && window : query | view)
-//     {
-//         if(found && extend_in_text(text_pos, unitig_begin, unitig_end, forward, window.window_value, window.window_value_rev)) {
-//             occurences++;
-//             extensions++;
-//         }
-//         else if(window.minimiser1_value == current_minimiser1) {
-//             found = lookup_buffer<1>(buffer1, skmers1, no_skmers1, window.window_value, window.window_value_rev, text_pos, window.minimiser1_left_position, window.minimiser1_right_position, forward, unitig_begin, unitig_end);
-//             occurences += found;
-//         }
-//         else if(window.minimiser1_value != current_neg_minimiser1 && (minimiser_rank1 = r1.rank(window.minimiser1_value), r1.rank(window.minimiser1_value + 1) - minimiser_rank1)) {
-//             const size_t p = s1_select.select(minimiser_rank1);
-//             no_skmers1 = s1_select.select(minimiser_rank1+1) - p;
-
-//             refill_buffer<1>(offsets, buffer1, skmers1, p, no_skmers1, mask, shift);
-//             found = lookup_buffer<1>(buffer1, skmers1, no_skmers1, window.window_value, window.window_value_rev, text_pos, window.minimiser1_left_position, window.minimiser1_right_position, forward, unitig_begin, unitig_end);
-//             occurences += found;
-//             current_minimiser1 = window.minimiser1_value;
-//         }
-//         else if(window.minimiser2_value == current_minimiser2) {
-//             found = lookup_buffer<2>(buffer2, skmers2, no_skmers2, window.window_value, window.window_value_rev, text_pos, window.minimiser2_left_position, window.minimiser2_right_position, forward, unitig_begin, unitig_end);
-//             occurences += found;
-//         }
-//         else if(window.minimiser2_value != current_neg_minimiser2 && (minimiser_rank2 = r2.rank(window.minimiser2_value), r2.rank(window.minimiser2_value + 1) - minimiser_rank2)) {
-//             const size_t p = s2_select.select(minimiser_rank2);
-//             no_skmers2 = s2_select.select(minimiser_rank2+1) - p;
-
-//             refill_buffer<2>(offsets, buffer2, skmers2, p, no_skmers2, mask, shift);
-//             found = lookup_buffer<2>(buffer2, skmers2, no_skmers2, window.window_value, window.window_value_rev, text_pos, window.minimiser2_left_position, window.minimiser2_right_position, forward, unitig_begin, unitig_end);
-//             occurences += found;
-//             current_minimiser2 = window.minimiser2_value;
-//             current_neg_minimiser1 = window.minimiser1_value;
-//         }
-//         else {
-//             occurences += hashmap.contains(std::min<uint64_t>(window.window_value, window.window_value_rev));
-//             found = false;
-//             current_neg_minimiser1 = window.minimiser1_value;
-//             current_neg_minimiser2 = window.minimiser2_value;
-//         }
-
-//     }
-
-//     delete[] offsets;
-//     delete[] buffer1;
-//     delete[] skmers1;
-//     delete[] buffer2;
-//     delete[] skmers2;
-    
-//     return occurences;
-// }
-
 uint64_t RSHash2::streaming_query(const std::vector<seqan3::dna4> &query, uint64_t &extensions)
 {
-    auto view = srindex::views::xor_two_minimiser_and_window2({.minimiser1_size = m1, .minimiser2_size = m2, .window_size = k, .seed1=seed1, .seed2=seed2});
+    auto view = srindex::views::kmerview({.window_size = k});
 
-    const uint64_t mask = compute_mask(2u * k);
     const uint64_t shift = 2*(k-1);
     constexpr uint64_t INF = std::numeric_limits<uint64_t>::max();
     uint64_t current_minimiser1=INF, current_minimiser2=INF;
@@ -796,54 +749,80 @@ uint64_t RSHash2::streaming_query(const std::vector<seqan3::dna4> &query, uint64
     SkmerInfo* skmers1 = new SkmerInfo[m_thres1-1];
     uint64_t* buffer2 = new uint64_t[(m_thres2-1) * span2];
     SkmerInfo* skmers2 = new SkmerInfo[m_thres2-1];
-    uint64_t minimiser_rank1, minimiser_rank2;
     size_t no_skmers1, no_skmers2;
     size_t unitig_begin, unitig_end;
     size_t text_pos;
     bool forward;
     bool found = false;
+    bool rolling1 = false;
+    bool rolling2 = false;
     uint64_t occurences = 0;
+    size_t left_minimiser1_position, right_minimiser1_position;
+    uint64_t minimiser1, minimiser1_rank;
+    size_t left_minimiser2_position, right_minimiser2_position;
+    uint64_t minimiser2, minimiser2_rank;
 
     for(auto && window : query | view)
     {
-        if(found && extend_in_text(text_pos, unitig_begin, unitig_end, forward, window.window_value, window.window_value_rev)) {
+        if(found && extend_in_text(text_pos, unitig_begin, unitig_end, forward, window.kmer_value, window.kmer_value_rev)) {
             occurences++;
             extensions++;
-        }
-        else if(window.minimiser1_value == current_minimiser1) {
-            found = lookup_first_buffer(buffer1, skmers1, window.window_value, window.window_value_rev, text_pos, window.minimiser1_left_position, window.minimiser1_right_position, forward, unitig_begin, unitig_end);
-            occurences += found;
-        }
-        else if(window.minimiser1_value != current_neg_minimiser1 && (minimiser_rank1 = r1.rank(window.minimiser1_value), r1.rank(window.minimiser1_value + 1) - minimiser_rank1)) {
-            const size_t p = s1_select.select(minimiser_rank1);
-            // no_skmers1 = s1_select.select(minimiser_rank1+1) - p;
-
-            fill_first_buffer(offsets, buffer1, skmers1, p, mask, shift);
-            found = lookup_first_buffer(buffer1, skmers1, window.window_value, window.window_value_rev, text_pos, window.minimiser1_left_position, window.minimiser1_right_position, forward, unitig_begin, unitig_end);
-            occurences += found;
-            current_minimiser1 = window.minimiser1_value;
-        }
-        else if(window.minimiser2_value == current_minimiser2) {
-            found = lookup_buffer<2>(buffer2, skmers2, no_skmers2, window.window_value, window.window_value_rev, text_pos, window.minimiser2_left_position, window.minimiser2_right_position, forward, unitig_begin, unitig_end);
-            occurences += found;
-        }
-        else if(window.minimiser2_value != current_neg_minimiser2 && (minimiser_rank2 = r2.rank(window.minimiser2_value), r2.rank(window.minimiser2_value + 1) - minimiser_rank2)) {
-            const size_t p = s2_select.select(minimiser_rank2);
-            no_skmers2 = s2_select.select(minimiser_rank2+1) - p;
-
-            refill_buffer<2>(offsets, buffer2, skmers2, p, no_skmers2, mask, shift);
-            found = lookup_buffer<2>(buffer2, skmers2, no_skmers2, window.window_value, window.window_value_rev, text_pos, window.minimiser2_left_position, window.minimiser2_right_position, forward, unitig_begin, unitig_end);
-            occurences += found;
-            current_minimiser2 = window.minimiser2_value;
-            current_neg_minimiser1 = window.minimiser1_value;
+            rolling1 = false;
+            rolling2 = false;
         }
         else {
-            occurences += hashmap.contains(std::min<uint64_t>(window.window_value, window.window_value_rev));
-            found = false;
-            current_neg_minimiser1 = window.minimiser1_value;
-            current_neg_minimiser2 = window.minimiser2_value;
-        }
+            if(rolling1)
+                update_minimiser<1>(window.kmer_value, window.kmer_value_rev, minimiser1, left_minimiser1_position, right_minimiser1_position);
+            else {
+                find_minimiser<1>(window.kmer_value, window.kmer_value_rev, minimiser1, left_minimiser1_position, right_minimiser1_position);
+                rolling1 = true;
+            }
 
+            if(minimiser1 == current_minimiser1) {
+                found = lookup_buffer<1>(buffer1, skmers1, no_skmers1, window.kmer_value, window.kmer_value_rev, text_pos, left_minimiser1_position, right_minimiser1_position, forward, unitig_begin, unitig_end);
+                occurences += found;
+                rolling2 = false;
+            }
+            else if(minimiser1 != current_neg_minimiser1 && (minimiser1_rank = r1.rank(minimiser1), r1.rank(minimiser1 + 1) - minimiser1_rank)) {
+                const size_t p = s1_select.select(minimiser1_rank);
+                no_skmers1 = s1_select.select(minimiser1_rank+1) - p;
+
+                refill_buffer<1>(offsets, buffer1, skmers1, p, no_skmers1, kmermask, shift);
+                found = lookup_buffer<1>(buffer1, skmers1, no_skmers1, window.kmer_value, window.kmer_value_rev, text_pos, left_minimiser1_position, right_minimiser1_position, forward, unitig_begin, unitig_end);
+                occurences += found;
+                current_minimiser1 = minimiser1;
+                rolling2 = false;
+            }
+            else {
+                if(rolling2)
+                    update_minimiser<2>(window.kmer_value, window.kmer_value_rev, minimiser2, left_minimiser2_position, right_minimiser2_position);
+                else {
+                    find_minimiser<2>(window.kmer_value, window.kmer_value_rev, minimiser2, left_minimiser2_position, right_minimiser2_position);
+                    rolling2 = true;
+                }
+
+                if(minimiser2 == current_minimiser2) {
+                    found = lookup_buffer<2>(buffer2, skmers2, no_skmers2, window.kmer_value, window.kmer_value_rev, text_pos, left_minimiser2_position, right_minimiser2_position, forward, unitig_begin, unitig_end);
+                    occurences += found;
+                }
+                else if(minimiser2 != current_neg_minimiser2 && (minimiser2_rank = r2.rank(minimiser2), r2.rank(minimiser2 + 1) - minimiser2_rank)) {
+                    const size_t p = s2_select.select(minimiser2_rank);
+                    no_skmers2 = s2_select.select(minimiser2_rank+1) - p;
+
+                    refill_buffer<2>(offsets, buffer2, skmers2, p, no_skmers2, kmermask, shift);
+                    found = lookup_buffer<2>(buffer2, skmers2, no_skmers2, window.kmer_value, window.kmer_value_rev, text_pos, left_minimiser2_position, right_minimiser2_position, forward, unitig_begin, unitig_end);
+                    occurences += found;
+                    current_minimiser2 = minimiser2;
+                    current_neg_minimiser1 = minimiser1;
+                }
+                else {
+                    occurences += hashmap.contains(std::min<uint64_t>(window.kmer_value, window.kmer_value_rev));
+                    found = false;
+                    current_neg_minimiser1 = minimiser1;
+                    current_neg_minimiser2 = minimiser2;
+                }
+            }
+        }
     }
 
     delete[] offsets;
@@ -854,8 +833,6 @@ uint64_t RSHash2::streaming_query(const std::vector<seqan3::dna4> &query, uint64
     
     return occurences;
 }
-
-
 
 
 int RSHash2::save(const std::filesystem::path &filepath) {
@@ -902,6 +879,9 @@ int RSHash2::load(const std::filesystem::path &filepath) {
 
     this->span1 = k - m1 + 1;
     this->span2 = k - m2 + 1;
+    this->kmermask = compute_mask(2u * k);
+    this->mmermask1 = compute_mask(2u * m1);
+    this->mmermask2 = compute_mask(2u * m2);
 
     std::cout << "loaded index...\n";
 

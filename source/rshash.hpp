@@ -135,6 +135,8 @@ class RSHash2
 private:
     uint64_t k, m1, m_thres1, m2, m_thres2;
     uint64_t span1, span2;
+    uint64_t kmermask, mmermask1, mmermask2;
+    mixer_64 m_hasher1, m_hasher2;
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> r1, r2;
     bit_vector s1, s2;
     sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s1_select, s2_select;
@@ -142,6 +144,12 @@ private:
     gtl::flat_hash_set<uint64_t> hashmap;
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> endpoints;
     std::vector<uint64_t> text;
+    template<int level>
+    inline void find_minimiser(const uint64_t, const uint64_t, uint64_t&, size_t &, size_t &);
+    // inline void find_minimiser1(const uint64_t, const uint64_t, uint64_t&, size_t &, size_t &);
+    // inline void find_minimiser2(const uint64_t, const uint64_t, uint64_t&, size_t &, size_t &);
+    template<int level>
+    inline void update_minimiser(const uint64_t, const uint64_t, uint64_t&, size_t &, size_t &);
     template<int level>
     inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, double &, double &, double &);
     template<int level>
