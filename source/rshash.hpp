@@ -45,11 +45,13 @@ static inline constexpr uint64_t crc(uint64_t x, uint64_t k) {
     return res;
 }
 
-inline std::vector<uint64_t> pack_dna4_to_uint64(const std::vector<std::vector<seqan3::dna4>> & input)
+inline std::vector<uint64_t> pack_dna4_to_uint64(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input)
 {
     auto ranks = input | std::views::join | seqan3::views::to_rank;
 
     std::vector<uint64_t> packed;
+    packed.push_back(UINT64_MAX); // padding for left extension
+
     uint64_t word = 0;
     size_t shift = 0;
 
@@ -69,7 +71,7 @@ inline std::vector<uint64_t> pack_dna4_to_uint64(const std::vector<std::vector<s
     if (shift != 0) // last partial word
         packed.push_back(word);
 
-    packed.push_back(0);
+    packed.push_back(UINT64_MAX); // padding for right extension
 
     return packed;
 }
@@ -106,8 +108,15 @@ private:
     inline bool check(uint64_t*, std::array<uint64_t, 2>*, const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, const uint64_t);
     inline bool check_minimiser_pos(uint64_t *, const SkmerInfo&, const uint64_t, const uint64_t, const size_t, const size_t, const size_t, bool &, size_t &, size_t &, size_t &);
     inline bool check_minimiser_pos2(uint64_t *, const SkmerInfo&, const uint64_t, const uint64_t, const size_t, const size_t, const size_t, const size_t, bool &, size_t &, size_t &, size_t &);
+    // inline bool check_minimiser_pos(uint64_t *, const uint64_t, const uint64_t, const uint64_t, const size_t, const size_t, const size_t, bool &, size_t &, size_t &, size_t &);
+    // inline bool check_minimiser_pos2(uint64_t *, const uint64_t, const uint64_t, const uint64_t, const size_t, const size_t, const size_t, const size_t, bool &, size_t &, size_t &, size_t &);
+    // inline bool check_overlap(uint64_t, uint64_t, uint64_t &, uint64_t &);
+    // inline bool check_overlap_fwd(uint64_t, uint64_t, uint64_t &);
+    // inline bool check_overlap_rev(uint64_t, uint64_t, uint64_t &);
     inline void refill_buffer(uint64_t *, uint64_t*, SkmerInfo*, size_t, size_t, const uint64_t, const uint64_t);
+    // inline void refill_buffer(uint64_t *, uint64_t*, size_t, size_t, const uint64_t, const uint64_t);
     inline bool lookup_buffer(uint64_t *, SkmerInfo *, const size_t, const uint64_t, const uint64_t, size_t &, const size_t, const size_t, bool &, size_t &, size_t &);
+    // inline bool lookup_buffer(uint64_t *, uint64_t *, const size_t, const uint64_t, const uint64_t, size_t &, const size_t, const size_t, bool &, size_t &, size_t &);
     inline bool extend_in_text(size_t&, size_t, size_t, bool, const uint64_t, const uint64_t, const uint64_t);
     const inline uint64_t get_word64(uint64_t pos);
     const inline uint64_t get_base(uint64_t pos);
@@ -122,9 +131,9 @@ public:
     std::vector<uint64_t> rand_text_kmers(const uint64_t);
     uint64_t access(const uint64_t, const size_t);
     uint64_t lookup(const std::vector<uint64_t>&, bool verbose);
-    int build(const std::vector<std::vector<seqan3::dna4>>&);
-    uint64_t streaming_query(const std::vector<seqan3::dna4>&, uint64_t&);
-    uint64_t streaming_query(const std::vector<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
+    int build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&);
+    uint64_t streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4>&, uint64_t&);
+    uint64_t streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
     void save(const std::filesystem::path&);
     void load(const std::filesystem::path&);
 };
@@ -177,9 +186,9 @@ public:
     std::vector<uint64_t> rand_text_kmers(const uint64_t);
     uint64_t access(const uint64_t, const size_t);
     uint64_t lookup(const std::vector<uint64_t>&, bool verbose);
-    int build(const std::vector<std::vector<seqan3::dna4>>&);
-    uint64_t streaming_query(const std::vector<seqan3::dna4>&, uint64_t&);
-    uint64_t streaming_query(const std::vector<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
+    int build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&);
+    uint64_t streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4>&, uint64_t&);
+    uint64_t streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
     int save(const std::filesystem::path&);
     int load(const std::filesystem::path&);
 };
@@ -224,9 +233,8 @@ public:
     std::vector<uint64_t> rand_text_kmers(const uint64_t);
     uint64_t access(const uint64_t, const size_t);
     uint64_t lookup(const std::vector<uint64_t>&, bool verbose);
-    int build(const std::vector<std::vector<seqan3::dna4>>&);
-    uint64_t streaming_query(const std::vector<seqan3::dna4>&, uint64_t&);
-    uint64_t streaming_query(const std::vector<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
+    int build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &);
+    uint64_t streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4> &, uint64_t&);
     int save(const std::filesystem::path&);
     int load(const std::filesystem::path&);
 };
@@ -269,9 +277,11 @@ public:
     std::vector<uint64_t> rand_text_kmers(const uint64_t);
     uint64_t access(const uint64_t, const size_t);
     uint64_t lookup(const std::vector<uint64_t>&, bool verbose);
-    int build(const std::vector<std::vector<seqan3::dna4>>&);
-    uint64_t streaming_query(const std::vector<seqan3::dna4>&, uint64_t&);
-    uint64_t streaming_query(const std::vector<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
+    int build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&);
+    // uint64_t streaming_query(const std::vector<seqan3::dna4>&, uint64_t&);
+    // uint64_t streaming_query(const std::vector<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
+    uint64_t streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4>&, uint64_t&);
+    uint64_t streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
     int save(const std::filesystem::path&);
     int load(const std::filesystem::path&);
 };

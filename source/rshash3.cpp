@@ -27,7 +27,7 @@ RSHash3::RSHash3(
 {}
 
 
-int RSHash3::build(const std::vector<std::vector<seqan3::dna4>> &input)
+int RSHash3::build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input)
 {
     auto minimiserview1 = srindex::views::xor_minimiser_and_positions2({.minimiser_size = m1, .window_size = k, .seed=seed1});
     auto minimiserview2 = srindex::views::xor_minimiser_and_positions2({.minimiser_size = m2, .window_size = k, .seed=seed2});
@@ -683,7 +683,7 @@ inline bool RSHash3::lookup_buffer(uint64_t* buffer, SkmerInfo* skmers, const si
 }
 
 
-uint64_t RSHash3::streaming_query(const std::vector<seqan3::dna4> &query, uint64_t &extensions)
+uint64_t RSHash3::streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4> &query, uint64_t &extensions)
 {
     auto view = srindex::views::xor_three_minimiser_and_window2({.minimiser1_size = m1, .minimiser2_size = m2, .minimiser3_size = m3, .window_size = k, .seed1=seed1, .seed2=seed2, .seed3=seed3});
 

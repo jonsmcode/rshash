@@ -82,14 +82,22 @@ struct my_traits:seqan3::sequence_file_input_default_traits_dna {
 };
 
 
-void load_file(const std::filesystem::path &filepath, std::vector<std::vector<seqan3::dna4>> &output) {
+// void load_file(const std::filesystem::path &filepath, std::vector<std::vector<seqan3::dna4>> &output) {
+//     auto stream = seqan3::sequence_file_input<my_traits>{filepath};
+//     size_t N = 0;
+//     for (auto & record : stream) {
+//         N += record.sequence().size();
+//         output.push_back(std::move(record.sequence()));
+//     }
+// }
+void load_file(const std::filesystem::path &filepath,
+               std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &output)
+{
     auto stream = seqan3::sequence_file_input<my_traits>{filepath};
-    size_t N = 0;
     for (auto & record : stream) {
-        N += record.sequence().size();
-        output.push_back(std::move(record.sequence()));
-        // if(N > 1'000'000'000)
-        //     break;
+        seqan3::bitpacked_sequence<seqan3::dna4> seq;
+        seq.assign(record.sequence().begin(), record.sequence().end());
+        output.push_back(std::move(seq));
     }
 }
 
@@ -118,8 +126,10 @@ int main(int argc, char** argv)
 
     if(args.cmd == "build") {
         std::cout << "loading text...\n";
-        std::vector<std::vector<seqan3::dna4>> text;
+        // std::vector<std::vector<seqan3::dna4>> text;
+        std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> text;
         load_file(args.i, text);
+        // pad_text(text, args.k-args.m1+1);
 
         std::cout << "building dict...\n";
         if(args.l == 1) {
@@ -149,7 +159,8 @@ int main(int argc, char** argv)
     }
     else if(args.cmd == "query") {
         std::cout << "loading queries...\n";
-        std::vector<std::vector<seqan3::dna4>> queries;
+        // std::vector<std::vector<seqan3::dna4>> queries;
+        std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> queries;
         load_file(args.q, queries);
 
         uint64_t kmers = 0;

@@ -38,7 +38,8 @@ RSHash1::RSHash1(
 {}
 
 
-int RSHash1::build(const std::vector<std::vector<seqan3::dna4>> &input)
+// int RSHash1::build(const std::vector<std::vector<seqan3::dna4>> &input)
+int RSHash1::build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input)
 {
     // auto view1 = srindex::views::xor_minimiser_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
     auto view1 = srindex::views::xor_minimiser_and_positions2({.minimiser_size = m1, .window_size = k, .seed=seed1});
@@ -64,14 +65,15 @@ int RSHash1::build(const std::vector<std::vector<seqan3::dna4>> &input)
     std::cout << "no sequences: " << no_sequences << "\n";
 
     std::cout << "get sequences...\n";
-    bit_vector sequences = bit_vector(N+1, 0);
-    size_t j = 0;
+    bit_vector sequences = bit_vector(N+2, 0);
     sequences[0] = 1;
+    sequences[32] = 1;
+    size_t j = 32;
     for(uint64_t i=0; i < no_sequences; i++) {
         j += input[i].size();
         sequences[j] = 1;
     }
-    endpoints = sux::bits::EliasFano(reinterpret_cast<uint64_t*>(sequences.data()), N+1);
+    endpoints = sux::bits::EliasFano(reinterpret_cast<uint64_t*>(sequences.data()), N+2);
     sequences = bit_vector();
 
     std::cout << "count minimizers1...\n";
@@ -123,14 +125,14 @@ int RSHash1::build(const std::vector<std::vector<seqan3::dna4>> &input)
     unfreq_minimizers1.clear();
 
     std::cout << "filling offsets_1...\n";
-    const size_t offset_width = std::bit_width(N);
+    const size_t offset_width = std::bit_width(N+span);
     pthash::compact_vector::builder b1;
     b1.resize(n1, offset_width);
 
     uint8_t* count1 = new uint8_t[c1tmp];
     std::memset(count1, 0, c1tmp*sizeof(uint8_t));
 
-    size_t length = 0;
+    size_t length = 32;
     for(auto & sequence : input) {
         for (auto && minimiser : sequence | view1) {
             if(uint64_t i = r1.rank(minimiser.minimiser_value); r1.rank(minimiser.minimiser_value+1)-i) {
@@ -198,10 +200,17 @@ int RSHash1::build(const std::vector<std::vector<seqan3::dna4>> &input)
 
     std::cout << "build level 2...\n";
 
-    // // todo: simple kmer view
+    // size_t i = 0;
+    // for(const auto& sequence : freq_skmers1) {
+    //     std::cout << ">freq superkmer " << i++ << std::endl;
+    //     for(const auto& nucleotide : sequence)
+    //         std::cout << nucleotide.to_char();
+    //     std::cout << std::endl;
+    // }
+
     for(auto & sequence : freq_skmers1) {
-        for(auto && minimiser : sequence | view3) {
-            hashmap.insert(std::min<uint64_t>(minimiser.window_value, minimiser.window_value_rev));
+        for(auto && window : sequence | srindex::views::kmerview({.window_size = k})) {
+            hashmap.insert(std::min<uint64_t>(window.kmer_value, window.kmer_value_rev));
         }
     }
 
@@ -221,6 +230,7 @@ int RSHash1::build(const std::vector<std::vector<seqan3::dna4>> &input)
     // r2 = sd_vector<>(builder2);
 
     std::cout << "copy text...\n";
+    // pad_text(input, span);
     text = pack_dna4_to_uint64(input);
     // seqan3::bitpacked_sequence<seqan3::dna4> text_;
     // for(auto & record : input) {
@@ -517,35 +527,28 @@ inline void RSHash1::refill_buffer(uint64_t *offsets, uint64_t *buffer, SkmerInf
 {
     for(uint64_t i = 0; i < N; i++) {
         const uint64_t o = offsets1.access(p+i);
-        const uint64_t s1 = o + 1 - std::min<uint64_t>(o+1, span);
 
         uint64_t next_endpoint;
         const uint64_t r = endpoints.rank(o+1);
         const uint64_t prev_endpoint = endpoints.select(r-1, &next_endpoint);
 
-        skmers[i] = {s1, prev_endpoint, next_endpoint};
+        skmers[i] = {o+1-span, prev_endpoint, next_endpoint};
         offsets[i] = o;
     }
     for(uint64_t i = 0; i < N; i++) {
         const auto& skmer = skmers[i];
-        const uint64_t s1 = skmer.position;
+        const uint64_t s = skmer.position;
         const uint64_t prev_endpoint = skmer.unitig_begin;
         const uint64_t next_endpoint = skmer.unitig_end;
         const uint64_t o = offsets[i];
         const uint64_t ok = o + k;
-        const uint64_t s2 = std::max<uint64_t>(s1, prev_endpoint);
+        const uint64_t s2 = std::max<uint64_t>(s, prev_endpoint);
         const uint64_t e = std::min<uint64_t>(ok, next_endpoint);
         const uint64_t pad_back = ok - e;
-        const uint64_t delta = std::min<uint64_t>(o+1, span);
-        const uint64_t pad_front = span - delta;
-
+        
+        const uint64_t pad_front = s2 - s;
         std::memset(buffer, 0xFF, pad_front * sizeof(uint64_t));
         buffer += pad_front;
-        if(prev_endpoint > s1) {
-            const uint64_t pad_front2 = prev_endpoint - s1;
-            std::memset(buffer, 0xFF, pad_front2 * sizeof(uint64_t));
-            buffer += pad_front2;
-        }
         
         uint64_t kmer = get_word64(s2) & mask;
         uint64_t bits = get_word64(s2 + k);
@@ -561,6 +564,148 @@ inline void RSHash1::refill_buffer(uint64_t *offsets, uint64_t *buffer, SkmerInf
         buffer += pad_back;
     }
 }
+
+
+// inline void RSHash1::refill_buffer(uint64_t *offsets, uint64_t *buffer, size_t p, size_t N, const uint64_t mask, const uint64_t shift)
+// {
+//     for(uint64_t i = 0; i < N; i++) {
+//         const uint64_t o = offsets1.access(p+i);
+//         offsets[i] = o + 1 - span;
+//     }
+
+//     for(uint64_t i = 0; i < N; i++) {
+//         const uint64_t s = offsets[i];
+
+//         uint64_t kmer = get_word64(s) & mask;
+//         uint64_t bits = get_word64(s + k);
+//         *buffer++ = kmer;
+//         for(uint64_t j=0; j < span-1; j++) {
+//             uint64_t const next_base = bits & 3ULL;
+//             bits >>= 2;
+//             kmer = (kmer >> 2) | (next_base << shift);
+//             *buffer++ = kmer;
+//         }
+
+//     }
+// }
+
+
+// inline bool RSHash1::check_minimiser_pos(uint64_t *buffer, const uint64_t offset,
+//     const uint64_t query, const uint64_t queryrc,
+//     const size_t s, const size_t e, const size_t minimiser_pos,
+//     bool &forward, size_t &text_pos, size_t &start_pos, size_t &end_pos)
+// {
+//     if(buffer[s+minimiser_pos] == queryrc) {
+//         forward = false;
+//         text_pos = offset+span-1 + minimiser_pos;
+//         // if(check_overlap(offset, text_pos, start_pos, end_pos))
+//         //     return true;
+//         // if(check_overlap_rev(offset, text_pos, start_pos))
+//             return true;
+//     }
+//     if(buffer[e-1-minimiser_pos] == query) {
+//         forward = true;
+//         text_pos = offset+span-1 + e-1-s-minimiser_pos + k - 1;
+//         // if(check_overlap(offset, text_pos, start_pos, end_pos))
+//         //     return true;
+//         // if(check_overlap_fwd(offset, text_pos, end_pos))
+//             return true;
+//     }
+//     return false;
+// }
+
+// inline bool RSHash1::check_minimiser_pos2(uint64_t *buffer, const uint64_t offset,
+//     const uint64_t query, const uint64_t queryrc,
+//     const size_t s, const size_t e, const size_t left_minimiser_pos, const size_t right_minimiser_pos,
+//     bool &forward, size_t &text_pos, size_t &start_pos, size_t &end_pos)
+// {
+//     if(buffer[s+left_minimiser_pos] == queryrc) {
+//         forward = false;
+//         text_pos = offset+span-1 + left_minimiser_pos;
+//         // if(check_overlap(offset, text_pos, start_pos, end_pos))
+//         //     return true;
+//         // if(check_overlap_rev(offset, text_pos, start_pos))
+//             return true;
+//     }
+//     if(buffer[e-1-left_minimiser_pos] == query) {
+//         forward = true;
+//         text_pos = offset+span-1 + e-1-s-left_minimiser_pos + k - 1;
+//         // if(check_overlap(offset, text_pos, start_pos, end_pos))
+//         //     return true;
+//         // if(check_overlap_fwd(offset, text_pos, end_pos))
+//             return true;
+//     }
+//     if(buffer[s+right_minimiser_pos] == query) {
+//         forward = true;
+//         text_pos = offset+span-1 + right_minimiser_pos + k - 1;
+//         // if(check_overlap(offset, text_pos, start_pos, end_pos))
+//         //     return true;
+//         // if(check_overlap_fwd(offset, text_pos, end_pos))
+//             return true;
+//     }
+//     if(buffer[e-1-right_minimiser_pos] == queryrc) {
+//         forward = false;
+//         text_pos = offset+span-1 + e-1-s-right_minimiser_pos;
+//         // if(check_overlap(offset, text_pos, start_pos, end_pos))
+//         //     return true;
+//         // if(check_overlap_rev(offset, text_pos, start_pos))
+//             return true;
+//     }
+
+//     return false;
+// }
+
+
+// inline bool RSHash1::check_overlap(uint64_t skmer_pos, uint64_t text_pos, uint64_t &start_pos, uint64_t &end_pos)
+// {
+//     const uint64_t r = endpoints.rank(skmer_pos+span);
+//     start_pos = endpoints.select(r-1, &end_pos);
+
+//     return text_pos >= start_pos && text_pos < end_pos;
+// }
+
+// inline bool RSHash1::check_overlap_fwd(uint64_t skmer_pos, uint64_t text_pos, uint64_t &end_pos)
+// {
+//     const uint64_t r = endpoints.rank(skmer_pos+span);
+//     end_pos = endpoints.select(r);
+
+//     return text_pos < end_pos;
+// }
+
+// inline bool RSHash1::check_overlap_rev(uint64_t skmer_pos, uint64_t text_pos, uint64_t &start_pos)
+// {
+//     const uint64_t r = endpoints.rank(skmer_pos+span);
+//     start_pos = endpoints.select(r-1);
+
+//     return text_pos >= start_pos;
+// }
+
+
+// inline bool RSHash1::lookup_buffer(uint64_t *buffer, uint64_t *offsets, const size_t no_skmers,
+//     const uint64_t query, const uint64_t queryrc,
+//     size_t &text_pos, const size_t left_minimiser_pos, const size_t right_minimiser_pos,
+//     bool &forward, size_t &start_pos, size_t &end_pos)
+// {
+//     size_t s = 0, e = 0;
+//     if(left_minimiser_pos != k-m1-right_minimiser_pos) {
+//         for(size_t i = 0; i < no_skmers; i++) {
+//             e += span;
+//             if(check_minimiser_pos2(buffer, offsets[i], query, queryrc, s, e, left_minimiser_pos, right_minimiser_pos, forward, text_pos, start_pos, end_pos))
+//                 return true;
+//             s = e;
+//         }
+//     }
+//     else {
+//         for(size_t i = 0; i < no_skmers; i++) {
+//             e += span;
+//             if(check_minimiser_pos(buffer, offsets[i], query, queryrc, s, e, left_minimiser_pos, forward, text_pos, start_pos, end_pos))
+//                 return true;
+//             s = e;
+//         }
+//     }
+    
+//     return false;
+// }
 
 
 inline bool RSHash1::check_minimiser_pos(uint64_t *buffer, const SkmerInfo &skmer,
@@ -694,7 +839,7 @@ inline void RSHash1::update_minimiser(const uint64_t kmer, const uint64_t kmer_r
 }
 
 
-uint64_t RSHash1::streaming_query(const std::vector<seqan3::dna4> &query, uint64_t &extensions)
+uint64_t RSHash1::streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4> &query, uint64_t &extensions)
 {
     auto view = srindex::views::kmerview({.window_size = k});
 
@@ -732,6 +877,7 @@ uint64_t RSHash1::streaming_query(const std::vector<seqan3::dna4> &query, uint64
 
             if(minimiser == current_pos_minimiser) {
                 found = lookup_buffer(kmer_buffer, skmers, no_skmers, window.kmer_value, window.kmer_value_rev, text_pos, left_minimiser_position, right_minimiser_position, forward, unitig_begin, unitig_end);
+                // found = lookup_buffer(kmer_buffer, offsets, no_skmers, window.kmer_value, window.kmer_value_rev, text_pos, left_minimiser_position, right_minimiser_position, forward, unitig_begin, unitig_end);
                 occurences += found;
             }
             else if(minimiser != current_neg_minimiser && (minimiser_rank = r1.rank(minimiser), r1.rank(minimiser + 1) - minimiser_rank)) {
@@ -739,7 +885,9 @@ uint64_t RSHash1::streaming_query(const std::vector<seqan3::dna4> &query, uint64
                 no_skmers = s1_select.select(minimiser_rank+1) - p;
 
                 refill_buffer(offsets, kmer_buffer, skmers, p, no_skmers, kmermask, shift);
+                // refill_buffer(offsets, kmer_buffer, p, no_skmers, kmermask, shift);
                 found = lookup_buffer(kmer_buffer, skmers, no_skmers, window.kmer_value, window.kmer_value_rev, text_pos, left_minimiser_position, right_minimiser_position, forward, unitig_begin, unitig_end);
+                // found = lookup_buffer(kmer_buffer, offsets, no_skmers, window.kmer_value, window.kmer_value_rev, text_pos, left_minimiser_position, right_minimiser_position, forward, unitig_begin, unitig_end);
                 occurences += found;
                 current_pos_minimiser = minimiser;
             }

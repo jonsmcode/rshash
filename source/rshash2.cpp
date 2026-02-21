@@ -32,7 +32,7 @@ RSHash2::RSHash2(
 {}
 
 
-int RSHash2::build(const std::vector<std::vector<seqan3::dna4>> &input)
+int RSHash2::build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& input)
 {
     auto minimiserview1 = srindex::views::xor_minimiser_and_positions2({.minimiser_size = m1, .window_size = k, .seed=seed1});
     auto minimiserview2 = srindex::views::xor_minimiser_and_positions2({.minimiser_size = m2, .window_size = k, .seed=seed2});
@@ -515,38 +515,44 @@ inline bool RSHash2::extend_in_text(size_t &text_pos, size_t start, size_t end,
 template<int level>
 inline void RSHash2::refill_buffer(uint64_t *offsets, uint64_t *buffer, SkmerInfo *skmers, size_t p, size_t N, const uint64_t mask, const uint64_t shift)
 {
-    constexpr uint64_t INF = std::numeric_limits<uint64_t>::max();
     uint64_t span;
     if constexpr (level == 1)
         span = span1;
     if constexpr (level == 2)
         span = span2;
-
+    
     for(size_t i = 0; i < N; i++) {
+        uint64_t o;
         if constexpr (level == 1)
-            offsets[i] = offsets1.access(p+i);
+            o = offsets1.access(p+i);
         if constexpr (level == 2)
-            offsets[i] = offsets2.access(p+i);
-    }
-    for(size_t i = 0; i < N; i++) {
-        uint64_t o = offsets[i];
+            o = offsets2.access(p+i);
+        const uint64_t s1 = o + 1 - std::min<uint64_t>(o+1, span);
         uint64_t next_endpoint;
         const uint64_t r = endpoints.rank(o+1);
         const uint64_t prev_endpoint = endpoints.select(r-1, &next_endpoint);
 
-        const uint64_t delta = std::min<uint64_t>(o+1, span);
-        const uint64_t s1 = o + 1 - delta;
-        const uint64_t s2 = std::max<uint64_t>(s1, prev_endpoint);
-        const uint64_t e = std::min<uint64_t>(o+k, next_endpoint);
-
         skmers[i] = {s1, prev_endpoint, next_endpoint};
-        
+        offsets[i] = o;
+    }
+    for(uint64_t i = 0; i < N; i++) {
+        const auto& skmer = skmers[i];
+        const uint64_t s1 = skmer.position;
+        const uint64_t prev_endpoint = skmer.unitig_begin;
+        const uint64_t next_endpoint = skmer.unitig_end;
+        const uint64_t o = offsets[i];
+        const uint64_t ok = o + k;
+        const uint64_t s2 = std::max<uint64_t>(s1, prev_endpoint);
+        const uint64_t e = std::min<uint64_t>(ok, next_endpoint);
+        const uint64_t pad_back = ok - e;
+        const uint64_t delta = std::min<uint64_t>(o+1, span);
         const uint64_t pad_front = span - delta;
-        std::fill(buffer, buffer + pad_front, INF);
+
+        std::memset(buffer, 0xFF, pad_front * sizeof(uint64_t));
         buffer += pad_front;
         if(prev_endpoint > s1) {
             const uint64_t pad_front2 = prev_endpoint - s1;
-            std::fill(buffer, buffer + pad_front2, INF);
+            std::memset(buffer, 0xFF, pad_front2 * sizeof(uint64_t));
             buffer += pad_front2;
         }
         
@@ -560,8 +566,7 @@ inline void RSHash2::refill_buffer(uint64_t *offsets, uint64_t *buffer, SkmerInf
             *buffer++ = kmer;
         }
 
-        const uint64_t pad_back = o + k - e;
-        std::fill(buffer, buffer + pad_back, INF);
+        std::memset(buffer, 0xFF, pad_back * sizeof(uint64_t));
         buffer += pad_back;
     }
 }
@@ -736,7 +741,7 @@ inline void RSHash2::update_minimiser(const uint64_t kmer, const uint64_t kmer_r
 }
 
 
-uint64_t RSHash2::streaming_query(const std::vector<seqan3::dna4> &query, uint64_t &extensions)
+uint64_t RSHash2::streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4> &query, uint64_t &extensions)
 {
     auto view = srindex::views::kmerview({.window_size = k});
 
