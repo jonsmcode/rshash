@@ -12,9 +12,6 @@ using namespace seqan3::literals;
 using namespace seqan3::contrib::sdsl;
 
 
-// #pragma once
-
-
 static inline constexpr uint64_t compute_mask(uint64_t const size)
 {
     assert(size > 0u);
@@ -77,7 +74,6 @@ inline std::vector<uint64_t> pack_dna4_to_uint64(const std::vector<seqan3::bitpa
 }
 
 
-// const uint64_t seed1 = 0x8F'3F'73'B5'CF'1C'9A'DE;
 const uint64_t seed1 = 1;
 const uint64_t seed2 = 0x29'6D'BD'33'32'56'8C'64;
 const uint64_t seed3 = 0xE5'9A'38'5F'03'76'C9'F6;
@@ -149,8 +145,6 @@ private:
     std::vector<uint64_t> text;
     template<int level>
     inline void find_minimiser(const uint64_t, const uint64_t, uint64_t&, size_t &, size_t &);
-    // inline void find_minimiser1(const uint64_t, const uint64_t, uint64_t&, size_t &, size_t &);
-    // inline void find_minimiser2(const uint64_t, const uint64_t, uint64_t&, size_t &, size_t &);
     template<int level>
     inline void update_minimiser(const uint64_t, const uint64_t, uint64_t&, size_t &, size_t &);
     template<int level>
@@ -158,13 +152,15 @@ private:
     template<int level>
     inline bool check(uint64_t*, std::array<uint64_t, 2>*, const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, const uint64_t);
     template<int level>
-    inline void refill_buffer(uint64_t *, uint64_t *, SkmerInfo *, size_t, size_t, const uint64_t, const uint64_t);
-    inline void fill_first_buffer(uint64_t *, uint64_t *, SkmerInfo *, size_t, const uint64_t, const uint64_t);
-    inline bool check_minimiser_pos(uint64_t *, const SkmerInfo&, const uint64_t, const uint64_t, const size_t, const size_t, const size_t, bool &, size_t &, size_t &, size_t &);
-    inline bool check_minimiser_pos2(uint64_t *, const SkmerInfo&, const uint64_t, const uint64_t, const size_t, const size_t, const size_t, const size_t, bool &, size_t &, size_t &, size_t &);
+    inline void fill_buffer(uint64_t *, uint64_t *, size_t, size_t, const uint64_t, const uint64_t);
     template<int level>
-    inline bool lookup_buffer(uint64_t *, SkmerInfo *, const size_t, const uint64_t,  const uint64_t, size_t &, const size_t, const size_t, bool &, size_t &, size_t &);
-    inline bool lookup_first_buffer(uint64_t *, SkmerInfo *, const uint64_t,  const uint64_t, size_t &, const size_t, const size_t, bool &, size_t &, size_t &);
+    inline bool check_minimiser_pos(uint64_t *, const uint64_t, const uint64_t, const uint64_t, const size_t, const size_t, const size_t, bool &, size_t &, size_t &, size_t &);
+    template<int level>
+    inline bool check_minimiser_pos2(uint64_t *, const uint64_t, const uint64_t, const uint64_t, const size_t, const size_t, const size_t, const size_t, bool &, size_t &, size_t &, size_t &);
+    template<int level>
+    inline bool check_overlap(uint64_t, uint64_t, uint64_t &, uint64_t &);
+    template<int level>
+    inline bool lookup_buffer(uint64_t *, uint64_t *, const size_t, const uint64_t,  const uint64_t, size_t &, const size_t, const size_t, bool &, size_t &, size_t &);
     inline bool extend_in_text(size_t&, size_t, size_t, bool, const uint64_t, const uint64_t);
     const inline uint64_t get_word64(uint64_t pos);
     const inline uint64_t get_base(uint64_t pos);
