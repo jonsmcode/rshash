@@ -210,6 +210,28 @@ int RSHash1::build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input)
 }
 
 
+const inline uint64_t RSHash1::get_word64(uint64_t pos) {
+    uint64_t block = pos >> 5;
+    uint64_t shift = (pos & 31) << 1;
+    uint64_t lo = text[block];
+    uint64_t hi = text[block + 1];
+
+    uint64_t shift_mask = -(shift != 0);
+    return (lo >> shift) | ((hi << (64 - shift)) & shift_mask);
+}
+
+const inline uint64_t RSHash1::get_base(uint64_t pos) {
+    return (text[pos >> 5] >> ((pos & 31) << 1)) & 3ULL;
+}
+
+
+uint64_t RSHash1::access(const uint64_t unitig_id, const size_t offset)
+{
+    const uint64_t mask = compute_mask(2u * k);
+    return get_word64(offset) & mask;
+}
+
+
 std::vector<uint64_t> RSHash1::rand_text_kmers(const uint64_t n) {
     std::uniform_int_distribution<uint32_t> distr;
     std::mt19937 m_rand(1);
@@ -226,8 +248,7 @@ std::vector<uint64_t> RSHash1::rand_text_kmers(const uint64_t n) {
 
         if(offset + 64 >= next_endpoint)
             continue;
-        // const uint64_t unitig_id = distr(m_rand) % no_unitigs;
-        // const uint64_t offset = distr(m_rand) % unitig_size(unitig_id);
+
         const uint64_t kmer = access(0, offset);
 
         if ((i & 1) == 0)
@@ -242,220 +263,64 @@ std::vector<uint64_t> RSHash1::rand_text_kmers(const uint64_t n) {
 }
 
 
-
-uint64_t RSHash1::access(const uint64_t unitig_id, const size_t offset)
-{
-    const uint64_t mask = compute_mask(2u * k);
-    return get_word64(offset) & mask;
-}
-
-
-inline bool RSHash1::check(const size_t p, const size_t no_kmers, const uint64_t mask, const uint64_t shift,
-    const uint64_t kmer, const uint64_t kmer_rc,
-    double &to, double &th, double &te)
-{
-    // std::chrono::high_resolution_clock::time_point t0, t1, t2, t3, t4;
-    // for(size_t i = 0; i < q-p; i++) {
-
-    //     t0 = std::chrono::high_resolution_clock::now();
-    //     size_t o = offsets1.access(p+i);
-    //     t1 = std::chrono::high_resolution_clock::now();
-    //     to += (std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)).count();
-
-    //     uint64_t hash = 0;
-    //     for (size_t j=o; j < o+k; j++) {
-    //         uint64_t const new_rank = seqan3::to_rank(text[j]);
-    //         hash = (hash >> 2) | (new_rank << 2*(k-1));
-    //     }
-    //     t2 = std::chrono::high_resolution_clock::now();
-    //     th += (std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1)).count();
-    //     if(hash == kmer || hash == kmer_rc)
-    //         return true;
-
-    //     uint64_t e = std::min<uint64_t>(endpoints.select(endpoints.rank(o+1)), o+k+span);
-    //     // uint64_t e = o+k+span;
-
-    //     t3 = std::chrono::high_resolution_clock::now();
-    //     te += (std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2)).count();
-
-    //     for(size_t j=o+k; j < e; j++) {
-    //         uint64_t const new_rank = seqan3::to_rank(text[j]);
-    //         hash = (hash >> 2) | (new_rank << 2*(k-1));
-    //         if(hash == kmer || hash == kmer_rc) {
-    //             t4 = std::chrono::high_resolution_clock::now();
-    //             th += (std::chrono::duration_cast<std::chrono::nanoseconds>(t4 - t3)).count();
-    //             return true;
-    //         }
-    //     }
-    //     t4 = std::chrono::high_resolution_clock::now();
-    //     th += (std::chrono::duration_cast<std::chrono::nanoseconds>(t4 - t3)).count();
-    // }
-
-    return false;
-}
-
-
-inline bool RSHash1::check(uint64_t* offsets, std::array<uint64_t, 2>* sequence_ends, const size_t p, const size_t no_kmers, const uint64_t mask, const uint64_t shift,
-    const uint64_t kmer, const uint64_t kmer_rc)
-{
-    for(size_t i = 0; i < no_kmers; i++)
-        offsets[i] = offsets1.access(p+i);
-    for(size_t i = 0; i < no_kmers; i++) {
-        const uint64_t o = offsets[i];
-        uint64_t next_endpoint;
-        const uint64_t r = endpoints.rank(o+1);
-        const uint64_t prev_endpoint = endpoints.select(r-1, &next_endpoint);
-
-        const uint64_t delta = std::min<uint64_t>(o+1, span);
-        const uint64_t s1 = o + 1 - delta;
-        const uint64_t s2 = std::max<uint64_t>(s1, prev_endpoint);
-        const uint64_t e = std::min<uint64_t>(o+k, next_endpoint);
-
-        sequence_ends[i] = {s2, e};
-    }
-    for(size_t i = 0; i < no_kmers; i++) {
-        auto [s2, e] = sequence_ends[i];
-        uint64_t hash = get_word64(s2) & mask;
-        if(hash == kmer || hash == kmer_rc)
-            return true;
-
-        uint64_t bits = get_word64(s2 + k);
-        for(uint64_t j=s2+k; j < e; j++) {
-            uint64_t const next_base = bits & 3ULL;
-            bits >>= 2;
-            hash = (hash >> 2) | (next_base << shift);
-            if(hash == kmer || hash == kmer_rc)
-                return true;
-        }
-    }
-
-    return false;
-}
-
 uint64_t RSHash1::lookup(const std::vector<uint64_t> &kmers, bool verbose)
 {
     uint64_t occurences = 0;
-    const uint64_t mask = compute_mask(2u * k);
-    const uint64_t shift = 2*(k-1);
-    srindex::minimizers::Minimisers_hash2 minimisers = srindex::minimizers::Minimisers_hash2(k, m1, seed1);
-    uint64_t* offsets = new uint64_t[m_thres1];
-    std::array<uint64_t, 2>* sequence_ends = new std::array<uint64_t, 2>[m_thres1];
 
-    if (verbose) {
-        std::chrono::high_resolution_clock::time_point t0, t1, t2, t3, t4, t5, t6 = std::chrono::high_resolution_clock::now();
-        double t0_ = 0.0;
-        double t1_ = 0.0;
-        double t2_ = 0.0;
-        double t3_ = 0.0;
-        double t4_ = 0.0;
-        double t5_ = 0.0;
-        double to = 0.0;
-        double th = 0.0;
-        double te = 0.0;
-        size_t skmers1_ = 0;
-        uint64_t lookups1 = 0;
-        uint64_t ht_lookups = 0;
+    const uint64_t kmermask = compute_mask(2u * k);
+    const uint64_t mmermask = compute_mask(2u * m1);
 
-        for(uint64_t kmer : kmers)
-        {
-        t5 = std::chrono::high_resolution_clock::now();
+    uint64_t* offsets = new uint64_t[m_thres1-1];
+    size_t left_minimiser_position, right_minimiser_position;
+
+    for(uint64_t kmer : kmers) {
         const uint64_t kmer_rc = crc(kmer, k);
-        uint64_t minimiser_value = minimisers.compute(kmer, kmer_rc);
-        t4_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - t5)).count();
+        const uint64_t minimiser = find_minimiser(kmer, kmer_rc, left_minimiser_position, right_minimiser_position, mmermask);
 
-        t6 = std::chrono::high_resolution_clock::now();
-        if(uint64_t minimiser_rank = r1.rank(minimiser_value); r1.rank(minimiser_value + 1) - minimiser_rank) {
-            t1 = std::chrono::high_resolution_clock::now();
+        if(uint64_t minimiser_rank = r1.rank(minimiser); r1.rank(minimiser + 1) - minimiser_rank) {
             size_t p = s1_select.select(minimiser_rank);
-            size_t no_kmers = s1_select.select(minimiser_rank+1) - p;
-            t2 = std::chrono::high_resolution_clock::now();
+            size_t no_minimiser = s1_select.select(minimiser_rank+1) - p;
 
-            occurences += check(p, no_kmers, mask, shift, kmer, kmer_rc, to, th, te);
-            t3 = std::chrono::high_resolution_clock::now();
-
-            t1_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1)).count();
-            t2_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2)).count();
-            t5_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t0 - t6)).count();
-            skmers1_ += no_kmers;
-            ++lookups1;
+            occurences += check(kmer, kmer_rc, offsets, p, no_minimiser, left_minimiser_position, right_minimiser_position, kmermask);
         }
-        else {
-            t4 = std::chrono::high_resolution_clock::now();
-            t3_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - t4)).count();
-            t5_ += (std::chrono::duration_cast<std::chrono::nanoseconds>(t4 - t6)).count();
-            ++ht_lookups;
-        }
-        }
-        std::cout << "minimisers: " << t4_/kmers.size() << " ns\n";
-        std::cout << "R lookup: " << t5_/kmers.size() << " ns\n";
-        std::cout << "r_rank: " << t0_/kmers.size() << " ns\n";
-        std::cout << "s_select: " << t1_/kmers.size() << " ns\n";
-        std::cout << "check: " << t2_/kmers.size() << " ns\n";
-        std::cout << "offsets: " << to/kmers.size() << " ns\n";
-        std::cout << "endpoints: " << te/kmers.size() << " ns\n";
-        std::cout << "text: " << th/kmers.size() << " ns\n";
-        std::cout << "ht: " << t3_/kmers.size() << " ns\n";
-        std::cout << "lookups lvl1: " << (double) lookups1/(lookups1+ht_lookups)*100 << "%\n";
-        std::cout << "lookups ht: " << (double) ht_lookups/(lookups1+ht_lookups)*100 << "%\n";
-        std::cout << "avg skmers1: " << (double) skmers1_/lookups1 << "\n";
-    }
-    else {
-        for(uint64_t kmer : kmers)
-        {
-            const uint64_t kmer_rc = crc(kmer, k);
-            uint64_t minimiser_value = minimisers.compute(kmer, kmer_rc);
-
-            if(uint64_t minimiser_rank = r1.rank(minimiser_value); r1.rank(minimiser_value + 1) - minimiser_rank) {
-                size_t p = s1_select.select(minimiser_rank);
-                size_t no_kmers = s1_select.select(minimiser_rank+1) - p;
-
-                occurences += check(offsets, sequence_ends, p, no_kmers, mask, shift, kmer, kmer_rc);
-            }
-            else
-                occurences += hashmap.contains(std::min<uint64_t>(kmer, kmer_rc));
-        }
+        else
+            occurences += hashmap.contains(std::min<uint64_t>(kmer, kmer_rc));
     }
 
     delete[] offsets;
-    delete[] sequence_ends;
 
     return occurences;
 }
 
 
-
-
-inline bool RSHash1::extend_in_text(size_t &text_pos, size_t start, size_t end,
-    bool forward, const uint64_t query, const uint64_t query_rc, const uint64_t shift)
+inline bool RSHash1::check(const uint64_t kmer, const uint64_t kmer_rc,
+    uint64_t* offsets, const size_t p, const size_t no_skmers,
+    const size_t left_minimiser_position, const size_t right_minimiser_position,
+    const uint64_t mask)
 {
-    if(forward) {
-        if(++text_pos < end) {
-            uint64_t const new_rank = get_base(text_pos);
-            return new_rank == (query >> shift);
+    for(size_t i = 0; i < no_skmers; i++)
+        offsets[i] = offsets1.access(p+i)-span+1;
+
+    for(size_t i = 0; i < no_skmers; i++) {
+        const uint64_t o = offsets[i];
+
+        uint64_t hash_rc = get_word64(o + left_minimiser_position) & mask;
+        uint64_t hash_fwd = get_word64(o + span-1-left_minimiser_position) & mask;
+
+        if(kmer == hash_fwd || kmer_rc == hash_rc)
+            return true;
+
+        if(left_minimiser_position != k-m1-right_minimiser_position) {
+            hash_fwd = get_word64(o + right_minimiser_position) & mask;
+            hash_rc = get_word64(o + span-1-right_minimiser_position) & mask;
+
+            if(kmer == hash_fwd || kmer_rc == hash_rc)
+                return true;
         }
+
     }
-    else {
-        if(--text_pos >= start) {
-            uint64_t const new_rank = get_base(text_pos);
-            return new_rank == (query_rc & 0b11);
-        }
-    }
+
     return false;
-}
-
-
-const inline uint64_t RSHash1::get_word64(uint64_t pos) {
-    uint64_t block = pos >> 5;
-    uint64_t shift = (pos & 31) << 1;
-    uint64_t lo = text[block];
-    uint64_t hi = text[block + 1];
-
-    uint64_t shift_mask = -(shift != 0);
-    return (lo >> shift) | ((hi << (64 - shift)) & shift_mask);
-}
-
-const inline uint64_t RSHash1::get_base(uint64_t pos) {
-    return (text[pos >> 5] >> ((pos & 31) << 1)) & 3ULL;
 }
 
 
@@ -563,6 +428,25 @@ inline bool RSHash1::lookup_buffer(uint64_t *buffer, uint64_t *offsets, const si
         }
     }
     
+    return false;
+}
+
+
+inline bool RSHash1::extend_in_text(size_t &text_pos, size_t start, size_t end,
+    bool forward, const uint64_t query, const uint64_t query_rc, const uint64_t shift)
+{
+    if(forward) {
+        if(++text_pos < end) {
+            uint64_t const new_rank = get_base(text_pos);
+            return new_rank == (query >> shift);
+        }
+    }
+    else {
+        if(--text_pos >= start) {
+            uint64_t const new_rank = get_base(text_pos);
+            return new_rank == (query_rc & 0b11);
+        }
+    }
     return false;
 }
 

@@ -100,8 +100,7 @@ private:
     mixer_64 m_hasher;
     inline uint64_t find_minimiser(const uint64_t, const uint64_t, size_t &, size_t &, const uint64_t);
     inline void update_minimiser(const uint64_t, const uint64_t, uint64_t&, size_t &, size_t &, const uint64_t);
-    inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, const uint64_t, double &, double &, double &);
-    inline bool check(uint64_t*, std::array<uint64_t, 2>*, const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, const uint64_t);
+    inline bool check(const uint64_t, const uint64_t, uint64_t*, const size_t, const size_t, const size_t, const size_t, const uint64_t);
     inline bool check_minimiser_pos(uint64_t *, const uint64_t, const uint64_t, const uint64_t, const size_t, const size_t, bool &, size_t &, size_t &, size_t &);
     inline bool check_minimiser_pos2(uint64_t *, const uint64_t, const uint64_t, const uint64_t, const size_t, const size_t, const size_t, bool &, size_t &, size_t &, size_t &);
     inline bool check_overlap(uint64_t, uint64_t, uint64_t &, uint64_t &);
