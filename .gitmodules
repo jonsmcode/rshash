@@ -4,3 +4,12 @@
 [submodule "sux"]
 	path = sux
 	url = https://github.com/vigna/sux.git
+[submodule "sharg-parser"]
+	path = sharg-parser
+	url = https://github.com/seqan/sharg-parser.git
+[submodule "lib/gtl"]
+	path = lib/gtl
+	url = https://github.com/greg7mdp/gtl
+[submodule "bits"]
+	path = bits
+	url = https://github.com/jermp/bits.git

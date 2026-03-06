@@ -458,7 +458,7 @@ inline bool RSHash2::check(const uint64_t kmer, const uint64_t kmer_rc,
 }
 
 
-inline bool RSHash2::extend_in_text(size_t &text_pos, size_t start, size_t end,
+inline bool RSHash2::extend_in_text(uint64_t &text_pos, uint64_t start, uint64_t end,
     bool forward, const uint64_t query, const uint64_t query_rc)
 {
     if(forward) {
@@ -532,7 +532,7 @@ template<int level>
 inline bool RSHash2::check_minimiser_pos(uint64_t *buffer, const uint64_t offset,
     const uint64_t query, const uint64_t queryrc,
     const size_t s, const size_t e, const size_t minimiser_pos,
-    bool &forward, size_t &text_pos, size_t &start_pos, size_t &end_pos)
+    bool &forward, uint64_t &text_pos, uint64_t &start_pos, uint64_t &end_pos)
 {
     if(buffer[s+minimiser_pos] == queryrc) {
         forward = false;
@@ -555,7 +555,7 @@ template<int level>
 inline bool RSHash2::check_minimiser_pos2(uint64_t *buffer, const uint64_t offset,
     const uint64_t query, const uint64_t queryrc,
     const size_t s, const size_t e, const size_t left_minimiser_pos, const size_t right_minimiser_pos,
-    bool &forward, size_t &text_pos, size_t &start_pos, size_t &end_pos)
+    bool &forward, uint64_t &text_pos, uint64_t &start_pos, uint64_t &end_pos)
 {
     if(buffer[s+left_minimiser_pos] == queryrc) {
         forward = false;
@@ -589,8 +589,8 @@ inline bool RSHash2::check_minimiser_pos2(uint64_t *buffer, const uint64_t offse
 template<int level>
 inline bool RSHash2::lookup_buffer(uint64_t* buffer, uint64_t *offsets, const size_t no_skmers,
     const uint64_t query, const uint64_t queryrc,
-    size_t &text_pos, const size_t left_minimiser_pos, const size_t right_minimiser_pos,
-    bool &forward, size_t &start_pos, size_t &end_pos)
+    uint64_t &text_pos, const size_t left_minimiser_pos, const size_t right_minimiser_pos,
+    bool &forward, uint64_t &start_pos, uint64_t &end_pos)
 {
     size_t span, m;
     if constexpr (level == 1) {
@@ -715,8 +715,8 @@ uint64_t RSHash2::streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4>
     uint64_t* buffer1 = new uint64_t[(m_thres1-1) * span1];
     uint64_t* buffer2 = new uint64_t[(m_thres2-1) * span2];
     size_t no_skmers1, no_skmers2;
-    size_t unitig_begin, unitig_end;
-    size_t text_pos;
+    uint64_t unitig_begin, unitig_end;
+    uint64_t text_pos;
     bool forward;
     bool found = false;
     bool rolling1 = false;

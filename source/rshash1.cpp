@@ -356,7 +356,7 @@ inline bool RSHash1::check_overlap(uint64_t skmer_pos, uint64_t text_pos, uint64
 
 inline bool RSHash1::check_minimiser_pos(uint64_t *buffer, const uint64_t offset,
     const uint64_t kmer, const uint64_t kmerrc, const size_t s,
-    const size_t minimiser_pos, bool &forward, size_t &text_pos, size_t &start_pos, size_t &end_pos)
+    const size_t minimiser_pos, bool &forward, uint64_t &text_pos, uint64_t &start_pos, uint64_t &end_pos)
 {
     if(buffer[s+minimiser_pos] == kmerrc) {
         forward = false;
@@ -377,7 +377,7 @@ inline bool RSHash1::check_minimiser_pos(uint64_t *buffer, const uint64_t offset
 inline bool RSHash1::check_minimiser_pos2(uint64_t *buffer, const uint64_t offset,
     const uint64_t kmer, const uint64_t kmerrc, const size_t s,
     const size_t left_minimiser_pos, const size_t right_minimiser_pos,
-    bool &forward, size_t &text_pos, size_t &start_pos, size_t &end_pos)
+    bool &forward, uint64_t &text_pos, uint64_t &start_pos, uint64_t &end_pos)
 {
     if(buffer[s+left_minimiser_pos] == kmerrc) {
         forward = false;
@@ -410,8 +410,8 @@ inline bool RSHash1::check_minimiser_pos2(uint64_t *buffer, const uint64_t offse
 
 inline bool RSHash1::lookup_buffer(uint64_t *buffer, uint64_t *offsets, const size_t no_minimiser,
     const uint64_t query, const uint64_t queryrc,
-    size_t &text_pos, const size_t left_minimiser_pos, const size_t right_minimiser_pos,
-    bool &forward, size_t &start_pos, size_t &end_pos)
+    uint64_t &text_pos, const size_t left_minimiser_pos, const size_t right_minimiser_pos,
+    bool &forward, uint64_t &start_pos, uint64_t &end_pos)
 {
     size_t s = 0;
     if(left_minimiser_pos != k-m1-right_minimiser_pos) {
@@ -433,7 +433,7 @@ inline bool RSHash1::lookup_buffer(uint64_t *buffer, uint64_t *offsets, const si
 }
 
 
-inline bool RSHash1::extend_in_text(size_t &text_pos, size_t start, size_t end,
+inline bool RSHash1::extend_in_text(uint64_t &text_pos, uint64_t start, uint64_t end,
     bool forward, const uint64_t query, const uint64_t query_rc, const uint64_t shift)
 {
     if(forward) {
@@ -513,7 +513,8 @@ uint64_t RSHash1::streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4>
     const uint64_t shift = 2*(k-1);
     uint64_t* offsets = new uint64_t[m_thres1-1];
     uint64_t* kmer_buffer = new uint64_t[(m_thres1-1) * span];
-    size_t no_minimiser, text_pos, sequence_begin, sequence_end;
+    size_t no_minimiser;
+    uint64_t text_pos, sequence_begin, sequence_end;
     bool forward;
     bool found = false;
     bool rolling = false;
