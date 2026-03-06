@@ -196,7 +196,7 @@ private:
     template<int level>
     inline void fill_buffer(uint64_t *, uint64_t *, size_t, size_t, const uint64_t, const uint64_t);
     template<int level>
-    inline bool check_overlap(uint64_t, uint64_t, uint64_t &, uint64_t &);
+    inline bool check_overlap(uint64_t, uint64_t, size_t &, size_t &);
     template<int level>
     inline bool check_minimiser_pos(uint64_t *, const uint64_t, const uint64_t, const uint64_t, const size_t, const size_t, const size_t, bool &, size_t &, size_t &, size_t &);
     template<int level>

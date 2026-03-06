@@ -651,7 +651,7 @@ inline void RSHash3::fill_buffer(uint64_t *offsets, uint64_t *buffer, size_t p, 
 
 
 template<int level>
-inline bool RSHash3::check_overlap(uint64_t skmer_pos, uint64_t text_pos, uint64_t &start_pos, uint64_t &end_pos)
+inline bool RSHash3::check_overlap(uint64_t skmer_pos, uint64_t text_pos, size_t& start_pos, size_t& end_pos)
 {
     size_t span;
     if constexpr (level == 1)
