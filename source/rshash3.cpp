@@ -614,7 +614,7 @@ inline bool RSHash3::extend_in_text(uint64_t &text_pos, uint64_t start, uint64_t
 
 
 template<int level>
-inline void RSHash3::fill_buffer(uint64_t *offsets, uint64_t *buffer, uint64_t p, uint64_t N, const uint64_t mask, const uint64_t shift)
+inline void RSHash3::fill_buffer(uint64_t *offsets, uint64_t *buffer, size_t p, size_t N, const uint64_t mask, const uint64_t shift)
 {
     uint64_t span;
     if constexpr (level == 1)
@@ -633,7 +633,7 @@ inline void RSHash3::fill_buffer(uint64_t *offsets, uint64_t *buffer, uint64_t p
             offsets[i] = offsets3.access(p+i) + 1 - span;
     }
 
-    for(uint64_t i = 0; i < N; i++) {
+    for(size_t i = 0; i < N; i++) {
         const uint64_t s = offsets[i];
 
         uint64_t kmer = get_word64(s) & mask;
