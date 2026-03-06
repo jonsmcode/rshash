@@ -37,7 +37,7 @@ int RSHash2::build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& 
     auto minimiserview2 = srindex::views::xor_minimiser_and_positions2({.minimiser_size = m2, .window_size = k, .seed=seed2});
     auto skmerview1 = srindex::views::xor_minimiser_and_skmer_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
     auto skmerview2 = srindex::views::xor_minimiser_and_skmer_positions({.minimiser_size = m2, .window_size = k, .seed=seed2});
-    auto kmerview = srindex::views::xor_minimiser_and_window({.minimiser_size = m1, .window_size = k, .seed=seed1});
+    auto kmerview = srindex::views::kmerview({.window_size = k});
 
     const uint64_t M1 = 1ULL << (m1+m1);
     const uint64_t M2 = 1ULL << (m2+m2);
@@ -57,7 +57,7 @@ int RSHash2::build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& 
     std::cout << "no sequences: " << no_sequences << "\n";
 
     std::cout << "get sequences...\n";
-    bit_vector sequences = bit_vector(N+32, 0);
+    bit_vector sequences = bit_vector(N+33, 0);
     sequences[0] = 1;
     sequences[32] = 1;
     size_t j = 32;
@@ -65,7 +65,7 @@ int RSHash2::build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& 
         j += input[i].size();
         sequences[j] = 1;
     }
-    endpoints = sux::bits::EliasFano(reinterpret_cast<uint64_t*>(sequences.data()), N+32);
+    endpoints = sux::bits::EliasFano(reinterpret_cast<uint64_t*>(sequences.data()), N+33);
     sequences = bit_vector();
 
     std::cout << "count minimizers1...\n";
@@ -282,11 +282,10 @@ int RSHash2::build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& 
 
     std::cout << "build level 3, HT...\n";
 
-    // todo: simple kmer view
     // todo: hashmap.reserve(rem_kmers2);
     for(auto & sequence : freq_skmers2) {
-        for(auto && minimiser : sequence | kmerview) {
-            hashmap.insert(std::min<uint64_t>(minimiser.window_value, minimiser.window_value_rev));
+        for(auto && kmer : sequence | kmerview) {
+            hashmap.insert(std::min<uint64_t>(kmer.kmer_value, kmer.kmer_value_rev));
         }
     }
 
@@ -345,8 +344,7 @@ std::vector<uint64_t> RSHash2::rand_text_kmers(const uint64_t n) {
 
         if(offset + 64 >= next_endpoint)
             continue;
-        // const uint64_t unitig_id = distr(m_rand) % no_unitigs;
-        // const uint64_t offset = distr(m_rand) % unitig_size(unitig_id);
+
         const uint64_t kmer = access(0, offset);
 
         if ((i & 1) == 0)
@@ -359,109 +357,6 @@ std::vector<uint64_t> RSHash2::rand_text_kmers(const uint64_t n) {
 
     return kmers;
 }
-
-
-uint64_t RSHash2::access(const uint64_t unitig_id, const size_t offset)
-{
-    const uint64_t mask = compute_mask(2u * k);
-    return get_word64(offset) & mask;
-}
-
-template<int level>
-inline bool RSHash2::check(const size_t p, const size_t q, const uint64_t mask,
-    const uint64_t kmer, const uint64_t kmer_rc,
-    double &to, double &th, double &te)
-{
-    return false;
-}
-
-template<int level>
-inline bool RSHash2::check(uint64_t* offsets, std::array<uint64_t, 2>* sequence_ends, const size_t p, const size_t no_kmers, const uint64_t mask, const uint64_t shift,
-    const uint64_t kmer, const uint64_t kmer_rc)
-{
-    uint64_t span;
-    if constexpr (level == 1)
-        span = span1;
-    if constexpr (level == 2)
-        span = span2;
-
-    for(size_t i = 0; i < no_kmers; i++) {
-        if constexpr (level == 1)
-            offsets[i] = offsets1.access(p+i);
-        if constexpr (level == 2)
-            offsets[i] = offsets2.access(p+i);
-    }
-    
-    for(size_t i = 0; i < no_kmers; i++) {
-        const uint64_t o = offsets[i];
-        uint64_t next_endpoint;
-        const uint64_t r = endpoints.rank(o+1);
-        const uint64_t prev_endpoint = endpoints.select(r-1, &next_endpoint);
-
-        const uint64_t delta = std::min<uint64_t>(o+1, span);
-        const uint64_t s1 = o + 1 - delta;
-        const uint64_t s2 = std::max<uint64_t>(s1, prev_endpoint);
-        const uint64_t e = std::min<uint64_t>(o+k, next_endpoint);
-
-        sequence_ends[i] = {s2, e};
-    }
-
-    for(size_t i = 0; i < no_kmers; i++) {
-        auto [s2, e] = sequence_ends[i];
-        uint64_t hash = get_word64(s2) & mask;
-        if(hash == kmer || hash == kmer_rc)
-            return true;
-
-        uint64_t bits = get_word64(s2 + k);
-        for(uint64_t j=s2+k; j < e; j++) {
-            uint64_t const next_base = bits & 3ULL;
-            bits >>= 2;
-            hash = (hash >> 2) | (next_base << shift);
-            if(hash == kmer || hash == kmer_rc)
-                return true;
-        }
-    }
-
-    return false;
-}
-
-uint64_t RSHash2::lookup(const std::vector<uint64_t> &kmers, bool verbose)
-{
-    uint64_t occurences = 0;
-
-    const uint64_t mask = compute_mask(2u * k);
-    const uint64_t shift = 2*(k-1);
-    srindex::minimizers::Three_minimisers_hash2 minimisers = srindex::minimizers::Three_minimisers_hash2(k, m1, m2, 0, seed1, seed2, seed3);
-    uint64_t* offsets = new uint64_t[m_thres2];
-    std::array<uint64_t, 2>* sequence_ends = new std::array<uint64_t, 2>[m_thres2];
-
-    for(uint64_t kmer : kmers)
-    {
-        const uint64_t kmer_rc = crc(kmer, k);
-        minimisers.compute(kmer, kmer_rc);
-
-        if(uint64_t minimiser_rank = r1.rank(minimisers.minimiser1); r1.rank(minimisers.minimiser1 + 1) - minimiser_rank) {
-            size_t p = s1_select.select(minimiser_rank);
-            size_t no_kmers = s1_select.select(minimiser_rank+1) - p;
-
-            occurences += check<1>(offsets, sequence_ends, p, no_kmers, mask, shift, kmer, kmer_rc);
-        }
-        else if(uint64_t minimiser_rank = r2.rank(minimisers.minimiser2); r2.rank(minimisers.minimiser2 + 1) - minimiser_rank) {
-            size_t p = s2_select.select(minimiser_rank);
-            size_t no_kmers = s2_select.select(minimiser_rank+1) - p;
-
-            occurences += check<2>(offsets, sequence_ends, p, no_kmers, mask, shift, kmer, kmer_rc);
-        }
-        else
-            occurences += hashmap.contains(std::min<uint64_t>(kmer, kmer_rc));
-    }
-
-    delete[] offsets;
-    delete[] sequence_ends;
-
-    return occurences;
-}
-
 
 const inline uint64_t RSHash2::get_word64(uint64_t pos) {
     uint64_t block = pos >> 5;
@@ -477,6 +372,90 @@ const inline uint64_t RSHash2::get_base(uint64_t pos) {
     return (text[pos >> 5] >> ((pos & 31) << 1)) & 3ULL;
 }
 
+
+uint64_t RSHash2::access(const uint64_t unitig_id, const size_t offset)
+{
+    const uint64_t mask = compute_mask(2u * k);
+    return get_word64(offset) & mask;
+}
+
+
+uint64_t RSHash2::lookup(const std::vector<uint64_t> &kmers, bool verbose)
+{
+    uint64_t occurences = 0;
+
+    uint64_t* offsets = new uint64_t[m_thres2-1];
+    uint64_t minimiser, minimiser_rank;
+    size_t left_minimiser_position, right_minimiser_position;
+
+    for(uint64_t kmer : kmers) {
+        const uint64_t kmer_rc = crc(kmer, k);
+        minimiser = find_minimiser<1>(kmer, kmer_rc, left_minimiser_position, right_minimiser_position);
+
+        if(minimiser_rank = r1.rank(minimiser); r1.rank(minimiser + 1) - minimiser_rank) {
+            size_t p = s1_select.select(minimiser_rank);
+            size_t no_minimiser = s1_select.select(minimiser_rank+1) - p;
+
+            occurences += check<1>(kmer, kmer_rc, offsets, p, no_minimiser, left_minimiser_position, right_minimiser_position);
+        }
+        else {
+            minimiser = find_minimiser<2>(kmer, kmer_rc, left_minimiser_position, right_minimiser_position);
+            if(minimiser_rank = r2.rank(minimiser); r2.rank(minimiser + 1) - minimiser_rank) {
+                size_t p = s2_select.select(minimiser_rank);
+                size_t no_minimiser = s2_select.select(minimiser_rank+1) - p;
+
+                occurences += check<2>(kmer, kmer_rc, offsets, p, no_minimiser, left_minimiser_position, right_minimiser_position);
+            }
+            else
+                occurences += hashmap.contains(std::min<uint64_t>(kmer, kmer_rc));
+        }
+    }
+
+    delete[] offsets;
+
+    return occurences;
+}
+
+
+template<int level>
+inline bool RSHash2::check(const uint64_t kmer, const uint64_t kmer_rc,
+    uint64_t* offsets, const size_t p, const size_t no_skmers,
+    const size_t left_minimiser_position, const size_t right_minimiser_position)
+{
+    size_t span;
+    if constexpr (level == 1)
+        span = span1;
+    if constexpr (level == 2)
+        span = span2;
+    
+    for(size_t i = 0; i < no_skmers; i++) {
+        if constexpr (level == 1)
+            offsets[i] = offsets1.access(p+i)-span+1;
+        else
+            offsets[i] = offsets2.access(p+i)-span+1;
+    }
+
+    for(size_t i = 0; i < no_skmers; i++) {
+        const uint64_t o = offsets[i];
+
+        uint64_t hash_rc = get_word64(o + left_minimiser_position) & kmermask;
+        uint64_t hash_fwd = get_word64(o + span-1-left_minimiser_position) & kmermask;
+
+        if(kmer == hash_fwd || kmer_rc == hash_rc)
+            return true;
+
+        if(left_minimiser_position != k-m1-right_minimiser_position) {
+            hash_fwd = get_word64(o + right_minimiser_position) & kmermask;
+            hash_rc = get_word64(o + span-1-right_minimiser_position) & kmermask;
+
+            if(kmer == hash_fwd || kmer_rc == hash_rc)
+                return true;
+        }
+
+    }
+
+    return false;
+}
 
 
 inline bool RSHash2::extend_in_text(size_t &text_pos, size_t start, size_t end,
@@ -646,7 +625,7 @@ inline bool RSHash2::lookup_buffer(uint64_t* buffer, uint64_t *offsets, const si
 
 
 template<int level>
-inline void RSHash2::find_minimiser(const uint64_t kmer, const uint64_t kmer_rc, uint64_t &minimiser, size_t &left_minimiser_position, size_t &right_minimiser_position)
+inline uint64_t RSHash2::find_minimiser(const uint64_t kmer, const uint64_t kmer_rc, size_t &left_minimiser_position, size_t &right_minimiser_position)
 {
     uint64_t m, mmermask;
     mixer_64 m_hasher;
@@ -663,7 +642,7 @@ inline void RSHash2::find_minimiser(const uint64_t kmer, const uint64_t kmer_rc,
 
     uint64_t mmer = kmer >> 2*(k - m);
     uint64_t mmer_rc = kmer_rc & mmermask;
-    minimiser = std::min<uint64_t>(m_hasher.hash(mmer) & mmermask, m_hasher.hash(mmer_rc) & mmermask);
+    uint64_t minimiser = std::min<uint64_t>(m_hasher.hash(mmer) & mmermask, m_hasher.hash(mmer_rc) & mmermask);
     left_minimiser_position = k-m;
     right_minimiser_position = 0;
 
@@ -679,6 +658,8 @@ inline void RSHash2::find_minimiser(const uint64_t kmer, const uint64_t kmer_rc,
         else if(mmerhash == minimiser)
             left_minimiser_position = k-m-i;
     }
+
+    return minimiser;
 }
 
 template<int level>
@@ -698,7 +679,7 @@ inline void RSHash2::update_minimiser(const uint64_t kmer, const uint64_t kmer_r
     }
 
     if(left_minimiser_position-- == 0) {
-        find_minimiser<level>(kmer, kmer_rc, minimiser, left_minimiser_position, right_minimiser_position);
+        minimiser = find_minimiser<level>(kmer, kmer_rc, left_minimiser_position, right_minimiser_position);
         return;
     }
 
@@ -758,7 +739,7 @@ uint64_t RSHash2::streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4>
             if(rolling1)
                 update_minimiser<1>(window.kmer_value, window.kmer_value_rev, minimiser1, left_minimiser1_position, right_minimiser1_position);
             else {
-                find_minimiser<1>(window.kmer_value, window.kmer_value_rev, minimiser1, left_minimiser1_position, right_minimiser1_position);
+                minimiser1 = find_minimiser<1>(window.kmer_value, window.kmer_value_rev, left_minimiser1_position, right_minimiser1_position);
                 rolling1 = true;
             }
 
@@ -781,7 +762,7 @@ uint64_t RSHash2::streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4>
                 if(rolling2)
                     update_minimiser<2>(window.kmer_value, window.kmer_value_rev, minimiser2, left_minimiser2_position, right_minimiser2_position);
                 else {
-                    find_minimiser<2>(window.kmer_value, window.kmer_value_rev, minimiser2, left_minimiser2_position, right_minimiser2_position);
+                    minimiser2 = find_minimiser<2>(window.kmer_value, window.kmer_value_rev, left_minimiser2_position, right_minimiser2_position);
                     rolling2 = true;
                 }
 
@@ -820,22 +801,9 @@ uint64_t RSHash2::streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4>
 
 int RSHash2::save(const std::filesystem::path &filepath) {
     std::ofstream out(filepath, std::ios::binary);
-    seqan3::contrib::sdsl::serialize(this->k, out);
-    seqan3::contrib::sdsl::serialize(this->m1, out);
-    seqan3::contrib::sdsl::serialize(this->m2, out);
-    seqan3::contrib::sdsl::serialize(this->m_thres1, out);
-    seqan3::contrib::sdsl::serialize(this->m_thres2, out);
-    seqan3::contrib::sdsl::serialize(s1, out);
-    seqan3::contrib::sdsl::serialize(s2, out);
-
     cereal::BinaryOutputArchive archive(out);
-    archive(this->endpoints);
-    archive(this->r1);
-    archive(this->r2);
-    archive(this->offsets1);
-    archive(this->offsets2);
-    archive(this->text);
-    archive(this->hashmap);
+
+    archive(k, m1, m2, m_thres1, m_thres2, s1, s2, endpoints, r1, r2, offsets1, offsets2, text, hashmap);
 
     out.close();
     return 0;
@@ -843,32 +811,18 @@ int RSHash2::save(const std::filesystem::path &filepath) {
 
 int RSHash2::load(const std::filesystem::path &filepath) {
     std::ifstream in(filepath, std::ios::binary);
-    seqan3::contrib::sdsl::load(this->k, in);
-    seqan3::contrib::sdsl::load(this->m1, in);
-    seqan3::contrib::sdsl::load(this->m2, in);
-    seqan3::contrib::sdsl::load(this->m_thres1, in);
-    seqan3::contrib::sdsl::load(this->m_thres2, in);
-    seqan3::contrib::sdsl::load(s1, in);
-    seqan3::contrib::sdsl::load(s2, in);
-
     cereal::BinaryInputArchive archive(in);
-    archive(this->endpoints);
-    archive(this->r1);
-    archive(this->r2);
-    archive(this->offsets1);
-    archive(this->offsets2);
-    archive(this->text);
-    archive(this->hashmap);
+
+    archive(k, m1, m2, m_thres1, m_thres2, s1, s2, endpoints, r1, r2, offsets1, offsets2, text, hashmap);
+
+    std::cout << "loaded index...\n";
+    in.close();
 
     this->span1 = k - m1 + 1;
     this->span2 = k - m2 + 1;
     this->kmermask = compute_mask(2u * k);
     this->mmermask1 = compute_mask(2u * m1);
     this->mmermask2 = compute_mask(2u * m2);
-
-    std::cout << "loaded index...\n";
-
-    in.close();
 
     this->s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), s1.size(), 3);
     this->s2_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s2.data()), s2.size(), 3);

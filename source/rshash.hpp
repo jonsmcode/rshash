@@ -78,12 +78,6 @@ const uint64_t seed1 = 1;
 const uint64_t seed2 = 0x29'6D'BD'33'32'56'8C'64;
 const uint64_t seed3 = 0xE5'9A'38'5F'03'76'C9'F6;
 
-struct SkmerInfo {
-    uint64_t position;
-    uint64_t unitig_begin;
-    uint64_t unitig_end;
-};
-
 
 class RSHash1
 {
@@ -122,7 +116,6 @@ public:
     uint64_t lookup(const std::vector<uint64_t>&, bool verbose);
     int build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&);
     uint64_t streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4>&, uint64_t&);
-    uint64_t streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
     void save(const std::filesystem::path&);
     void load(const std::filesystem::path&);
 };
@@ -143,13 +136,11 @@ private:
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> endpoints;
     std::vector<uint64_t> text;
     template<int level>
-    inline void find_minimiser(const uint64_t, const uint64_t, uint64_t&, size_t &, size_t &);
+    inline uint64_t find_minimiser(const uint64_t, const uint64_t, size_t &, size_t &);
     template<int level>
     inline void update_minimiser(const uint64_t, const uint64_t, uint64_t&, size_t &, size_t &);
     template<int level>
-    inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, double &, double &, double &);
-    template<int level>
-    inline bool check(uint64_t*, std::array<uint64_t, 2>*, const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, const uint64_t);
+    inline bool check(const uint64_t, const uint64_t, uint64_t*, const size_t, const size_t, const size_t, const size_t);
     template<int level>
     inline void fill_buffer(uint64_t *, uint64_t *, size_t, size_t, const uint64_t, const uint64_t);
     template<int level>
@@ -177,7 +168,6 @@ public:
     uint64_t lookup(const std::vector<uint64_t>&, bool verbose);
     int build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&);
     uint64_t streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4>&, uint64_t&);
-    uint64_t streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
     int save(const std::filesystem::path&);
     int load(const std::filesystem::path&);
 };
@@ -188,9 +178,9 @@ class RSHash3
 private:
     uint64_t k, m1, m_thres1, m2, m_thres2, m3, m_thres3;
     uint64_t span1, span2, span3;
-    bit_vector r1;
-    rank_support_v<1> r1_rank;
-    sux::bits::EliasFano<sux::util::AllocType::MALLOC> r2, r3;
+    uint64_t kmermask, mmermask1, mmermask2, mmermask3;
+    mixer_64 m_hasher1, m_hasher2, m_hasher3;
+    sux::bits::EliasFano<sux::util::AllocType::MALLOC> r1, r2, r3;
     bit_vector s1, s2, s3;
     sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s1_select, s2_select, s3_select;
     pthash::compact_vector offsets1, offsets2, offsets3;
@@ -198,15 +188,21 @@ private:
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> endpoints;
     std::vector<uint64_t> text;
     template<int level>
-    inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, double &, double &, double &);
+    inline uint64_t find_minimiser(const uint64_t, const uint64_t, size_t &, size_t &);
     template<int level>
-    inline bool check(uint64_t*, std::array<uint64_t, 2>*, const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, const uint64_t);
+    inline void update_minimiser(const uint64_t, const uint64_t, uint64_t&, size_t &, size_t &);
     template<int level>
-    inline void refill_buffer(uint64_t *, SkmerInfo *, size_t, size_t, const uint64_t, const uint64_t);
-    inline bool check_minimiser_pos(uint64_t *, const SkmerInfo&, const uint64_t, const uint64_t, const size_t, const size_t, const size_t, bool &, size_t &, size_t &, size_t &);
-    inline bool check_minimiser_pos2(uint64_t *, const SkmerInfo&, const uint64_t, const uint64_t, const size_t, const size_t, const size_t, const size_t, bool &, size_t &, size_t &, size_t &);
+    inline bool check(const uint64_t, const uint64_t, uint64_t*, const size_t, const size_t, const size_t, const size_t);
     template<int level>
-    inline bool lookup_buffer(uint64_t *, SkmerInfo *, const size_t, const uint64_t,  const uint64_t, size_t &, const size_t, const size_t, bool &, size_t &, size_t &);
+    inline void fill_buffer(uint64_t *, uint64_t *, size_t, size_t, const uint64_t, const uint64_t);
+    template<int level>
+    inline bool check_overlap(uint64_t, uint64_t, uint64_t &, uint64_t &);
+    template<int level>
+    inline bool check_minimiser_pos(uint64_t *, const uint64_t, const uint64_t, const uint64_t, const size_t, const size_t, const size_t, bool &, size_t &, size_t &, size_t &);
+    template<int level>
+    inline bool check_minimiser_pos2(uint64_t *, const uint64_t, const uint64_t, const uint64_t, const size_t, const size_t, const size_t, const size_t, bool &, size_t &, size_t &, size_t &);
+    template<int level>
+    inline bool lookup_buffer(uint64_t *, uint64_t *, const size_t, const uint64_t,  const uint64_t, size_t &, const size_t, const size_t, bool &, size_t &, size_t &);
     inline bool extend_in_text(size_t&, size_t, size_t, bool, const uint64_t, const uint64_t);
     const inline uint64_t get_word64(uint64_t pos);
     const inline uint64_t get_base(uint64_t pos);
@@ -222,55 +218,8 @@ public:
     std::vector<uint64_t> rand_text_kmers(const uint64_t);
     uint64_t access(const uint64_t, const size_t);
     uint64_t lookup(const std::vector<uint64_t>&, bool verbose);
-    int build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &);
-    uint64_t streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4> &, uint64_t&);
-    int save(const std::filesystem::path&);
-    int load(const std::filesystem::path&);
-};
-
-
-class RSHash3C
-{
-private:
-    uint64_t k, m1, m_thres1, m2, m_thres2, m3, m_thres3;
-    uint64_t span1, span2, span3;
-    sux::bits::EliasFano<sux::util::AllocType::MALLOC> r1, r2, r3;
-    bit_vector s1, s2, s3;
-    sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s1_select, s2_select, s3_select;
-    pthash::compact_vector offsets1, offsets2, offsets3;
-    gtl::flat_hash_set<uint64_t> hashmap;
-    sux::bits::EliasFano<sux::util::AllocType::MALLOC> endpoints;
-    std::vector<uint64_t> text;
-    template<int level>
-    inline bool check(const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, double &, double &, double &);
-    template<int level>
-    inline bool check(uint64_t*, std::array<uint64_t, 2>*, const size_t, const size_t, const uint64_t, const uint64_t, const uint64_t, const uint64_t);
-    template<int level>
-    inline void refill_buffer(uint64_t *, SkmerInfo *, size_t, size_t, const uint64_t, const uint64_t);
-    inline bool check_minimiser_pos(uint64_t *, const SkmerInfo&, const uint64_t, const uint64_t, const size_t, const size_t, const size_t, bool &, size_t &, size_t &, size_t &);
-    inline bool check_minimiser_pos2(uint64_t *, const SkmerInfo&, const uint64_t, const uint64_t, const size_t, const size_t, const size_t, const size_t, bool &, size_t &, size_t &, size_t &);
-    template<int level>
-    inline bool lookup_buffer(uint64_t *, SkmerInfo *, const size_t, const uint64_t,  const uint64_t, size_t &, const size_t, const size_t, bool &, size_t &, size_t &);
-    inline bool extend_in_text(size_t&, size_t, size_t, bool, const uint64_t, const uint64_t);
-    const inline uint64_t get_word64(uint64_t pos);
-    const inline uint64_t get_base(uint64_t pos);
-
-
-public:
-    RSHash3C();
-    RSHash3C(uint8_t const k, uint8_t const m1, uint8_t const m_thres1,
-                 uint8_t const m2, uint8_t const m_thres2, uint8_t const m3, uint8_t const m_thres3);
-    uint8_t getk() { return k; }
-    uint64_t number_unitigs() { return endpoints.rank(endpoints.size()); }
-    size_t unitig_size(uint64_t unitig_id) { return endpoints.select(unitig_id+1) - endpoints.select(unitig_id) - k + 1; }
-    std::vector<uint64_t> rand_text_kmers(const uint64_t);
-    uint64_t access(const uint64_t, const size_t);
-    uint64_t lookup(const std::vector<uint64_t>&, bool verbose);
     int build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&);
-    // uint64_t streaming_query(const std::vector<seqan3::dna4>&, uint64_t&);
-    // uint64_t streaming_query(const std::vector<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
     uint64_t streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4>&, uint64_t&);
-    uint64_t streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4>&, std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> &);
     int save(const std::filesystem::path&);
     int load(const std::filesystem::path&);
 };

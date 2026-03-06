@@ -30,6 +30,7 @@ int RSHash1::build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input)
 {
     auto minimiserview = srindex::views::xor_minimiser_and_positions2({.minimiser_size = m1, .window_size = k, .seed=seed1});
     auto skmerview = srindex::views::xor_minimiser_and_skmer_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
+    auto kmerview = srindex::views::kmerview({.window_size = k});
 
     std::cout << +m1 << "\n";
     const uint64_t M1 = 1ULL << (m1+m1);
@@ -48,7 +49,7 @@ int RSHash1::build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input)
     std::cout << "no sequences: " << no_sequences << "\n";
 
     std::cout << "get sequences...\n";
-    bit_vector sequences = bit_vector(N+32, 0);
+    bit_vector sequences = bit_vector(N+33, 0);
     sequences[0] = 1;
     sequences[32] = 1;
     size_t j = 32;
@@ -56,7 +57,7 @@ int RSHash1::build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input)
         j += input[i].size();
         sequences[j] = 1;
     }
-    endpoints = sux::bits::EliasFano(reinterpret_cast<uint64_t*>(sequences.data()), N+32);
+    endpoints = sux::bits::EliasFano(reinterpret_cast<uint64_t*>(sequences.data()), N+33);
     sequences = bit_vector();
 
     std::cout << "count minimizers1...\n";
@@ -92,41 +93,41 @@ int RSHash1::build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input)
 
     r1 = sux::bits::EliasFano(unfreq_minimizers1, M1);
 
-    std::cout << "filling bitvector S_1...\n";
-    s1 = bit_vector(n1+1, 0);
-    s1[0] = 1;
-    j = 0;
-    for(uint64_t minimizer : unfreq_minimizers1) {
-        j += minimizers1[minimizer];
-        s1[j] = 1;
-    }
-    s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), n1+1, 3);
+    // std::cout << "filling bitvector S_1...\n";
+    // s1 = bit_vector(n1+1, 0);
+    // s1[0] = 1;
+    // j = 0;
+    // for(uint64_t minimizer : unfreq_minimizers1) {
+    //     j += minimizers1[minimizer];
+    //     s1[j] = 1;
+    // }
+    // s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), n1+1, 3);
 
     minimizers1.clear();
     unfreq_minimizers1.clear();
 
-    std::cout << "filling offsets_1...\n";
+    // std::cout << "filling offsets_1...\n";
     const size_t offset_width = std::bit_width(N+32);
-    pthash::compact_vector::builder b1;
-    b1.resize(n1, offset_width);
+    // pthash::compact_vector::builder b1;
+    // b1.resize(n1, offset_width);
 
-    uint8_t* count1 = new uint8_t[c1tmp];
-    std::memset(count1, 0, c1tmp*sizeof(uint8_t));
+    // uint8_t* count1 = new uint8_t[c1tmp];
+    // std::memset(count1, 0, c1tmp*sizeof(uint8_t));
 
-    size_t length = 32;
-    for(auto & sequence : input) {
-        for (auto && minimiser : sequence | minimiserview) {
-            if(uint64_t i = r1.rank(minimiser.minimiser_value); r1.rank(minimiser.minimiser_value+1)-i) {
-                size_t s = s1_select.select(i);
-                b1.set(s + count1[i], length + minimiser.range_position);
-                count1[i]++;
-            }
-        }
-        length += sequence.size();
-    }
-    b1.build(offsets1);
+    // size_t length = 32;
+    // for(auto & sequence : input) {
+    //     for (auto && minimiser : sequence | minimiserview) {
+    //         if(uint64_t i = r1.rank(minimiser.minimiser_value); r1.rank(minimiser.minimiser_value+1)-i) {
+    //             size_t s = s1_select.select(i);
+    //             b1.set(s + count1[i], length + minimiser.range_position);
+    //             count1[i]++;
+    //         }
+    //     }
+    //     length += sequence.size();
+    // }
+    // b1.build(offsets1);
 
-    delete[] count1;
+    // delete[] count1;
 
     std::cout << "get frequent skmers...\n";
     std::vector<std::vector<seqan3::dna4>> freq_skmers1;
@@ -174,7 +175,7 @@ int RSHash1::build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input)
     // }
 
     for(auto & sequence : freq_skmers1) {
-        for(auto && window : sequence | srindex::views::kmerview({.window_size = k})) {
+        for(auto && window : sequence | kmerview) {
             hashmap.insert(std::min<uint64_t>(window.kmer_value, window.kmer_value_rev));
         }
     }

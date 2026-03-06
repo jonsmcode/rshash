@@ -35,7 +35,6 @@ struct cmd_arguments {
     uint8_t t1{65};
     uint8_t t2{65};
     uint16_t t3{65};
-    bool c{false};
 };
 
 void initialise_argument_parser(sharg::parser &parser, cmd_arguments &args) {
@@ -51,7 +50,6 @@ void initialise_argument_parser(sharg::parser &parser, cmd_arguments &args) {
     parser.add_option(args.t1, sharg::config{.long_id = "t1", .description = "threshold1"});
     parser.add_option(args.t2, sharg::config{.long_id = "t2", .description = "threshold2"});
     parser.add_option(args.t3, sharg::config{.long_id = "t3", .description = "threshold3"});
-    parser.add_flag(args.c, sharg::config{.short_id = 'c', .long_id = "comp", .description = "compress first level"});
 }
 
 int check_arguments(sharg::parser &parser, cmd_arguments &args) {
@@ -82,14 +80,6 @@ struct my_traits:seqan3::sequence_file_input_default_traits_dna {
 };
 
 
-// void load_file(const std::filesystem::path &filepath, std::vector<std::vector<seqan3::dna4>> &output) {
-//     auto stream = seqan3::sequence_file_input<my_traits>{filepath};
-//     size_t N = 0;
-//     for (auto & record : stream) {
-//         N += record.sequence().size();
-//         output.push_back(std::move(record.sequence()));
-//     }
-// }
 void load_file(const std::filesystem::path &filepath,
                std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &output)
 {
@@ -100,16 +90,6 @@ void load_file(const std::filesystem::path &filepath,
         output.push_back(std::move(seq));
     }
 }
-
-uint64_t kmer_to_int(std::vector<seqan3::dna4> &kmerdna4, const uint8_t k) {
-    uint64_t kmer = 0;
-    for (uint8_t j=0; j < k; j++) {
-        uint64_t const new_rank = seqan3::to_rank(kmerdna4[j]);
-        kmer = (kmer >> 2) | (new_rank << 2*(k-1));
-    }
-    return kmer;
-}
-
 
 int main(int argc, char** argv)
 {
@@ -141,23 +121,13 @@ int main(int argc, char** argv)
             index.save(args.d);
         }
         else if(args.l == 3) {
-            if(args.c) {
-                RSHash3C index = RSHash3C(args.k, args.m1, args.m2, args.m3, args.t1, args.t2, args.t3);
-                index.build(text);
-                index.save(args.d);
-                return 0;
-            }
-            else {
-                RSHash3 index = RSHash3(args.k, args.m1, args.m2, args.m3, args.t1, args.t2, args.t3);
-                index.build(text);
-                index.save(args.d);
-                return 0;
-            }
+            RSHash3 index = RSHash3(args.k, args.m1, args.m2, args.m3, args.t1, args.t2, args.t3);
+            index.build(text);
+            index.save(args.d);
         }
     }
     else if(args.cmd == "query") {
         std::cout << "loading queries...\n";
-        // std::vector<std::vector<seqan3::dna4>> queries;
         std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> queries;
         load_file(args.q, queries);
 
@@ -195,34 +165,18 @@ int main(int argc, char** argv)
             elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
         }
         else if(args.l == 3) {
-            if(args.c) {
-                std::cout << "loading dict...\n";
-                RSHash3C index = RSHash3C();
-                index.load(args.d);
-                std::cout << "querying...\n";
+            std::cout << "loading dict...\n";
+            RSHash3 index = RSHash3();
+            index.load(args.d);
 
-                std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
-                for (auto query : queries) {
-                    found += index.streaming_query(query, extensions);
-                    kmers += query.size() - index.getk() + 1;
-                }
-                std::chrono::high_resolution_clock::time_point t_stop = std::chrono::high_resolution_clock::now();
-                elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
+            std::cout << "querying...\n";
+            std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
+            for (auto query : queries) {
+                found += index.streaming_query(query, extensions);
+                kmers += query.size() - index.getk() + 1;
             }
-            else {
-                std::cout << "loading dict...\n";
-                RSHash3 index = RSHash3();
-                index.load(args.d);
-                std::cout << "querying...\n";
-
-                std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
-                for (auto query : queries) {
-                    found += index.streaming_query(query, extensions);
-                    kmers += query.size() - index.getk() + 1;
-                }
-                std::chrono::high_resolution_clock::time_point t_stop = std::chrono::high_resolution_clock::now();
-                elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
-            }
+            std::chrono::high_resolution_clock::time_point t_stop = std::chrono::high_resolution_clock::now();
+            elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
         }
         double ns_per_kmer = (double) elapsed.count() / kmers;
         
@@ -348,7 +302,7 @@ int main(int argc, char** argv)
             std::cout << "neg_time_per_kmer = " << ns_per_kmer << '\n';
         }
         else if(args.l == 3) {
-            RSHash3C index = RSHash3C();
+            RSHash3 index = RSHash3();
             index.load(args.d);
             std::vector<uint64_t> kmers;
 
