@@ -5,7 +5,20 @@
 #include <cereal/types/vector.hpp>
 #include <cereal/archives/binary.hpp>
 
-#include "essentials.hpp"
+
+
+template <typename WordType = uint64_t>
+static uint64_t words_for(uint64_t bits) {
+    uint64_t word_bits = sizeof(WordType) * 8;
+    return (bits + word_bits - 1) / word_bits;
+}
+
+template <typename T>
+static size_t vec_bytes(T const& vec) {
+    return vec.size() * sizeof(vec.front()) + sizeof(typename T::size_type);
+}
+
+
 
 namespace pthash {
 
@@ -91,7 +104,7 @@ struct compact_vector {
             m_cur_shift = 0;
             m_bits.resize(
                 /* use 1 word more for safe access() */
-                essentials::words_for(m_size * m_width) + 1, 0);
+                words_for(m_size * m_width) + 1, 0);
         }
 
         template <typename Iterator>
@@ -266,7 +279,7 @@ struct compact_vector {
     }
 
     size_t bytes() const {
-        return sizeof(m_size) + sizeof(m_width) + sizeof(m_mask) + essentials::vec_bytes(m_bits);
+        return sizeof(m_size) + sizeof(m_width) + sizeof(m_mask) + vec_bytes(m_bits);
     }
 
     void swap(compact_vector& other) {
