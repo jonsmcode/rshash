@@ -108,26 +108,26 @@ int RSHash1::build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input)
 
     // std::cout << "filling offsets_1...\n";
     const size_t offset_width = std::bit_width(N+32);
-    // pthash::compact_vector::builder b1;
-    // b1.resize(n1, offset_width);
+    bits::compact_vector::builder b1;
+    b1.resize(n1, offset_width);
 
-    // uint8_t* count1 = new uint8_t[c1tmp];
-    // std::memset(count1, 0, c1tmp*sizeof(uint8_t));
+    uint8_t* count1 = new uint8_t[c1tmp];
+    std::memset(count1, 0, c1tmp*sizeof(uint8_t));
 
-    // size_t length = 32;
-    // for(auto & sequence : input) {
-    //     for (auto && minimiser : sequence | minimiserview) {
-    //         if(uint64_t i = r1.rank(minimiser.minimiser_value); r1.rank(minimiser.minimiser_value+1)-i) {
-    //             size_t s = s1_select.select(i);
-    //             b1.set(s + count1[i], length + minimiser.range_position);
-    //             count1[i]++;
-    //         }
-    //     }
-    //     length += sequence.size();
-    // }
-    // b1.build(offsets1);
+    size_t length = 32;
+    for(auto & sequence : input) {
+        for (auto && minimiser : sequence | minimiserview) {
+            if(uint64_t i = r1.rank(minimiser.minimiser_value); r1.rank(minimiser.minimiser_value+1)-i) {
+                size_t s = s1_select.select(i);
+                b1.set(s + count1[i], length + minimiser.range_position);
+                count1[i]++;
+            }
+        }
+        length += sequence.size();
+    }
+    b1.build(offsets1);
 
-    // delete[] count1;
+    delete[] count1;
 
     std::cout << "get frequent skmers...\n";
     std::vector<std::vector<seqan3::dna4>> freq_skmers1;

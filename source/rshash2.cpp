@@ -115,7 +115,7 @@ int RSHash2::build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& 
 
     std::cout << "filling offsets_1...\n";
     const size_t offset_width = std::bit_width(N+32);
-    pthash::compact_vector::builder b1;
+    bits::compact_vector::builder b1;
     b1.resize(n1, offset_width);
 
     uint8_t* count1 = new uint8_t[c1tmp];
@@ -221,7 +221,7 @@ int RSHash2::build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& 
     unfreq_minimizers2.clear();
 
     std::cout << "filling offsets_2...\n";
-    pthash::compact_vector::builder b2;
+    bits::compact_vector::builder b2;
     b2.resize(n2, offset_width);
 
     uint8_t* count2 = new uint8_t[c2tmp];

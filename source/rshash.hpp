@@ -87,7 +87,7 @@ private:
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> r1;
     bit_vector s1;
     sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s1_select;
-    pthash::compact_vector offsets1;
+    bits::compact_vector offsets1;
     gtl::flat_hash_set<uint64_t> hashmap;
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> endpoints;
     std::vector<uint64_t> text;
@@ -131,7 +131,7 @@ private:
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> r1, r2;
     bit_vector s1, s2;
     sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s1_select, s2_select;
-    pthash::compact_vector offsets1, offsets2;
+    bits::compact_vector offsets1, offsets2;
     gtl::flat_hash_set<uint64_t> hashmap;
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> endpoints;
     std::vector<uint64_t> text;
@@ -183,7 +183,7 @@ private:
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> r1, r2, r3;
     bit_vector s1, s2, s3;
     sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s1_select, s2_select, s3_select;
-    pthash::compact_vector offsets1, offsets2, offsets3;
+    bits::compact_vector offsets1, offsets2, offsets3;
     gtl::flat_hash_set<uint64_t> hashmap;
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> endpoints;
     std::vector<uint64_t> text;

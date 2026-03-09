@@ -20,7 +20,7 @@ static size_t vec_bytes(T const& vec) {
 
 
 
-namespace pthash {
+namespace bits {
 
 struct compact_vector {
     template <typename Data>
