@@ -7,6 +7,3 @@
 [submodule "sharg-parser"]
 	path = sharg-parser
 	url = https://github.com/seqan/sharg-parser.git
-[submodule "lib/gtl"]
-	path = lib/gtl
-	url = https://github.com/greg7mdp/gtl
