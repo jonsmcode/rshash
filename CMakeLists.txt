@@ -22,9 +22,5 @@ list (APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/sharg-parser/cmake")
 
 find_package (sharg 1.0 REQUIRED)
 
-add_subdirectory(lib/gtl)
-
 add_subdirectory(source)
 
-# build tests
-# add_subdirectory(test)
