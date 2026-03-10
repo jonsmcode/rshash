@@ -5,8 +5,8 @@
 
 Given a set of DNA-strings it efficiently allows to:
 - **Lookup** a k-mer x, i.e., answer if x is present in the input strings
-- **Streaming Lookup** all k-mers in a query DNA-string longer than k
-- **Access** a k-mer at position p in the input strings
+- **Streaming Lookup** all k-mers in a query DNA-string
+- **Access** a k-mer given a position in the input strings
 
 
 ### Setup
