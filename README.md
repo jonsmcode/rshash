@@ -4,9 +4,9 @@
 (strings of length k over the DNA alphabet {A,C,G,T}) based on bitvectors with **R**ank and **S**elect support to **Hash** k-mers.
 
 Given a set of DNA-strings it efficiently allows to:
-- **Lookup**(x) a k-mer x, i.e., answer if x is present in one input string
-- **Streaming Lookup**(Q) all k-mers in a query DNA-string Q longer than k
-- **Access**(p) a k-mer at position p in the input strings
+- **Lookup** a k-mer x, i.e., answer if x is present in the input strings
+- **Streaming Lookup** all k-mers in a query DNA-string longer than k
+- **Access** a k-mer at position p in the input strings
 
 
 ### Setup
