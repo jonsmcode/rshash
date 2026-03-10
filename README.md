@@ -1,7 +1,12 @@
 # RSHash
 
-**RSHash** is a compressed data structure for k-mers
-(strings of length k over the DNA alphabet {A,C,G,T}), based on bitvectors with **R**ank and **S**elect support to **Hash** k-mers.
+**RSHash** is a compressed, exact data structure for k-mers
+(strings of length k over the DNA alphabet {A,C,G,T}) based on bitvectors with **R**ank and **S**elect support to **Hash** k-mers.
+Given a set of DNA-strings it efficiently allows to:
+- **Lookup** a k-mer (x), i.e., answer if x is present in a string
+- **Streaming Lookup** all k-mers in a query DNA-string longer than k
+- **Access**(p) a k-mer at position p in the input strings
+
 
 ### Setup
 Checkout
