@@ -1,5 +1,7 @@
 # RSHash
 
+**RSHash** is a compressed data structure for k-mers
+(strings of length k over the DNA alphabet {A,C,G,T}), based on bitvectors with **R**ank and **S**elect support to **Hash** k-mers.
 
 ### Setup
 Checkout
@@ -13,7 +15,16 @@ cd build
 cmake -DCMAKE_BUILD_TYPE=Release .. -D CMAKE_CXX_COMPILER=g++-14
 ```
 
-### Datasets
+
+### Run
+```
+.build/source/rshash build -i ../datasets/cod.k31.unitigs.fa.ust.fa.gz -d ../datasets/cod.k31.unitigs.fa.ust.dict -k 31 --m1 18 --t1 64 -l 1
+.build/source/rshash query -d ../datasets/cod.k31.unitigs.fa.ust.dict -l 1 -q ../datasets/SRR16288382_1.fastq.gz
+```
+
+### Benchmarks
+
+Datasets
 
 ```
 mkdir datasets
@@ -21,9 +32,3 @@ cd datasets
 wget https://zenodo.org/records/17582116/data.fa.gz
 ```
 
-
-### Run
-```
-.build/source/rshash build -i ../datasets/cod.k31.unitigs.fa.ust.fa.gz -d ../datasets/cod.k31.unitigs.fa.ust.dict -k 31 --m1 18 --t1 64 -l 1
-.build/source/rshash query -d ../datasets/cod.k31.unitigs.fa.ust.dict -l 1 -q ../datasets/SRR16288382_1.fastq.gz
-```
