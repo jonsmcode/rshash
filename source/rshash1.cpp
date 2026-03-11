@@ -93,15 +93,15 @@ int RSHash1::build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input)
 
     r1 = sux::bits::EliasFano(unfreq_minimizers1, M1);
 
-    // std::cout << "filling bitvector S_1...\n";
-    // s1 = bit_vector(n1+1, 0);
-    // s1[0] = 1;
-    // j = 0;
-    // for(uint64_t minimizer : unfreq_minimizers1) {
-    //     j += minimizers1[minimizer];
-    //     s1[j] = 1;
-    // }
-    // s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), n1+1, 3);
+    std::cout << "filling bitvector S_1...\n";
+    s1 = bit_vector(n1+1, 0);
+    s1[0] = 1;
+    j = 0;
+    for(uint64_t minimizer : unfreq_minimizers1) {
+        j += minimizers1[minimizer];
+        s1[j] = 1;
+    }
+    s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), n1+1, 3);
 
     minimizers1.clear();
     unfreq_minimizers1.clear();

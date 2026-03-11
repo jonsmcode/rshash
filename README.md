@@ -19,13 +19,14 @@ Compile
 mkdir build
 cd build
 cmake -DCMAKE_BUILD_TYPE=Release .. -D CMAKE_CXX_COMPILER=g++-14
+make
 ```
 
 
 ### Run
 ```
-.build/source/rshash build -i ../datasets/cod.k31.unitigs.fa.ust.fa.gz -d ../datasets/cod.k31.unitigs.fa.ust.dict -k 31 --m1 18 --t1 64 -l 1
-.build/source/rshash query -d ../datasets/cod.k31.unitigs.fa.ust.dict -l 1 -q ../datasets/SRR16288382_1.fastq.gz
+.build/source/rshash build -i ../datasets/genome.fa.ust.fa.gz -d ../datasets/genome.rshash -k 31 --m1 18 --t1 64 -l 1
+.build/source/rshash query -d ../datasets/genome.rshash -l 1 -q ../datasets/query.fastq.gz
 ```
 
 ### Benchmarks
