@@ -1,9 +1,7 @@
 #include <filesystem>
-
-#include <seqan3/core/debug_stream.hpp>
-#include <seqan3/alphabet/container/bitpacked_sequence.hpp>
 #include <seqan3/io/sequence_file/all.hpp>
 #include <cereal/archives/binary.hpp>
+#include <tsl/sparse_map.h>
 
 #include "rshash.hpp"
 #include "io.hpp"
@@ -61,7 +59,8 @@ int RSHash1::build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input)
     sequences = bit_vector();
 
     std::cout << "count minimizers1...\n";
-    std::unordered_map<uint64_t, uint8_t> minimizers1;
+    // std::unordered_map<uint64_t, uint8_t> minimizers1;
+    tsl::sparse_map<uint64_t, uint8_t> minimizers1;
 
     uint64_t n = 0;
     for(auto & sequence : input) {

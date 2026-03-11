@@ -1,10 +1,7 @@
 #include <filesystem>
-#include <bitset>
-
-#include <seqan3/core/debug_stream.hpp>
-#include <seqan3/alphabet/container/bitpacked_sequence.hpp>
 #include <seqan3/io/sequence_file/all.hpp>
 #include <cereal/archives/binary.hpp>
+#include <tsl/sparse_map.h>
 
 #include "rshash.hpp"
 #include "io.hpp"
@@ -75,7 +72,8 @@ int RSHash3::build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& 
     endpoints = sux::bits::EliasFano(reinterpret_cast<uint64_t*>(sequences.data()), N+33);
 
     std::cout << "count minimizers1...\n";
-    std::unordered_map<uint64_t, uint8_t> minimizers1;
+    // std::unordered_map<uint64_t, uint8_t> minimizers1;
+    tsl::sparse_map<uint64_t, uint8_t> minimizers1;
 
     uint64_t n = 0;
     for(auto & sequence : input) {
@@ -120,7 +118,7 @@ int RSHash3::build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& 
     unfreq_minimizers1.clear();
 
     std::cout << "filling offsets_1...\n";
-    const size_t offset_width = std::bit_width(N);
+    const size_t offset_width = std::bit_width(N+32);
     bits::compact_vector::builder b1;
     b1.resize(n1, offset_width);
 
@@ -184,7 +182,8 @@ int RSHash3::build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& 
 
 
     std::cout << "count minimizers2...\n";
-    std::unordered_map<uint64_t, uint8_t> minimizers2;
+    // std::unordered_map<uint64_t, uint8_t> minimizers2;
+    tsl::sparse_map<uint64_t, uint8_t> minimizers2;
 
     for(auto & skmer : freq_skmers1) {
         for(auto && minimiser : skmer | minimiserview2) {
@@ -293,7 +292,8 @@ int RSHash3::build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& 
     std::cout << "build level 3...\n";
 
     std::cout << "count minimizers3...\n";
-    std::unordered_map<uint64_t, uint8_t> minimizers3;
+    // std::unordered_map<uint64_t, uint8_t> minimizers3;
+    tsl::sparse_map<uint64_t, uint8_t> minimizers3;
 
     for(auto & skmer : freq_skmers2) {
         for(auto && minimiser : skmer | minimiserview3) {

@@ -1,6 +1,6 @@
 #include <seqan3/alphabet/nucleotide/dna4.hpp>
 #include <seqan3/alphabet/container/bitpacked_sequence.hpp>
-#include <seqan3/contrib/sdsl-lite.hpp>
+
 #include <sux/bits/SimpleSelect.hpp>
 #include <gtl/phmap.hpp>
 

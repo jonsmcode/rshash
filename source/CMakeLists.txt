@@ -9,5 +9,12 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/greg7mdp/gtl.git
     GIT_TAG        v1.2.0 # adjust tag/branch/commit as needed
 )
+FetchContent_Declare(
+    sparse_map
+    GIT_REPOSITORY https://github.com/Tessil/sparse-map.git
+    GIT_TAG master
+)
+
+FetchContent_MakeAvailable(sparse_map)
 FetchContent_MakeAvailable(gtl)
-target_link_libraries(rshash PRIVATE seqan3::seqan3 sharg::sharg gtl)
+target_link_libraries(rshash PRIVATE seqan3::seqan3 sharg::sharg gtl tsl::sparse_map)
