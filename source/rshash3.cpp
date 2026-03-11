@@ -37,13 +37,13 @@ RSHash3::RSHash3(
 
 int RSHash3::build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& input)
 {
-    auto minimiserview1 = srindex::views::xor_minimiser_and_positions2({.minimiser_size = m1, .window_size = k, .seed=seed1});
-    auto minimiserview2 = srindex::views::xor_minimiser_and_positions2({.minimiser_size = m2, .window_size = k, .seed=seed2});
-    auto minimiserview3 = srindex::views::xor_minimiser_and_positions2({.minimiser_size = m3, .window_size = k, .seed=seed3});
-    auto skmerview1 = srindex::views::xor_minimiser_and_skmer_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
-    auto skmerview2 = srindex::views::xor_minimiser_and_skmer_positions({.minimiser_size = m2, .window_size = k, .seed=seed2});
-    auto skmerview3 = srindex::views::xor_minimiser_and_skmer_positions({.minimiser_size = m3, .window_size = k, .seed=seed3});
-    auto kmerview = srindex::views::kmerview({.window_size = k});
+    auto minimiserview1 = rshash::views::xor_minimiser_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
+    auto minimiserview2 = rshash::views::xor_minimiser_and_positions({.minimiser_size = m2, .window_size = k, .seed=seed2});
+    auto minimiserview3 = rshash::views::xor_minimiser_and_positions({.minimiser_size = m3, .window_size = k, .seed=seed3});
+    auto skmerview1 = rshash::views::xor_minimiser_and_skmer_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
+    auto skmerview2 = rshash::views::xor_minimiser_and_skmer_positions({.minimiser_size = m2, .window_size = k, .seed=seed2});
+    auto skmerview3 = rshash::views::xor_minimiser_and_skmer_positions({.minimiser_size = m3, .window_size = k, .seed=seed3});
+    auto kmerview = rshash::views::kmerview({.window_size = k});
 
     const uint64_t M1 = 1ULL << (m1+m1);
     const uint64_t M2 = 1ULL << (m2+m2);
@@ -858,7 +858,7 @@ inline void RSHash3::update_minimiser(const uint64_t kmer, const uint64_t kmer_r
 
 uint64_t RSHash3::streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4> &query, uint64_t &extensions)
 {
-    auto view = srindex::views::kmerview({.window_size = k});
+    auto view = rshash::views::kmerview({.window_size = k});
 
     const uint64_t shift = 2*(k-1);
     constexpr uint64_t INF = std::numeric_limits<uint64_t>::max();

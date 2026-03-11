@@ -28,9 +28,9 @@ RSHash1::RSHash1(
 
 int RSHash1::build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input)
 {
-    auto minimiserview = srindex::views::xor_minimiser_and_positions2({.minimiser_size = m1, .window_size = k, .seed=seed1});
-    auto skmerview = srindex::views::xor_minimiser_and_skmer_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
-    auto kmerview = srindex::views::kmerview({.window_size = k});
+    auto minimiserview = rshash::views::xor_minimiser_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
+    auto skmerview = rshash::views::xor_minimiser_and_skmer_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
+    auto kmerview = rshash::views::kmerview({.window_size = k});
 
     std::cout << +m1 << "\n";
     const uint64_t M1 = 1ULL << (m1+m1);
@@ -503,7 +503,7 @@ inline void RSHash1::update_minimiser(const uint64_t kmer, const uint64_t kmer_r
 
 uint64_t RSHash1::streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4> &query, uint64_t &extensions)
 {
-    auto view = srindex::views::kmerview({.window_size = k});
+    auto view = rshash::views::kmerview({.window_size = k});
 
     uint64_t occurences = 0;
     uint64_t current_pos_minimiser=std::numeric_limits<uint64_t>::max();
