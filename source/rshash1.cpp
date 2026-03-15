@@ -1,7 +1,6 @@
 #include <filesystem>
 #include <seqan3/io/sequence_file/all.hpp>
 #include <cereal/archives/binary.hpp>
-#include <tsl/sparse_map.h>
 
 #include "rshash.hpp"
 #include "io.hpp"
