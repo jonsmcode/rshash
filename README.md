@@ -37,12 +37,9 @@ e.g.
 
 ### Benchmarks
 
-Datasets used by Pibiri (2022) cite are available ...
-
+Get datasets used by Pibiri (2022) with
 ```
-mkdir datasets
-cd datasets
-wget https://zenodo.org/records/17582116/data.fa.gz
+./benchmarks/download_and_preprocess_datasets.sh
 ```
 
 Run our benchmarks with script
