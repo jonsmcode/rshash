@@ -93,6 +93,7 @@ private:
     std::vector<uint64_t> text;
     mixer_64 m_hasher;
     void get_unfrequent_minimizers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &, std::vector<uint64_t> &, std::vector<size_t> &, size_t &, size_t &);
+    std::vector<std::vector<seqan3::dna4>> get_frequent_skmers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input);
     inline uint64_t find_minimiser(const uint64_t, const uint64_t, size_t &, size_t &, const uint64_t);
     inline void update_minimiser(const uint64_t, const uint64_t, uint64_t&, size_t &, size_t &, const uint64_t);
     inline bool check(const uint64_t, const uint64_t, uint64_t*, const size_t, const size_t, const size_t, const size_t, const uint64_t);
@@ -115,10 +116,11 @@ public:
     std::vector<uint64_t> rand_text_kmers(const uint64_t);
     uint64_t access(const uint64_t, const size_t);
     uint64_t lookup(const std::vector<uint64_t>&, bool verbose);
-    int build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&);
+    void build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&);
     uint64_t streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4>&, uint64_t&);
     void save(const std::filesystem::path&);
     void load(const std::filesystem::path&);
+    void print_space_info();
 };
 
 
