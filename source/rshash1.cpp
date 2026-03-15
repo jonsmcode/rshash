@@ -24,6 +24,51 @@ RSHash1::RSHash1(
 {}
 
 
+void RSHash1::get_unfrequent_minimizers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input,
+    std::vector<uint64_t> &unfreq_minimizers, std::vector<size_t> &counts, size_t &n1, size_t &c1)
+{
+    std::vector<uint64_t> minimizers;
+
+    std::cout << "get minimizers...\n";
+    auto minimiserview = rshash::views::xor_minimiser_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
+    for(auto & sequence : input) {
+        for(auto && minimiser : sequence | minimiserview)
+            minimizers.emplace_back(minimiser.minimiser_value);
+    }
+
+    std::cout << "sorting minimizers...\n";
+    std::sort(minimizers.begin(), minimizers.end());
+
+    std::cout << "get unfrequent minimizers...\n";
+    uint64_t current_minimizer = minimizers[0];
+    size_t counter = 1;
+    n1 = 0;
+    c1 = 1;
+    for(size_t i = 1; i < minimizers.size()-1; i++) {
+        if(minimizers[i] != current_minimizer) {
+            if(counter < m_thres1) {
+                unfreq_minimizers.emplace_back(current_minimizer);
+                counts.emplace_back(counter);
+                n1 += counter;
+            }
+            current_minimizer = minimizers[i];
+            counter = 1;
+            c1++;
+        }
+        else
+            counter++;
+    }
+    if(counter < m_thres1) {
+        unfreq_minimizers.emplace_back(current_minimizer);
+        counts.emplace_back(counter);
+        n1 += counter;
+    }
+
+    minimizers.clear();
+
+}
+
+
 int RSHash1::build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input)
 {
     auto minimiserview = rshash::views::xor_minimiser_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
@@ -58,54 +103,32 @@ int RSHash1::build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input)
     endpoints = sux::bits::EliasFano(reinterpret_cast<uint64_t*>(sequences.data()), N+33);
     sequences = bit_vector();
 
-    std::cout << "count minimizers1...\n";
-    // std::unordered_map<uint64_t, uint8_t> minimizers1;
-    tsl::sparse_map<uint64_t, uint8_t> minimizers1;
-
-    uint64_t n = 0;
-    for(auto & sequence : input) {
-        for(auto && minimiser : sequence | minimiserview) {
-            minimizers1[minimiser.minimiser_value]++;
-            if(minimizers1[minimiser.minimiser_value] > m_thres1)
-                minimizers1[minimiser.minimiser_value] = m_thres1;
-            n++;
-        }
-    }
-    
-    std::cout << "extract unfrequent minimizers...\n";
-    uint64_t n1 = 0;
     std::vector<uint64_t> unfreq_minimizers1;
-    for(auto const& [minimizer, count] : minimizers1) {
-        if(count < m_thres1) {
-            unfreq_minimizers1.push_back(minimizer);
-            n1 += count;
-        }
-    }
+    std::vector<size_t> counts1;
+    size_t n1, c1;
+    get_unfrequent_minimizers(input, unfreq_minimizers1, counts1, n1, c1);
 
-    size_t c1 = minimizers1.size();
     size_t c1tmp = unfreq_minimizers1.size();
 
-    std::cout << "unfrequent minimizers: " << unfreq_minimizers1.size() << " (" << (double) unfreq_minimizers1.size()/minimizers1.size()*100 << "%)\n";
+    std::cout << "unfrequent minimizers: " << unfreq_minimizers1.size() << " (" << (double) unfreq_minimizers1.size()/c1*100 << "%)\n";
 
     std::cout << "build R_1...\n";
-    std::sort(unfreq_minimizers1.begin(), unfreq_minimizers1.end());
-
     r1 = sux::bits::EliasFano(unfreq_minimizers1, M1);
 
     std::cout << "filling bitvector S_1...\n";
     s1 = bit_vector(n1+1, 0);
     s1[0] = 1;
     j = 0;
-    for(uint64_t minimizer : unfreq_minimizers1) {
-        j += minimizers1[minimizer];
+    for(size_t i = 0; i < counts1.size(); i++) {
+        j += counts1[i];
         s1[j] = 1;
     }
     s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), n1+1, 3);
 
-    minimizers1.clear();
     unfreq_minimizers1.clear();
+    counts1.clear();
 
-    // std::cout << "filling offsets_1...\n";
+    std::cout << "filling offsets_1...\n";
     const size_t offset_width = std::bit_width(N+32);
     bits::compact_vector::builder b1;
     b1.resize(n1, offset_width);
@@ -164,15 +187,7 @@ int RSHash1::build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input)
     std::cout << "remaining kmers: " << rem_kmers1 << " (" << (double) rem_kmers1/kmers*100 << "%)\n";
 
     std::cout << "build level 2...\n";
-
-    // size_t i = 0;
-    // for(const auto& sequence : freq_skmers1) {
-    //     std::cout << ">freq superkmer " << i++ << std::endl;
-    //     for(const auto& nucleotide : sequence)
-    //         std::cout << nucleotide.to_char();
-    //     std::cout << std::endl;
-    // }
-
+    hashmap.reserve(rem_kmers1);
     for(auto & sequence : freq_skmers1) {
         for(auto && window : sequence | kmerview) {
             hashmap.insert(std::min<uint64_t>(window.kmer_value, window.kmer_value_rev));
@@ -186,7 +201,6 @@ int RSHash1::build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input)
     std::cout << "text length: " << N << "\n";
     std::cout << "textkmers: " << kmers <<  '\n';
     
-    std::cout << "no minimiser: " << n << "\n";
     std::cout << "no distinct minimiser: " << c1tmp << "\n";
     std::cout << "minimiser going to level 2: " << c1-c1tmp << "  " << (double) (c1-c1tmp)/c1*100 << "%\n";
     std::cout << "no minimiser1: " << n1 << "\n";
