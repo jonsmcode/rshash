@@ -94,7 +94,7 @@ private:
     std::vector<uint64_t> text;
     mixer_64 m_hasher;
     void get_unfrequent_minimizers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &, std::vector<uint64_t> &, std::vector<size_t> &, size_t &, size_t &);
-    std::vector<std::vector<seqan3::dna4>> get_frequent_skmers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input);
+    std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> get_frequent_skmers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input);
     inline uint64_t find_minimiser(const uint64_t, const uint64_t, size_t &, size_t &);
     inline void update_minimiser(const uint64_t, const uint64_t, uint64_t&, size_t &, size_t &);
     inline bool check(const uint64_t, const uint64_t, uint64_t*, const size_t, const size_t, const size_t, const size_t);

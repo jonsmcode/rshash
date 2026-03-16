@@ -81,12 +81,11 @@ void RSHash1::get_unfrequent_minimizers(const std::vector<seqan3::bitpacked_sequ
 }
 
 
-std::vector<std::vector<seqan3::dna4>> RSHash1::get_frequent_skmers(
-    const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input)
+std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> RSHash1::get_frequent_skmers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input)
 {
     auto skmerview = rshash::views::xor_minimiser_and_skmer_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
 
-    std::vector<std::vector<seqan3::dna4>> freq_skmers;
+    std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> freq_skmers;
     for(auto & sequence : input) {
         size_t start_position = 0;
         bool cur_freq, freq;
@@ -100,18 +99,18 @@ std::vector<std::vector<seqan3::dna4>> RSHash1::get_frequent_skmers(
             if(freq && !cur_freq)
                 start_position = minimiser.range_position;
             if(!freq && cur_freq) {
-                std::vector<seqan3::dna4> skmer;
+                seqan3::bitpacked_sequence<seqan3::dna4> skmer;
                 for(size_t i=start_position; i < minimiser.range_position-1+k; i++)
                     skmer.push_back(sequence[i]);
-                freq_skmers.push_back(skmer);
+                freq_skmers.emplace_back(skmer);
             }
             freq = cur_freq;
         }
         if(!cur_freq) {
-            std::vector<seqan3::dna4> skmer;
+            seqan3::bitpacked_sequence<seqan3::dna4> skmer;
             for(size_t i=start_position; i < sequence.size(); i++)
                 skmer.push_back(sequence[i]);
-            freq_skmers.push_back(skmer);
+            freq_skmers.emplace_back(skmer);
         }
     }
 
@@ -201,7 +200,7 @@ void RSHash1::build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input
     delete[] count1;
 
     std::cout << "get frequent skmers...\n";
-    std::vector<std::vector<seqan3::dna4>> freq_skmers = get_frequent_skmers(input);
+    std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> freq_skmers = get_frequent_skmers(input);
     
     size_t rem_kmers = 0;
     for(auto & skmer : freq_skmers)
@@ -210,8 +209,8 @@ void RSHash1::build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input
 
     std::cout << "build level 2...\n";
     hashmap.reserve(rem_kmers);
-    for(auto & sequence : freq_skmers) {
-        for(auto && window : sequence | kmerview) {
+    for(auto & skmer : freq_skmers) {
+        for(auto && window : skmer | kmerview) {
             hashmap.insert(std::min<uint64_t>(window.kmer_value, window.kmer_value_rev));
         }
     }
