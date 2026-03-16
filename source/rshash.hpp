@@ -84,6 +84,7 @@ class RSHash1
 private:
     uint64_t k, m1, m_thres1;
     uint64_t span;
+    uint64_t kmermask, mmermask;
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> r1;
     bit_vector s1;
     sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s1_select;
@@ -94,13 +95,13 @@ private:
     mixer_64 m_hasher;
     void get_unfrequent_minimizers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &, std::vector<uint64_t> &, std::vector<size_t> &, size_t &, size_t &);
     std::vector<std::vector<seqan3::dna4>> get_frequent_skmers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input);
-    inline uint64_t find_minimiser(const uint64_t, const uint64_t, size_t &, size_t &, const uint64_t);
-    inline void update_minimiser(const uint64_t, const uint64_t, uint64_t&, size_t &, size_t &, const uint64_t);
-    inline bool check(const uint64_t, const uint64_t, uint64_t*, const size_t, const size_t, const size_t, const size_t, const uint64_t);
+    inline uint64_t find_minimiser(const uint64_t, const uint64_t, size_t &, size_t &);
+    inline void update_minimiser(const uint64_t, const uint64_t, uint64_t&, size_t &, size_t &);
+    inline bool check(const uint64_t, const uint64_t, uint64_t*, const size_t, const size_t, const size_t, const size_t);
     inline bool check_minimiser_pos(uint64_t *, const uint64_t, const uint64_t, const uint64_t, const size_t, const size_t, bool &, uint64_t &, uint64_t &, uint64_t &);
     inline bool check_minimiser_pos2(uint64_t *, const uint64_t, const uint64_t, const uint64_t, const size_t, const size_t, const size_t, bool &, uint64_t &, uint64_t &, uint64_t &);
     inline bool check_overlap(uint64_t, uint64_t, uint64_t &, uint64_t &);
-    inline void fill_buffer(uint64_t*, uint64_t*, size_t, size_t, const uint64_t, const uint64_t);
+    inline void fill_buffer(uint64_t*, uint64_t*, size_t, size_t, const uint64_t);
     inline bool lookup_buffer(uint64_t*, uint64_t*, const size_t, const uint64_t, const uint64_t, uint64_t &, const size_t, const size_t, bool &, uint64_t &, uint64_t &);
     inline bool extend_in_text(uint64_t&, uint64_t, uint64_t, bool, const uint64_t, const uint64_t, const uint64_t);
     const inline uint64_t get_word64(uint64_t pos);

@@ -19,7 +19,9 @@ RSHash1::RSHash1(
       m_thres1(m_thres1), span(k-m1+1),
       endpoints(std::vector<uint64_t>{}, 1),
       r1(std::vector<uint64_t>{}, 1),
-      m_hasher(seed1)
+      m_hasher(seed1),
+      kmermask(compute_mask(2u * k)),
+      mmermask(compute_mask(2u * m1))
 {}
 
 
@@ -159,10 +161,10 @@ void RSHash1::build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input
 
     std::cout << "unfrequent minimizers: " << unfreq_minimizers.size() << " (" << (double) unfreq_minimizers.size()/no_unique_minimizers*100 << "%)\n";
 
-    std::cout << "build bitvector R_1...\n";
+    std::cout << "mark unfrequent minimizers in bitvector R_1...\n";
     r1 = sux::bits::EliasFano(unfreq_minimizers, M1);
 
-    std::cout << "build bitvector S_1...\n";
+    std::cout << "mark minimizers occurences in bitvector S_1...\n";
     s1 = bit_vector(no_minimizers+1, 0);
     s1[0] = 1;
     j = 0;
@@ -229,7 +231,6 @@ void RSHash1::build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input
     std::cout << "no kmers HT: " << hashmap.size() << " " << (double) hashmap.size()/kmers*100 << "%\n";
 
     print_space_info();
-
 }
 
 
@@ -250,8 +251,7 @@ const inline uint64_t RSHash1::get_base(uint64_t pos) {
 
 uint64_t RSHash1::access(const uint64_t unitig_id, const size_t offset)
 {
-    const uint64_t mask = compute_mask(2u * k);
-    return get_word64(offset) & mask;
+    return get_word64(offset) & kmermask;
 }
 
 
@@ -290,21 +290,18 @@ uint64_t RSHash1::lookup(const std::vector<uint64_t> &kmers, bool verbose)
 {
     uint64_t occurences = 0;
 
-    const uint64_t kmermask = compute_mask(2u * k);
-    const uint64_t mmermask = compute_mask(2u * m1);
-
     uint64_t* offsets = new uint64_t[m_thres1-1];
     size_t left_minimiser_position, right_minimiser_position;
 
     for(uint64_t kmer : kmers) {
         const uint64_t kmer_rc = crc(kmer, k);
-        const uint64_t minimiser = find_minimiser(kmer, kmer_rc, left_minimiser_position, right_minimiser_position, mmermask);
+        const uint64_t minimiser = find_minimiser(kmer, kmer_rc, left_minimiser_position, right_minimiser_position);
 
         if(uint64_t minimiser_rank = r1.rank(minimiser); r1.rank(minimiser + 1) - minimiser_rank) {
             size_t p = s1_select.select(minimiser_rank);
             size_t no_minimiser = s1_select.select(minimiser_rank+1) - p;
 
-            occurences += check(kmer, kmer_rc, offsets, p, no_minimiser, left_minimiser_position, right_minimiser_position, kmermask);
+            occurences += check(kmer, kmer_rc, offsets, p, no_minimiser, left_minimiser_position, right_minimiser_position);
         }
         else
             occurences += hashmap.contains(std::min<uint64_t>(kmer, kmer_rc));
@@ -318,8 +315,7 @@ uint64_t RSHash1::lookup(const std::vector<uint64_t> &kmers, bool verbose)
 
 inline bool RSHash1::check(const uint64_t kmer, const uint64_t kmer_rc,
     uint64_t* offsets, const size_t p, const size_t no_skmers,
-    const size_t left_minimiser_position, const size_t right_minimiser_position,
-    const uint64_t mask)
+    const size_t left_minimiser_position, const size_t right_minimiser_position)
 {
     for(size_t i = 0; i < no_skmers; i++)
         offsets[i] = offsets1.access(p+i)-span+1;
@@ -327,15 +323,15 @@ inline bool RSHash1::check(const uint64_t kmer, const uint64_t kmer_rc,
     for(size_t i = 0; i < no_skmers; i++) {
         const uint64_t o = offsets[i];
 
-        uint64_t hash_rc = get_word64(o + left_minimiser_position) & mask;
-        uint64_t hash_fwd = get_word64(o + span-1-left_minimiser_position) & mask;
+        uint64_t hash_rc = get_word64(o + left_minimiser_position) & kmermask;
+        uint64_t hash_fwd = get_word64(o + span-1-left_minimiser_position) & kmermask;
 
         if(kmer == hash_fwd || kmer_rc == hash_rc)
             return true;
 
         if(left_minimiser_position != k-m1-right_minimiser_position) {
-            hash_fwd = get_word64(o + right_minimiser_position) & mask;
-            hash_rc = get_word64(o + span-1-right_minimiser_position) & mask;
+            hash_fwd = get_word64(o + right_minimiser_position) & kmermask;
+            hash_rc = get_word64(o + span-1-right_minimiser_position) & kmermask;
 
             if(kmer == hash_fwd || kmer_rc == hash_rc)
                 return true;
@@ -347,7 +343,7 @@ inline bool RSHash1::check(const uint64_t kmer, const uint64_t kmer_rc,
 }
 
 
-inline void RSHash1::fill_buffer(uint64_t *offsets, uint64_t *buffer, size_t p, size_t N, const uint64_t mask, const uint64_t shift)
+inline void RSHash1::fill_buffer(uint64_t *offsets, uint64_t *buffer, size_t p, size_t N, const uint64_t shift)
 {
     for(uint64_t i = 0; i < N; i++)
         offsets[i] = offsets1.access(p+i)+1-span;
@@ -355,7 +351,7 @@ inline void RSHash1::fill_buffer(uint64_t *offsets, uint64_t *buffer, size_t p, 
     for(uint64_t i = 0; i < N; i++) {
         const uint64_t o = offsets[i];
         
-        uint64_t kmer = get_word64(o) & mask;
+        uint64_t kmer = get_word64(o) & kmermask;
         uint64_t bits = get_word64(o + k);
         *buffer++ = kmer;
         for(size_t j=0; j < span-1; j++) {
@@ -474,7 +470,7 @@ inline bool RSHash1::extend_in_text(uint64_t &text_pos, uint64_t start, uint64_t
 }
 
 
-inline uint64_t RSHash1::find_minimiser(const uint64_t kmer, const uint64_t kmer_rc, size_t &left_minimiser_position, size_t &right_minimiser_position, const uint64_t mmermask)
+inline uint64_t RSHash1::find_minimiser(const uint64_t kmer, const uint64_t kmer_rc, size_t &left_minimiser_position, size_t &right_minimiser_position)
 {
     uint64_t mmer = kmer >> 2*(k - m1);
     uint64_t mmer_rc = kmer_rc & mmermask;
@@ -498,10 +494,10 @@ inline uint64_t RSHash1::find_minimiser(const uint64_t kmer, const uint64_t kmer
     return minimiser_value;
 }
 
-inline void RSHash1::update_minimiser(const uint64_t kmer, const uint64_t kmer_rc, uint64_t &minimiser, size_t &left_minimiser_position, size_t &right_minimiser_position, const uint64_t mmermask)
+inline void RSHash1::update_minimiser(const uint64_t kmer, const uint64_t kmer_rc, uint64_t &minimiser, size_t &left_minimiser_position, size_t &right_minimiser_position)
 {
     if(left_minimiser_position-- == 0) {
-        minimiser = find_minimiser(kmer, kmer_rc, left_minimiser_position, right_minimiser_position, mmermask);
+        minimiser = find_minimiser(kmer, kmer_rc, left_minimiser_position, right_minimiser_position);
         return;
     }
     const uint64_t mmer = kmer >> 2*(k - m1);
@@ -530,8 +526,6 @@ uint64_t RSHash1::streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4>
     uint64_t occurences = 0;
     uint64_t current_pos_minimiser=std::numeric_limits<uint64_t>::max();
     uint64_t current_neg_minimiser=std::numeric_limits<uint64_t>::max();
-    const uint64_t kmermask = compute_mask(2u * k);
-    const uint64_t mmermask = compute_mask(2u * m1);
     const uint64_t shift = 2*(k-1);
     uint64_t* offsets = new uint64_t[m_thres1-1];
     uint64_t* kmer_buffer = new uint64_t[(m_thres1-1) * span];
@@ -552,9 +546,9 @@ uint64_t RSHash1::streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4>
         }
         else {
             if(rolling)
-                update_minimiser(kmer.kmer_value, kmer.kmer_value_rev, minimiser, left_minimiser_position, right_minimiser_position, mmermask);
+                update_minimiser(kmer.kmer_value, kmer.kmer_value_rev, minimiser, left_minimiser_position, right_minimiser_position);
             else {
-                minimiser = find_minimiser(kmer.kmer_value, kmer.kmer_value_rev, left_minimiser_position, right_minimiser_position, mmermask);
+                minimiser = find_minimiser(kmer.kmer_value, kmer.kmer_value_rev, left_minimiser_position, right_minimiser_position);
                 rolling = true;
             }
 
@@ -566,7 +560,7 @@ uint64_t RSHash1::streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4>
                 const size_t minimiser_position = s1_select.select(minimiser_rank);
                 no_minimiser = s1_select.select(minimiser_rank+1) - minimiser_position;
 
-                fill_buffer(offsets, kmer_buffer, minimiser_position, no_minimiser, kmermask, shift);
+                fill_buffer(offsets, kmer_buffer, minimiser_position, no_minimiser, shift);
                 found = lookup_buffer(kmer_buffer, offsets, no_minimiser, kmer.kmer_value, kmer.kmer_value_rev, text_pos, left_minimiser_position, right_minimiser_position, forward, sequence_begin, sequence_end);
                 occurences += found;
                 current_pos_minimiser = minimiser;
@@ -605,6 +599,8 @@ void RSHash1::load(const std::filesystem::path &filepath) {
     in.close();
 
     span = k - m1 + 1;
+    this->kmermask = compute_mask(2u * k);
+    this->mmermask = compute_mask(2u * m1);
     s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), s1.size(), 3);
 
     std::cout << "loaded index...\n";
