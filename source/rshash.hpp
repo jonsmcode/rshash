@@ -92,9 +92,13 @@ private:
     gtl::flat_hash_set<uint64_t> hashmap;
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> endpoints;
     std::vector<uint64_t> text;
+    uint64_t no_text_kmers;
     mixer_64 m_hasher;
-    void get_unfrequent_minimizers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &, std::vector<uint64_t> &, std::vector<size_t> &, size_t &, size_t &);
-    std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> get_frequent_skmers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input);
+    size_t mark_sequences(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &);
+    uint64_t get_unfrequent_minimizers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &, std::vector<uint64_t> &, std::vector<uint8_t> &);
+    std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> get_frequent_skmers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &);
+    void mark_minimizer_occurences(const size_t, const std::vector<uint8_t> &);
+    void fill_minimizer_offsets(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &, const size_t, const size_t, const size_t);
     inline uint64_t find_minimiser(const uint64_t, const uint64_t, size_t &, size_t &);
     inline void update_minimiser(const uint64_t, const uint64_t, uint64_t&, size_t &, size_t &);
     inline bool check(const uint64_t, const uint64_t, uint64_t*, const size_t, const size_t, const size_t, const size_t);
@@ -121,7 +125,7 @@ public:
     uint64_t streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4>&, uint64_t&);
     void save(const std::filesystem::path&);
     void load(const std::filesystem::path&);
-    void print_space_info();
+    void print_info();
 };
 
 
