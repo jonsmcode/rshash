@@ -1,12 +1,11 @@
 #include <seqan3/alphabet/nucleotide/dna4.hpp>
 #include <seqan3/alphabet/container/bitpacked_sequence.hpp>
-
 #include <sux/bits/SimpleSelect.hpp>
 #include <gtl/phmap.hpp>
-
 #include "compact_vector.hpp"
 #include "EliasFano.hpp"
 #include "minimiser_views.hpp"
+
 
 using namespace seqan3::literals;
 using namespace seqan3::contrib::sdsl;
@@ -42,37 +41,6 @@ static inline constexpr uint64_t crc(uint64_t x, uint64_t k) {
     return res;
 }
 
-inline std::vector<uint64_t> pack_dna4_to_uint64(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input)
-{
-    auto ranks = input | std::views::join | seqan3::views::to_rank;
-
-    std::vector<uint64_t> packed;
-    packed.push_back(UINT64_MAX); // padding for left extension
-
-    uint64_t word = 0;
-    size_t shift = 0;
-
-    for (uint8_t r : ranks)
-    {
-        word |= uint64_t(r) << shift; // pack 2 bits per base
-        shift += 2;
-
-        if (shift == 64)
-        {
-            packed.push_back(word);
-            word = 0;
-            shift = 0;
-        }
-    }
-
-    if (shift != 0) // last partial word
-        packed.push_back(word);
-
-    packed.push_back(UINT64_MAX); // padding for right extension
-
-    return packed;
-}
-
 
 const uint64_t seed1 = 1;
 const uint64_t seed2 = 0x29'6D'BD'33'32'56'8C'64;
@@ -94,8 +62,8 @@ private:
     std::vector<uint64_t> text;
     uint64_t no_text_kmers;
     mixer_64 m_hasher;
-    size_t mark_sequences(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &);
-    uint64_t get_unfrequent_minimizers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &, std::vector<uint64_t> &, std::vector<uint8_t> &);
+    // size_t mark_sequences(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &);
+    // uint64_t get_unfrequent_minimizers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &, std::vector<uint64_t> &, std::vector<uint8_t> &);
     std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> get_frequent_skmers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &);
     void mark_minimizer_occurences(const size_t, const std::vector<uint8_t> &);
     void fill_minimizer_offsets(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &, std::vector<uint8_t> &, const size_t, const size_t, const size_t);

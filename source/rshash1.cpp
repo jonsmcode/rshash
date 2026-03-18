@@ -3,6 +3,7 @@
 #include <cereal/archives/binary.hpp>
 
 #include "rshash.hpp"
+#include "build.hpp"
 #include "io.hpp"
 #include "minimiser_views.hpp"
 
@@ -24,78 +25,43 @@ RSHash1::RSHash1(
       mmermask(compute_mask(2u * m1))
 {}
 
-size_t RSHash1::mark_sequences(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input)
+
+
+void RSHash1::mark_minimizer_occurences(const size_t no_skmers, const std::vector<uint8_t> &minimizer_occurences)
 {
-    size_t text_length = 0;
-    no_text_kmers = 0;
-    uint64_t no_sequences = 0;
-    for(auto & record : input) {
-        text_length += record.size();
-        no_text_kmers += record.size() - k + 1;
-        no_sequences++;
+    s1 = bit_vector(no_skmers+1, 0);
+    s1[0] = 1;
+    uint64_t j = 0;
+    for(size_t i = 0; i < minimizer_occurences.size(); i++) {
+        j += minimizer_occurences[i];
+        s1[j] = 1;
     }
-
-    std::cout << "text length: " << text_length << "\n";
-    std::cout << "text kmers: " << no_text_kmers <<  '\n';
-    std::cout << "no sequences: " << no_sequences << "\n";
-
-    std::cout << "mark endpoints BV...\n";
-    bit_vector sequences = bit_vector(text_length+33, 0);
-    sequences[0] = 1;
-    sequences[32] = 1;
-    uint64_t j = 32;
-    for(uint64_t i=0; i < no_sequences; i++) {
-        j += input[i].size();
-        sequences[j] = 1;
-    }
-    endpoints = sux::bits::EliasFano(reinterpret_cast<uint64_t*>(sequences.data()), text_length+33);
-    sequences = bit_vector();
-
-    return text_length;
+    s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), no_skmers+1, 3);
 }
 
 
-uint64_t RSHash1::get_unfrequent_minimizers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &sequences,
-    std::vector<uint64_t> &unfreq_minimizers, std::vector<uint8_t> &counts)
+void RSHash1::fill_minimizer_offsets(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &sequences,
+    std::vector<uint8_t> &minimizer_occurences,
+    const size_t text_length, const size_t no_minimizers, const size_t no_skmers)
 {
-    std::vector<uint64_t> minimizers;
+    const size_t offset_width = std::bit_width(text_length+32);
+    bits::compact_vector::builder builder;
+    builder.resize(no_skmers, offset_width);
 
-    std::cout << "computing minimizers...\n";
-    auto minimiserview = rshash::views::xor_minimiser_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
+    std::fill(minimizer_occurences.begin(), minimizer_occurences.end(), 0);
+
+    size_t length = 32;
     for(auto & sequence : sequences) {
-        for(auto && minimiser : sequence | minimiserview)
-            minimizers.emplace_back(minimiser.minimiser_value);
-    }
-
-    std::cout << "sorting minimizers...\n";
-    std::sort(minimizers.begin(), minimizers.end());
-
-    std::cout << "get unfrequent minimizers...\n";
-    uint64_t current_minimizer = minimizers[0];
-    uint64_t occurences = 1;
-    uint64_t no_skmers = 0;
-    for(size_t i = 1; i < minimizers.size(); i++) {
-        if(minimizers[i] != current_minimizer) {
-            if(occurences <= m_thres1) {
-                unfreq_minimizers.emplace_back(current_minimizer);
-                counts.emplace_back(static_cast<uint8_t>(occurences));
-                no_skmers += occurences;
+        for (auto && minimiser : sequence | rshash::views::xor_minimiser_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1})) {
+            if(uint64_t i = r1.rank(minimiser.minimiser_value); r1.rank(minimiser.minimiser_value+1)-i) {
+                size_t s = s1_select.select(i);
+                builder.set(s + minimizer_occurences[i], length + minimiser.range_position);
+                minimizer_occurences[i]++;
             }
-            current_minimizer = minimizers[i];
-            occurences = 1;
         }
-        else
-            occurences++;
+        length += sequence.size();
     }
-    if(minimizers.back() == current_minimizer && occurences <= m_thres1) {
-        unfreq_minimizers.emplace_back(current_minimizer);
-        counts.emplace_back(static_cast<uint8_t>(occurences));
-        no_skmers += occurences;
-    }
-
-    minimizers.clear();
-
-    return no_skmers;
+    builder.build(offsets1);
 }
 
 
@@ -137,51 +103,14 @@ std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> RSHash1::get_frequent_skme
 }
 
 
-void RSHash1::fill_minimizer_offsets(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &sequences,
-    std::vector<uint8_t> &minimizer_occurences,
-    const size_t text_length, const size_t no_minimizers, const size_t no_skmers)
-{
-    const size_t offset_width = std::bit_width(text_length+32);
-    bits::compact_vector::builder builder;
-    builder.resize(no_skmers, offset_width);
-
-    std::fill(minimizer_occurences.begin(), minimizer_occurences.end(), 0);
-
-    size_t length = 32;
-    for(auto & sequence : sequences) {
-        for (auto && minimiser : sequence | rshash::views::xor_minimiser_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1})) {
-            if(uint64_t i = r1.rank(minimiser.minimiser_value); r1.rank(minimiser.minimiser_value+1)-i) {
-                size_t s = s1_select.select(i);
-                builder.set(s + minimizer_occurences[i], length + minimiser.range_position);
-                minimizer_occurences[i]++;
-            }
-        }
-        length += sequence.size();
-    }
-    builder.build(offsets1);
-}
-
-
-void RSHash1::mark_minimizer_occurences(const size_t no_skmers, const std::vector<uint8_t> &minimizer_occurences)
-{
-    s1 = bit_vector(no_skmers+1, 0);
-    s1[0] = 1;
-    uint64_t j = 0;
-    for(size_t i = 0; i < minimizer_occurences.size(); i++) {
-        j += minimizer_occurences[i];
-        s1[j] = 1;
-    }
-    s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), no_skmers+1, 3);
-}
-
-
 void RSHash1::build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input)
 {
-    size_t text_length = mark_sequences(input);
+    no_text_kmers = mark_sequences(input, k, endpoints);
+    size_t text_length = endpoints.size();
 
     std::vector<uint64_t> minimizers;
     std::vector<uint8_t> minimizer_occurences;
-    const uint64_t no_skmers = get_unfrequent_minimizers(input, minimizers, minimizer_occurences);
+    const uint64_t no_skmers = get_unfrequent_minimizers(input, m1, m_thres1, k, seed1, minimizers, minimizer_occurences);
     const size_t no_minimizers = minimizers.size();
 
     std::cout << "build R_1...\n";

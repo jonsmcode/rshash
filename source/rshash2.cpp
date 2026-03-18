@@ -3,6 +3,7 @@
 #include <cereal/archives/binary.hpp>
 
 #include "rshash.hpp"
+#include "build.hpp"
 #include "io.hpp"
 #include "minimiser_views.hpp"
 
@@ -370,10 +371,8 @@ const inline uint64_t RSHash2::get_base(uint64_t pos) {
 }
 
 
-uint64_t RSHash2::access(const uint64_t unitig_id, const size_t offset)
-{
-    const uint64_t mask = compute_mask(2u * k);
-    return get_word64(offset) & mask;
+uint64_t RSHash2::access(const uint64_t unitig_id, const size_t offset) {
+    return get_word64(offset) & kmermask;
 }
 
 
@@ -707,10 +706,10 @@ uint64_t RSHash2::streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4>
     constexpr uint64_t INF = std::numeric_limits<uint64_t>::max();
     uint64_t current_minimiser1=INF, current_minimiser2=INF;
     uint64_t current_neg_minimiser1=INF, current_neg_minimiser2=INF;
-    uint64_t* offsets1 = new uint64_t[m_thres1-1];
-    uint64_t* offsets2 = new uint64_t[m_thres2-1];
-    uint64_t* buffer1 = new uint64_t[(m_thres1-1) * span1];
-    uint64_t* buffer2 = new uint64_t[(m_thres2-1) * span2];
+    uint64_t* offsets1 = new uint64_t[m_thres1];
+    uint64_t* offsets2 = new uint64_t[m_thres2];
+    uint64_t* buffer1 = new uint64_t[(m_thres1) * span1];
+    uint64_t* buffer2 = new uint64_t[(m_thres2) * span2];
     size_t no_skmers1, no_skmers2;
     uint64_t unitig_begin, unitig_end;
     uint64_t text_pos;

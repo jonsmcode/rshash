@@ -3,6 +3,7 @@
 #include <cereal/archives/binary.hpp>
 
 #include "rshash.hpp"
+#include "build.hpp"
 #include "io.hpp"
 #include "minimiser_views.hpp"
 
