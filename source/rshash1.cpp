@@ -138,30 +138,27 @@ std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> RSHash1::get_frequent_skme
 
 
 void RSHash1::fill_minimizer_offsets(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &sequences,
+    std::vector<uint8_t> &minimizer_occurences,
     const size_t text_length, const size_t no_minimizers, const size_t no_skmers)
 {
     const size_t offset_width = std::bit_width(text_length+32);
     bits::compact_vector::builder builder;
     builder.resize(no_skmers, offset_width);
 
-    uint8_t* count = new uint8_t[no_minimizers];
-    std::memset(count, 0, no_minimizers*sizeof(uint8_t));
+    std::fill(minimizer_occurences.begin(), minimizer_occurences.end(), 0);
 
-    auto minimiserview = rshash::views::xor_minimiser_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
     size_t length = 32;
     for(auto & sequence : sequences) {
-        for (auto && minimiser : sequence | minimiserview) {
+        for (auto && minimiser : sequence | rshash::views::xor_minimiser_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1})) {
             if(uint64_t i = r1.rank(minimiser.minimiser_value); r1.rank(minimiser.minimiser_value+1)-i) {
                 size_t s = s1_select.select(i);
-                builder.set(s + count[i], length + minimiser.range_position);
-                count[i]++;
+                builder.set(s + minimizer_occurences[i], length + minimiser.range_position);
+                minimizer_occurences[i]++;
             }
         }
         length += sequence.size();
     }
     builder.build(offsets1);
-
-    delete[] count;
 }
 
 
@@ -180,9 +177,6 @@ void RSHash1::mark_minimizer_occurences(const size_t no_skmers, const std::vecto
 
 void RSHash1::build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input)
 {
-    auto minimiserview = rshash::views::xor_minimiser_and_positions({.minimiser_size = m1, .window_size = k, .seed=seed1});
-    auto kmerview = rshash::views::kmerview({.window_size = k});
-
     size_t text_length = mark_sequences(input);
 
     std::vector<uint64_t> minimizers;
@@ -197,20 +191,18 @@ void RSHash1::build(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input
 
     std::cout << "filling bitvector S_1...\n";
     mark_minimizer_occurences(no_skmers, minimizer_occurences);
-    minimizer_occurences.clear();
 
     std::cout << "filling offsets_1...\n";
-    fill_minimizer_offsets(input, text_length, no_minimizers, no_skmers);
+    fill_minimizer_offsets(input, minimizer_occurences, text_length, no_minimizers, no_skmers);
+    minimizer_occurences.clear();
 
     std::cout << "get frequent skmers...\n";
     auto freq_skmers = get_frequent_skmers(input);
 
     std::cout << "build level 2...\n";
-    for(auto & sequence : freq_skmers) {
-        for(auto && window : sequence | kmerview) {
+    for(auto & sequence : freq_skmers)
+        for(auto && window : sequence | rshash::views::kmerview({.window_size = k}))
             hashmap.insert(std::min<uint64_t>(window.kmer_value, window.kmer_value_rev));
-        }
-    }
 
     std::cout << "copy text...\n";
     text = pack_dna4_to_uint64(input);
@@ -593,7 +585,7 @@ void RSHash1::load(const std::filesystem::path &filepath) {
 
 void RSHash1::print_info() {
     const size_t N = text.size()*32;
-    const size_t offset_width = std::bit_width(N+32);
+    const size_t offset_width = std::bit_width(N);
     const uint64_t M1 = 1ULL << (m1+m1);
     const uint64_t no_minimizers = r1.rank(M1);
     const uint64_t no_skmers = s1.size();
