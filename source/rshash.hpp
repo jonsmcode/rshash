@@ -62,8 +62,6 @@ private:
     std::vector<uint64_t> text;
     uint64_t no_text_kmers;
     mixer_64 m_hasher;
-    // size_t mark_sequences(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &);
-    // uint64_t get_unfrequent_minimizers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &, std::vector<uint64_t> &, std::vector<uint8_t> &);
     std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> get_frequent_skmers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &);
     void mark_minimizer_occurences(const size_t, const std::vector<uint8_t> &);
     void fill_minimizer_offsets(std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &, std::vector<uint8_t> &, const size_t, const size_t, const size_t);
@@ -104,6 +102,7 @@ private:
     uint64_t span1, span2;
     uint64_t kmermask, mmermask1, mmermask2;
     mixer_64 m_hasher1, m_hasher2;
+    uint64_t no_text_kmers;
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> r1, r2;
     bit_vector s1, s2;
     sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s1_select, s2_select;
@@ -111,6 +110,12 @@ private:
     gtl::flat_hash_set<uint64_t> hashmap;
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> endpoints;
     std::vector<uint64_t> text;
+    template<int level>
+    void mark_minimizer_occurences(const size_t, const std::vector<uint8_t> &);
+    template<int level>
+    void fill_minimizer_offsets(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &, std::vector<size_t> &, std::vector<uint8_t> &, const size_t, const size_t);
+    template<int level>
+    void get_frequent_skmers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &, std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &, std::vector<size_t> &);
     template<int level>
     inline uint64_t find_minimiser(const uint64_t, const uint64_t, size_t &, size_t &);
     template<int level>
@@ -142,10 +147,11 @@ public:
     std::vector<uint64_t> rand_text_kmers(const uint64_t);
     uint64_t access(const uint64_t, const size_t);
     uint64_t lookup(const std::vector<uint64_t>&, bool verbose);
-    int build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&);
+    void build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&);
     uint64_t streaming_query(const seqan3::bitpacked_sequence<seqan3::dna4>&, uint64_t&);
     int save(const std::filesystem::path&);
     int load(const std::filesystem::path&);
+    void print_info();
 };
 
 
