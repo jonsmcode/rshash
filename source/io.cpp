@@ -115,7 +115,7 @@ int RSHash::save(const std::filesystem::path &filepath) {
         mmermask1, mmermask2, mmermask3,
         level, m1, m2, m3, m_thres1, m_thres2, m_thres3, threshold, span1, span2, span3,
         s1, s2, s3, s4, s5, endpoints, r1, r2, r3, r4, r5, offsets1, offsets2, offsets3, offsets4, offsets5, text,
-        loc, use_ht,  hashsets, hashsets_rc, hashmaps, hashmaps_rc);
+        loc, use_ht,  hashsets, hashmaps);
 
     out.close();
     return 0;
@@ -129,7 +129,7 @@ int RSHash::load(const std::filesystem::path &filepath) {
         mmermask1, mmermask2, mmermask3,
         level, m1, m2, m3, m_thres1, m_thres2, m_thres3, threshold, span1, span2, span3,
         s1, s2, s3, s4, s5, endpoints, r1, r2, r3, r4, r5, offsets1, offsets2, offsets3, offsets4, offsets5, text,
-        loc, use_ht, hashsets, hashsets_rc, hashmaps, hashmaps_rc);
+        loc, use_ht, hashsets, hashmaps);
     in.close();
 
     this->s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), s1.size(), 3);

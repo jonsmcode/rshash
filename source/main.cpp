@@ -124,10 +124,6 @@ int main(int argc, char** argv)
             index = RSHash(args.k, args.level, args.m1, args.m2, args.m3, args.t1, args.t2, args.t3, args.t, args.loc, !args.ht);
         else {
             const Shapes32 shapes = shape32_create(args.shapes);
-            if(shapes.length > 32) {
-                std::cerr << "shapes length > 32 not supported\n";
-                return -1;
-            }
             index = RSHash(shapes, args.level, args.m1, args.m2, args.m3, args.t1, args.t2, args.t3, args.t, args.loc, !args.ht);
         }
         index.build(text);

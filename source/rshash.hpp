@@ -78,9 +78,7 @@ private:
     sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s1_select, s2_select, s3_select, s4_select, s5_select;
     bits::compact_vector offsets1, offsets2, offsets3, offsets4, offsets5;
     std::vector<gtl::flat_hash_set<uint64_t>> hashsets;
-    std::vector<gtl::flat_hash_set<uint64_t>> hashsets_rc;
     std::vector<FlatMap> hashmaps;
-    std::vector<FlatMap> hashmaps_rc;
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> endpoints;
     std::vector<uint64_t> text;
     using StreamingLookupFn = uint64_t (RSHash::*)(const seqan3::bitpacked_sequence<seqan3::dna4>&, uint64_t&);
@@ -103,10 +101,10 @@ private:
     template<int level>
     size_t get_frequent_skmers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &, const std::vector<SkmerInfo> &, std::vector<SkmerInfo> &);
     gtl::flat_hash_map<uint64_t, uint16_t> count_kmers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &);
-    template <typename AddForward, typename AddReverse>
-    void process_freq_kmers(AddForward&& add, AddReverse&& add_rc, const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &, gtl::flat_hash_map<uint64_t, uint16_t> &);
-    template <typename AddForward, typename AddReverse>
-    void process_freq_kmers(AddForward&& add, AddReverse&& add_rc, const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &, gtl::flat_hash_map<uint64_t, uint16_t> &, Shape32&);
+    template <typename AddForward>
+    void process_freq_kmers(AddForward&& add, const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &, gtl::flat_hash_map<uint64_t, uint16_t> &);
+    template <typename AddForward>
+    void process_freq_kmers(AddForward&& add, const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &, gtl::flat_hash_map<uint64_t, uint16_t> &, Shape32&);
     template <size_t MarkId, typename EF, typename Offsets>
     void build_level(gtl::flat_hash_map<uint64_t, std::vector<uint64_t>>&, EF&, Offsets&);
     void last_level(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &);
@@ -248,21 +246,19 @@ public:
         const uint64_t no_minimizers3 = r3.rank(M3);
         const uint64_t no_skmers3 = s3.size();
         const uint64_t no_kmers4 = s4.size();
-        const uint64_t no_kmers5 = s5.size();
         size_t freq_space = 0;
         size_t freq_kmers = 0;
         if(loc) {
             if(number_shapes > 0) {
                 if(use_ht) {
                     for(int i = 0; i < hashmaps.size(); i++) {
-                        freq_space += hashmaps[i].memory_bits() + hashmaps_rc[i].memory_bits();
-                        freq_kmers += hashmaps[i].size() + hashmaps_rc[i].size();
+                        freq_space += hashmaps[i].memory_bits();
+                        freq_kmers += hashmaps[i].size();
                     }
                 }
                 else {
-                    freq_space = r4.bitCount() + no_kmers4*offset_width + no_kmers4 + s4_select.bitCount()
-                               + r5.bitCount() + no_kmers5*offset_width + no_kmers5 + s5_select.bitCount();
-                    freq_kmers = r4.rank(1ULL << (2*window_size)) + r5.rank(1ULL << (2*window_size));
+                    freq_space = r4.bitCount() + no_kmers4*offset_width + no_kmers4 + s4_select.bitCount();
+                    freq_kmers = r4.rank(1ULL << (2*window_size));
                 }
             }
             else {
@@ -280,13 +276,13 @@ public:
             if(number_shapes > 0) {
                 if(use_ht) {
                     for(int i = 0; i < hashsets.size(); i++) {
-                        freq_space += hashsets[i].capacity()*(sizeof(uint64_t) + 1)*8 + hashsets_rc[i].capacity()*(sizeof(uint64_t) + 1)*8;
-                        freq_kmers += hashsets[i].size() + hashsets_rc[i].size();
+                        freq_space += hashsets[i].capacity()*(sizeof(uint64_t) + 1)*8;
+                        freq_kmers += hashsets[i].size();
                     }
                 }
                 else {
-                    freq_space = r4.bitCount() + r5.bitCount();
-                    freq_kmers = r4.rank(1ULL << (2*window_size)) + r5.rank(1ULL << (2*window_size));
+                    freq_space = r4.bitCount();
+                    freq_kmers = r4.rank(1ULL << (2*window_size));
                 }
             }
             else {
@@ -329,18 +325,15 @@ public:
         std::cout << "offsets2: " << (double) no_skmers2*offset_width/no_text_kmers << "\n";
         std::cout << "offsets3: " << (double) no_skmers3*offset_width/no_text_kmers << "\n";
         std::cout << "offsets4: " << (double) no_kmers4*offset_width/no_text_kmers << "\n";
-        std::cout << "offsets5: " << (double) no_kmers5*offset_width/no_text_kmers << "\n";
         std::cout << "Last_level: " << (double) freq_space/no_text_kmers << "\n";
         std::cout << "R_1: " << (double) r1.bitCount()/no_text_kmers << "\n";
         std::cout << "R_2: " << (double) r2.bitCount()/no_text_kmers << "\n";
         std::cout << "R_3: " << (double) r3.bitCount()/no_text_kmers << "\n";
         std::cout << "R_4: " << (double) r4.bitCount()/no_text_kmers << "\n";
-        std::cout << "R_5: " << (double) r5.bitCount()/no_text_kmers << "\n";
         std::cout << "S_1: " << (double) (no_skmers1+1)/no_text_kmers << "\n";
         std::cout << "S_2: " << (double) (no_skmers2+1)/no_text_kmers << "\n";
         std::cout << "S_3: " << (double) (no_skmers3+1)/no_text_kmers << "\n";
         std::cout << "S_4: " << (double) (no_kmers4+1)/no_text_kmers << "\n";
-        std::cout << "S_5: " << (double) (no_kmers5+1)/no_text_kmers << "\n";
     
         std::cout << "total: " << (double) (no_skmers1*offset_width+no_skmers2*offset_width+no_skmers3*offset_width+2*N+r1.bitCount()+r2.bitCount()+r3.bitCount()+no_skmers1+1+s1_select.bitCount()+no_skmers2+1+s2_select.bitCount()+no_skmers3+1+s3_select.bitCount()+endpoints.bitCount()+freq_space)/no_text_kmers << "\n";
     }

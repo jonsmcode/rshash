@@ -12,14 +12,14 @@ struct cmd_arguments {
     std::filesystem::path q{};
     std::filesystem::path o{};
     uint8_t k{31};
-    uint32_t shape{std::numeric_limits<uint32_t>::max()};
+    std::vector<uint32_t> shapes{std::numeric_limits<uint32_t>::max()};
 };
 
 void initialise_argument_parser(sharg::parser &parser, cmd_arguments &args) {
     parser.add_option(args.i, sharg::config{.short_id = 'i', .long_id = "input", .description = "provide input file"});
     parser.add_option(args.q, sharg::config{.short_id = 'q', .long_id = "query", .description = "provide query file"});
     parser.add_option(args.k, sharg::config{.short_id = 'k', .long_id = "k-mer", .description = "k-mer length"});
-    parser.add_option(args.shape, sharg::config{.long_id = "shape", .description = "shape value"});
+    parser.add_option(args.shapes, sharg::config{.long_id = "shapes", .description = "list of shape values"});
 }
 
 int check_arguments(sharg::parser &parser, cmd_arguments &args) {
@@ -65,15 +65,16 @@ int main(int argc, char** argv)
     load_file(args.i, text);
 
     std::cout << "building hashtable...\n";
-    std::unordered_set<uint64_t> ht_fwd;
-    std::unordered_set<uint64_t> ht_rc;
+    const bool use_shapes = args.shapes[0] != std::numeric_limits<uint32_t>::max();
+
+    std::vector<std::unordered_set<uint64_t>> hts(args.shapes.size());
     // gtl::flat_hash_map<uint64_t, uint64_t> ht;
 
-    Shape32 shape_obj;
+    Shapes32 shapes;
     size_t window_size;
-    if(args.shape != std::numeric_limits<uint32_t>::max()) {
-        shape_obj = shape32_create(args.shape);
-        window_size = shape_obj.length;
+    if(use_shapes) {
+        shapes = shape32_create(args.shapes);
+        window_size = shapes.length;
         // std::cout << shape_value << " " << std::bitset<64>(windowmask) << " " << window_size << " " << overlap << " "
         //         << std::bitset<64>(shape_mask) << " " << std::bitset<64>(shape_mask_rev) << " " << shift_shape << " " << shift_shape_rev << " "
         //         << " " << std::bitset<64>(kmermask) << '\n';
@@ -81,22 +82,24 @@ int main(int argc, char** argv)
     else
         window_size = args.k;
 
-    for(auto & sequence : text) {
-        for(auto && window : sequence | rshash::views::kmerview({.window_size = window_size})) {
-            if(args.shape != std::numeric_limits<uint32_t>::max()) {
-                uint64_t kmer = _pext_u64(window.value, shape_obj.mask);
-                uint64_t kmer_rc = _pext_u64(window.value, shape_obj.mask_rev);
-                // ht[kmer]++;
-                // ht[kmer_rc]++;
-                ht_fwd.insert(kmer);
-                ht_rc.insert(kmer_rc);
+    if(use_shapes) {
+        for(size_t i = 0; i < shapes.shapes.size(); ++i) {
+            const Shape32 shape = shapes.shapes[i];
+            for(auto & sequence : text) {
+                for(auto && window : sequence | rshash::views::kmerview({.window_size = shape.length})) {
+                    hts[i].insert(std::min<uint64_t>(_pext_u64(window.value, shape.mask), _pext_u64(window.value_rev, shape.mask)));
+                }
             }
-            else {
-                // ht[std::min<uint64_t>(window.value, window.value_rev)]++;
-                ht_fwd.insert(std::min<uint64_t>(window.value, window.value_rev));
-            }
-        }   
+        }
     }
+    else {
+        for(auto & sequence : text) {
+            for(auto && window : sequence | rshash::views::kmerview({.window_size = window_size})) {
+                hts[0].insert(std::min<uint64_t>(window.value, window.value_rev));
+            }
+        }
+    }
+    
      
     std::cout << "loading queries...\n";
     std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> queries;
@@ -109,20 +112,17 @@ int main(int argc, char** argv)
 
     std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
 
-    if (args.shape != std::numeric_limits<uint32_t>::max()) {
+    if (use_shapes) {
         for (auto& query : queries) {
             for (auto&& window : query | rshash::views::kmerview({.window_size = window_size})) {
-                uint64_t kmer_fwd = _pext_u64(window.value, shape_obj.mask);
-                uint64_t kmer_rev = _pext_u64(window.value_rev, shape_obj.mask_rev);
-                found_kmers += ht_fwd.contains(kmer_fwd) || ht_rc.contains(kmer_rev);
-                // if (auto it = ht.find(kmer_fwd); it != ht.end()) {
-                //     found_kmers++;
-                //     // found_positions += it->second;
-                // }
-                // else if (auto it = ht.find(kmer_rev); it != ht.end()) {
-                //     found_kmers++;
-                //     // found_positions += it->second;
-                // }
+                for(int i = 0; i < shapes.shapes.size(); ++i) {
+                    uint64_t kmer_fwd = _pext_u64(window.value, shapes.shapes[i].w_mask);
+                    uint64_t kmer_rev = _pext_u64(window.value_rev, shapes.shapes[i].w_mask);
+                    if(hts[i].contains(std::min<uint64_t>(kmer_fwd, kmer_rev))) {
+                        found_kmers++;
+                        break;
+                    }
+                }
                 kmers++;
             }
         }
@@ -131,11 +131,7 @@ int main(int argc, char** argv)
         for (auto& query : queries) {
             for (auto&& window : query | rshash::views::kmerview({.window_size = args.k})) {
                 uint64_t kmer_value = std::min<uint64_t>(window.value, window.value_rev);
-                // if (auto it = ht.find(kmer_value); it != ht.end()) {
-                //     found_kmers++;
-                //     found_positions += it->second;
-                // }
-                found_kmers += ht_fwd.contains(kmer_value);
+                found_kmers += hts[0].contains(kmer_value);
                 kmers++;
             }
         }

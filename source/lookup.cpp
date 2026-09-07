@@ -76,21 +76,15 @@ uint64_t RSHash::lookup(const std::vector<uint64_t> &kmers) {
 }
 
 
-template <int no_shapes, typename Forward, typename Reverse>
-inline bool contains_impl(Forward &forward, Reverse &reverse,
+template <int no_shapes, typename Forward>
+inline bool contains_impl(Forward &forward,
                           uint64_t kmer, uint64_t kmer_rc,
                           uint64_t* shapes_fwd, uint64_t* shapes_rev)
 {
     if constexpr (no_shapes > 0) {
         for(int i = 0; i < no_shapes; ++i) {
-            if(shapes_fwd[i] != shapes_rev[i]) {
-                if(forward[i].contains(shapes_fwd[i]) || reverse[i].contains(shapes_rev[i]))
-                    return true;
-            }
-            else {
-                if(forward[i].contains(shapes_fwd[i]))
-                    return true;
-            }
+            if(forward[i].contains(std::min<uint64_t>(shapes_fwd[i], shapes_rev[i])))
+                return true;
         }
         return false;
     }
@@ -103,9 +97,9 @@ inline bool RSHash::lookup_last_level(const uint64_t kmer, const uint64_t kmer_r
 {
     if constexpr (use_ht) {
         if constexpr (locate)
-            return contains_impl<no_shapes>(hashmaps, hashmaps_rc, kmer, kmer_rc, shapes_fwd, shapes_rev);
+            return contains_impl<no_shapes>(hashmaps, kmer, kmer_rc, shapes_fwd, shapes_rev);
         else
-            return contains_impl<no_shapes>(hashsets, hashsets_rc, kmer, kmer_rc, shapes_fwd, shapes_rev);
+            return contains_impl<no_shapes>(hashsets, kmer, kmer_rc, shapes_fwd, shapes_rev);
     }
     return false;
     // todo: multiple Rs for multiple shapes!
@@ -134,7 +128,7 @@ uint64_t RSHash::lookup1(const std::vector<uint64_t> &kmers)
             kernel = (kmer & shapes.kernel_mask) >> 2*shapes.overlap;
             kernel_rev = (kmer_rc & shapes.kernel_mask) >> 2*shapes.overlap;
             kmer = _pext_u64(kmer, shape.w_mask);
-            kmer_rc = _pext_u64(kmer_rc, shape.w_mask_rev);
+            kmer_rc = _pext_u64(kmer_rc, shape.w_mask);
         }
         else {
             kernel = kmer;
@@ -177,7 +171,7 @@ uint64_t RSHash::lookup2(const std::vector<uint64_t> &kmers)
             kernel = (kmer & shapes.kernel_mask) >> 2*shapes.overlap;
             kernel_rev = (kmer_rc & shapes.kernel_mask) >> 2*shapes.overlap;
             kmer = _pext_u64(kmer, shape.w_mask);
-            kmer_rc = _pext_u64(kmer_rc, shape.w_mask_rev);
+            kmer_rc = _pext_u64(kmer_rc, shape.w_mask);
         }
         else {
             kernel = kmer;
@@ -228,7 +222,7 @@ uint64_t RSHash::lookup3(const std::vector<uint64_t> &kmers)
             kernel = (kmer & shapes.kernel_mask) >> 2*shapes.overlap;
             kernel_rev = (kmer_rc & shapes.kernel_mask) >> 2*shapes.overlap;
             kmer = _pext_u64(kmer, shape.w_mask);
-            kmer_rc = _pext_u64(kmer_rc, shape.w_mask_rev);
+            kmer_rc = _pext_u64(kmer_rc, shape.w_mask);
         }
         else {
             kernel = kmer;
@@ -298,12 +292,12 @@ inline bool RSHash::check(const uint64_t kmer, const uint64_t kmer_rc,
         uint64_t pos = span-1-left_minimiser_position;
         uint64_t pos_rc = left_minimiser_position;
 
-        uint64_t hash_fwd = get_word64(offset + pos - shape.overlap_right) & windowmask;
-        uint64_t hash_rc = get_word64(offset + pos_rc - shape.overlap_left) & windowmask;
+        uint64_t hash_fwd = get_word64(offset + pos - shape.overlap) & windowmask;
+        uint64_t hash_rc = get_word64(offset + pos_rc - shape.overlap) & windowmask;
 
         if constexpr (no_shapes > 0) {
             hash_fwd = _pext_u64(hash_fwd, shape.w_mask);
-            hash_rc = _pext_u64(hash_rc, shape.w_mask_rev);
+            hash_rc = _pext_u64(hash_rc, shape.w_mask);
         }
 
         if(kmer == hash_fwd || kmer_rc == hash_rc)
@@ -313,12 +307,12 @@ inline bool RSHash::check(const uint64_t kmer, const uint64_t kmer_rc,
             pos = right_minimiser_position;
             pos_rc = span-1-right_minimiser_position;
 
-            hash_fwd = get_word64(offset + pos - shape.overlap_right) & windowmask;
-            hash_rc = get_word64(offset + pos_rc - shape.overlap_left) & windowmask;
+            hash_fwd = get_word64(offset + pos - shape.overlap) & windowmask;
+            hash_rc = get_word64(offset + pos_rc - shape.overlap) & windowmask;
 
             if constexpr (no_shapes > 0) {
                 hash_fwd = _pext_u64(hash_fwd, shape.w_mask);
-                hash_rc = _pext_u64(hash_rc, shape.w_mask_rev);
+                hash_rc = _pext_u64(hash_rc, shape.w_mask);
             }
 
             if(kmer == hash_fwd || kmer_rc == hash_rc)
@@ -334,36 +328,42 @@ template<int no_shapes>
 inline bool RSHash::extend_in_text(uint64_t &text_pos, uint64_t start, uint64_t end,
     bool forward, const uint64_t query, const uint64_t query_rc, uint64_t* shapes_fwd, uint64_t* shapes_rev, uint64_t &window, uint64_t &window_rev)
 {
-    if(forward) {
-        if(++text_pos < end) {
-            const uint64_t new_rank = get_base(text_pos);
-            if constexpr (no_shapes > 0) {
-                window = (window >> 2) | (new_rank << windowshift);
-                for(int i = 0; i < no_shapes; i++) {
-                    if(shapes_fwd[i] == _pext_u64(window, shapes.shapes[i].w_mask))
-                        return true;
-                }
-            }
-            else
+    if constexpr (no_shapes == 0) {
+        if(forward) {
+            if(++text_pos < end) {
+                const uint64_t new_rank = get_base(text_pos);
                 return new_rank == (query >> windowshift);
+            }
         }
+        else {
+            if(--text_pos >= start) {
+                const uint64_t new_rank = get_base(text_pos);
+                return new_rank == (query_rc & 0b11);
+            }
+        }
+        return false;
     }
     else {
-        if(--text_pos >= start) {
-            const uint64_t new_rank = get_base(text_pos);
-            if constexpr (no_shapes > 0) {
-                window_rev = (window_rev << 2) | new_rank;
-                for(int i = 0; i < no_shapes; i++) {
-                    if(shapes_rev[i] == _pext_u64(window_rev, shapes.shapes[i].w_mask_rev))
-                        return true;
-                }
+        if(forward) {
+            const uint64_t new_rank = get_base(++text_pos);
+            window = (window >> 2) | (new_rank << windowshift);
+            for(int i = 0; i < no_shapes; i++) {
+                Shape32 shape = shapes.shapes[i];
+                if(shapes_fwd[i] == _pext_u64(window, shape.w_mask) && text_pos - (shapes.overlap - shape.overlap) < end)
+                    return true;
             }
-            else
-                return new_rank == (query_rc & 0b11);
         }
+        else {
+            const uint64_t new_rank = get_base(--text_pos);
+            window_rev = (window_rev << 2) | new_rank;
+            for(int i = 0; i < no_shapes; i++) {
+                Shape32 shape = shapes.shapes[i];
+                if(shapes_rev[i] == _pext_u64(window_rev, shape.w_mask) && text_pos + (shapes.overlap - shape.overlap) >= start)
+                    return true;
+            }
+        }
+        return false;
     }
-
-    return false;
 }
 
 
@@ -406,29 +406,29 @@ inline bool RSHash::check_minimiser_pos(uint64_t *buffer, uint64_t offset,
     };
 
     const uint64_t pos = span-1-minimiser_pos;
-    const uint64_t window_pos = offset + pos;
+    const uint64_t kmer_pos = offset + pos;
     const uint64_t pos_rc = minimiser_pos;
-    const uint64_t window_pos_rc = offset + pos_rc;
+    const uint64_t kmer_pos_rc = offset + pos_rc;
     const uint64_t window = buffer[s + pos];
     const uint64_t window_rc = buffer[s + pos_rc];
 
     if constexpr (no_shapes > 0) {
+        const uint64_t window_pos = kmer_pos - shapes.overlap;
+        const uint64_t window_pos_rc = kmer_pos_rc - shapes.overlap;
         for(int i = 0; i < no_shapes; ++i) {
             Shape32 shape = shapes.shapes[i];
             uint64_t candidate = _pext_u64(window, shape.w_mask);
-            uint64_t shape_pos = window_pos - shape.overlap_right;
-            if(check_candidate_fwd(candidate, shapes_fwd[i], window, window_pos, shape_pos, shape.length))
+            if(check_candidate_fwd(candidate, shapes_fwd[i], window, window_pos, kmer_pos - shape.overlap, shape.length))
                 return true;
 
-            uint64_t candidate_rc = _pext_u64(window_rc, shape.w_mask_rev);
-            uint64_t shape_pos_rc = window_pos_rc - shape.overlap_left;
-            if(check_candidate_rev(candidate_rc, shapes_rev[i], window_rc, window_pos_rc, shape_pos_rc, shape.length))
+            uint64_t candidate_rc = _pext_u64(window_rc, shape.w_mask);
+            if(check_candidate_rev(candidate_rc, shapes_rev[i], window_rc, window_pos_rc, kmer_pos_rc - shape.overlap, shape.length))
                 return true;
         }
     }
     else {
-        return check_candidate_fwd(window, kmer, window, window_pos, window_pos, window_size)
-            || check_candidate_rev(window_rc, kmer_rc, window_rc, window_pos_rc, window_pos_rc, window_size);
+        return check_candidate_fwd(window, kmer, window, kmer_pos, kmer_pos, window_size)
+            || check_candidate_rev(window_rc, kmer_rc, window_rc, kmer_pos_rc, kmer_pos_rc, window_size);
     }
 
     return false;
@@ -474,13 +474,13 @@ inline bool RSHash::check_minimiser_pos2(uint64_t *buffer, uint64_t offset,
     };
 
     uint64_t left_pos = span-1-left_minimiser_pos;
-    uint64_t left_window_pos = offset + left_pos;
+    uint64_t left_kmer_pos = offset + left_pos;
     uint64_t left_pos_rc = left_minimiser_pos;
-    uint64_t left_window_pos_rc = offset + left_pos_rc;
+    uint64_t left_kmer_pos_rc = offset + left_pos_rc;
     uint64_t right_pos = right_minimiser_pos;
-    uint64_t right_window_pos = offset + right_pos;
+    uint64_t right_kmer_pos = offset + right_pos;
     uint64_t right_pos_rc = span-1-right_minimiser_pos;
-    uint64_t right_window_pos_rc = offset + right_pos_rc;
+    uint64_t right_kmer_pos_rc = offset + right_pos_rc;
     uint64_t left_window = buffer[s + left_pos];
     uint64_t left_window_rev = buffer[s + left_pos_rc];    
     uint64_t right_window = buffer[s + right_pos];    
@@ -491,31 +491,31 @@ inline bool RSHash::check_minimiser_pos2(uint64_t *buffer, uint64_t offset,
             Shape32 shape = shapes.shapes[i];
 
             uint64_t left_candidate = _pext_u64(left_window, shape.w_mask);
-            uint64_t left_shape_pos = left_window_pos - shape.overlap_right;
-            if(check_candidate_fwd(left_candidate, shapes_fwd[i], left_window, left_window_pos, left_shape_pos, shape.length))
+            uint64_t left_shape_pos = left_kmer_pos - shape.overlap;
+            if(check_candidate_fwd(left_candidate, shapes_fwd[i], left_window, left_kmer_pos - shapes.overlap, left_shape_pos, shape.length))
                 return true;
 
-            uint64_t left_candidate_rc = _pext_u64(left_window_rev, shape.w_mask_rev);
-            uint64_t left_shape_pos_rc = left_window_pos_rc - shape.overlap_left;
-            if(check_candidate_rev(left_candidate_rc, shapes_rev[i], left_window_rev, left_window_pos_rc, left_shape_pos_rc, shape.length))
+            uint64_t left_candidate_rc = _pext_u64(left_window_rev, shape.w_mask);
+            uint64_t left_shape_pos_rc = left_kmer_pos_rc - shape.overlap;
+            if(check_candidate_rev(left_candidate_rc, shapes_rev[i], left_window_rev, left_kmer_pos_rc - shapes.overlap, left_shape_pos_rc, shape.length))
                 return true;
 
             uint64_t right_candidate = _pext_u64(right_window, shape.w_mask);
-            uint64_t right_shape_pos = right_window_pos - shape.overlap_right;
-            if(check_candidate_fwd(right_candidate, shapes_fwd[i], right_window, right_window_pos, right_shape_pos, shape.length))
+            uint64_t right_shape_pos = right_kmer_pos - shape.overlap;
+            if(check_candidate_fwd(right_candidate, shapes_fwd[i], right_window, right_kmer_pos - shapes.overlap, right_shape_pos, shape.length))
                 return true;
 
-            uint64_t right_candidate_rc = _pext_u64(right_window_rev, shape.w_mask_rev);
-            uint64_t right_shape_pos_rc = right_window_pos_rc - shape.overlap_left;
-            if(check_candidate_rev(right_candidate_rc, shapes_rev[i], right_window_rev, right_window_pos_rc, right_shape_pos_rc, shape.length))
+            uint64_t right_candidate_rc = _pext_u64(right_window_rev, shape.w_mask);
+            uint64_t right_shape_pos_rc = right_kmer_pos_rc - shape.overlap;
+            if(check_candidate_rev(right_candidate_rc, shapes_rev[i], right_window_rev, right_kmer_pos_rc - shapes.overlap, right_shape_pos_rc, shape.length))
                 return true;
         }
     }
     else {
-        return check_candidate_fwd(left_window, kmer, left_window, left_window_pos, left_window_pos, window_size) ||
-                check_candidate_rev(left_window_rev, kmer_rc, left_window_rev, left_window_pos_rc, left_window_pos_rc, window_size) ||
-                check_candidate_fwd(right_window, kmer, right_window, right_window_pos, right_window_pos, window_size) ||
-                check_candidate_rev(right_window_rev, kmer_rc, right_window_rev, right_window_pos_rc, right_window_pos_rc, window_size);
+        return check_candidate_fwd(left_window, kmer, left_window, left_kmer_pos, left_kmer_pos, window_size) ||
+                check_candidate_rev(left_window_rev, kmer_rc, left_window_rev, left_kmer_pos_rc, left_kmer_pos_rc, window_size) ||
+                check_candidate_fwd(right_window, kmer, right_window, right_kmer_pos, right_kmer_pos, window_size) ||
+                check_candidate_rev(right_window_rev, kmer_rc, right_window_rev, right_kmer_pos_rc, right_kmer_pos_rc, window_size);
     }
 
     return false;
@@ -588,16 +588,16 @@ uint64_t RSHash::streaming_lookup1(const seqan3::bitpacked_sequence<seqan3::dna4
         if constexpr (no_shapes > 0) {
             for(int i = 0; i < no_shapes; ++i) {
                 shapes_fwd[i] = _pext_u64(window.value, shapes.shapes[i].w_mask);
-                shapes_rev[i] = _pext_u64(window.value_rev, shapes.shapes[i].w_mask_rev);
+                shapes_rev[i] = _pext_u64(window.value_rev, shapes.shapes[i].w_mask);
             }
         }
 
-        // if(found && extend_in_text<no_shapes>(text_pos, sequence_begin, sequence_end, forward, window.value, window.value_rev, shapes_fwd, shapes_rev, text_kmer, text_kmer_rc)) {
-        //     occurences++;
-        //     extensions++;
-        //     rolling = false;
-        // }
-        // else {
+        if(found && extend_in_text<no_shapes>(text_pos, sequence_begin, sequence_end, forward, window.value, window.value_rev, shapes_fwd, shapes_rev, text_kmer, text_kmer_rc)) {
+            occurences++;
+            extensions++;
+            rolling = false;
+        }
+        else {
             if constexpr (no_shapes > 0) {
                 kernel = (window.value & shapes.kernel_mask) >> 2*shapes.overlap;
                 kernel_rev = (window.value_rev & shapes.kernel_mask) >> 2*shapes.overlap;
@@ -632,7 +632,7 @@ uint64_t RSHash::streaming_lookup1(const seqan3::bitpacked_sequence<seqan3::dna4
                 found = false;
                 current_neg_minimiser1 = minimiser1;
             }
-        // }
+        }
     }
 
     delete[] offsets1;
@@ -672,17 +672,17 @@ uint64_t RSHash::streaming_lookup2(const seqan3::bitpacked_sequence<seqan3::dna4
         if constexpr (no_shapes > 0) {
             for(int i = 0; i < no_shapes; ++i) {
                 shapes_fwd[i] = _pext_u64(window.value, shapes.shapes[i].w_mask);
-                shapes_rev[i] = _pext_u64(window.value_rev, shapes.shapes[i].w_mask_rev);
+                shapes_rev[i] = _pext_u64(window.value_rev, shapes.shapes[i].w_mask);
             }
         }
 
-        // if(found && extend_in_text<no_shapes>(text_pos, sequence_begin, sequence_end, forward, window.value, window.value_rev, shapes_fwd, shapes_rev, text_kmer, text_kmer_rc)) {
-        //     occurences++;
-        //     extensions++;
-        //     rolling1 = false;
-        //     rolling2 = false;
-        // }
-        // else {
+        if(found && extend_in_text<no_shapes>(text_pos, sequence_begin, sequence_end, forward, window.value, window.value_rev, shapes_fwd, shapes_rev, text_kmer, text_kmer_rc)) {
+            occurences++;
+            extensions++;
+            rolling1 = false;
+            rolling2 = false;
+        }
+        else {
             if constexpr (no_shapes > 0) {
                 kernel = (window.value & shapes.kernel_mask) >> 2*shapes.overlap;
                 kernel_rev = (window.value_rev & shapes.kernel_mask) >> 2*shapes.overlap;
@@ -743,7 +743,7 @@ uint64_t RSHash::streaming_lookup2(const seqan3::bitpacked_sequence<seqan3::dna4
                     current_neg_minimiser2 = minimiser2;
                 }
             }
-        // }
+        }
     }
 
     delete[] offsets1;
@@ -790,18 +790,18 @@ uint64_t RSHash::streaming_lookup3(const seqan3::bitpacked_sequence<seqan3::dna4
         if constexpr (no_shapes > 0) {
             for(int i = 0; i < no_shapes; ++i) {
                 shapes_fwd[i] = _pext_u64(window.value, shapes.shapes[i].w_mask);
-                shapes_rev[i] = _pext_u64(window.value_rev, shapes.shapes[i].w_mask_rev);
+                shapes_rev[i] = _pext_u64(window.value_rev, shapes.shapes[i].w_mask);
             }
         }
 
-        // if(found && extend_in_text<no_shapes>(text_pos, sequence_begin, sequence_end, forward, window.value, window.value_rev, shapes_fwd, shapes_rev, text_kmer, text_kmer_rc)) {
-        //     occurences++;
-        //     extensions++;
-        //     rolling1 = false;
-        //     rolling2 = false;
-        //     rolling3 = false;
-        // }
-        // else {
+        if(found && extend_in_text<no_shapes>(text_pos, sequence_begin, sequence_end, forward, window.value, window.value_rev, shapes_fwd, shapes_rev, text_kmer, text_kmer_rc)) {
+            occurences++;
+            extensions++;
+            rolling1 = false;
+            rolling2 = false;
+            rolling3 = false;
+        }
+        else {
             if constexpr (no_shapes > 0) {
                 kernel = (window.value & shapes.kernel_mask) >> 2*shapes.overlap;
                 kernel_rev = (window.value_rev & shapes.kernel_mask) >> 2*shapes.overlap;
@@ -891,7 +891,7 @@ uint64_t RSHash::streaming_lookup3(const seqan3::bitpacked_sequence<seqan3::dna4
                     }
                 }
             }
-        // }
+        }
     }
 
     delete[] offsets1;
