@@ -1,7 +1,8 @@
 #include <sharg/all.hpp>
 #include <seqan3/io/sequence_file/all.hpp>
 #include <seqan3/alphabet/container/bitpacked_sequence.hpp>
-#include "../source/minimiser_views.hpp"
+// #include "../source/minimiser_views.hpp"
+#include "../source/kmer_view.hpp"
 #include "../source/shape.hpp"
 #include <gtl/phmap.hpp>
 
@@ -12,7 +13,7 @@ struct cmd_arguments {
     std::filesystem::path q{};
     std::filesystem::path o{};
     uint8_t k{31};
-    std::vector<uint32_t> shapes{std::numeric_limits<uint32_t>::max()};
+    std::vector<uint64_t> shapes{std::numeric_limits<uint64_t>::max()};
 };
 
 void initialise_argument_parser(sharg::parser &parser, cmd_arguments &args) {
@@ -65,36 +66,46 @@ int main(int argc, char** argv)
     load_file(args.i, text);
 
     std::cout << "building hashtable...\n";
-    const bool use_shapes = args.shapes[0] != std::numeric_limits<uint32_t>::max();
+    const bool use_shapes = args.shapes[0] != std::numeric_limits<uint64_t>::max();
 
-    std::vector<std::unordered_set<uint64_t>> hts(args.shapes.size());
-    // gtl::flat_hash_map<uint64_t, uint64_t> ht;
+    std::vector<gtl::flat_hash_set<uint64_t>> hts(1);
 
-    Shapes32 shapes;
-    size_t window_size;
+    Shapes64 shapes;
+    size_t canonical_no_shapes;
     if(use_shapes) {
-        shapes = shape32_create(args.shapes);
-        window_size = shapes.length;
-        // std::cout << shape_value << " " << std::bitset<64>(windowmask) << " " << window_size << " " << overlap << " "
-        //         << std::bitset<64>(shape_mask) << " " << std::bitset<64>(shape_mask_rev) << " " << shift_shape << " " << shift_shape_rev << " "
-        //         << " " << std::bitset<64>(kmermask) << '\n';
+        shapes = shape64_create(args.shapes);
+        canonical_no_shapes = std::count_if(shapes.shapes.begin(), shapes.shapes.end(), [](const auto& x) { return x.is_canonical; });
+        const size_t no_hts = 2*(shapes.shapes.size() - canonical_no_shapes) + canonical_no_shapes;
+        hts.resize(no_hts);
     }
-    else
-        window_size = args.k;
 
     if(use_shapes) {
         for(size_t i = 0; i < shapes.shapes.size(); ++i) {
-            const Shape32 shape = shapes.shapes[i];
-            for(auto & sequence : text) {
-                for(auto && window : sequence | rshash::views::kmerview({.window_size = shape.length})) {
-                    hts[i].insert(std::min<uint64_t>(_pext_u64(window.value, shape.mask), _pext_u64(window.value_rev, shape.mask)));
+            const Shape64 shape = shapes.shapes[i];
+                for(auto & sequence : text) {
+                    for(auto && window : sequence | rshash::views::kmer_view({.window_size = shape.length})) {
+                        const uint64_t kmer_fwd = _pext_u64(window.value, shape.mask.lo) | (_pext_u64(window.value_hi, shape.mask.hi) << shape.lo_weight);
+                        // const uint64_t kmer_rev = _pext_u64(window.value_rev, shape.mask.lo) | (_pext_u64(window.value_rev_hi, shape.mask.hi) << shape.lo_weight);
+
+                        hts[2*i].insert(kmer_fwd);
+                        // hts[2*i + 1].insert(kmer_rev);
+                    }
                 }
-            }
         }
+        // for(auto & sequence : text) {
+        //     for(auto && window : sequence | rshash::views::longkmerview({.window_size = shapes.length})) {
+        //         for(size_t i = 0; i < shapes.shapes.size(); ++i) {
+        //             const Shape64 shape = shapes.shapes[i];
+        //             const uint64_t kmer_fwd = _pext_u64(window.value_lo, shape.w_mask.lo) | (_pext_u64(window.value_hi, shape.w_mask.hi) << shape.w_lo_weight);
+
+        //             hts[2*i].insert(kmer_fwd);
+        //         }
+        //     }
+        // }
     }
     else {
         for(auto & sequence : text) {
-            for(auto && window : sequence | rshash::views::kmerview({.window_size = window_size})) {
+            for(auto && window : sequence | rshash::views::kmer_view({.window_size = args.k})) {
                 hts[0].insert(std::min<uint64_t>(window.value, window.value_rev));
             }
         }
@@ -109,31 +120,57 @@ int main(int argc, char** argv)
     uint64_t kmers = 0;
     uint64_t found_kmers = 0;
     uint64_t found_positions = 0;
+    uint64_t found_queries = 0;
 
     std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
 
     if (use_shapes) {
         for (auto& query : queries) {
-            for (auto&& window : query | rshash::views::kmerview({.window_size = window_size})) {
-                for(int i = 0; i < shapes.shapes.size(); ++i) {
-                    uint64_t kmer_fwd = _pext_u64(window.value, shapes.shapes[i].w_mask);
-                    uint64_t kmer_rev = _pext_u64(window.value_rev, shapes.shapes[i].w_mask);
-                    if(hts[i].contains(std::min<uint64_t>(kmer_fwd, kmer_rev))) {
+            bool found = false;
+            for(size_t i = 0; i < shapes.shapes.size() && !found; i++) {
+                const Shape64 shape = shapes.shapes[i];
+                for (auto&& window : query | rshash::views::kmer_view({.window_size = shape.length})) {
+                    const uint64_t kmer_fwd = _pext_u64(window.value, shape.mask.lo) | (_pext_u64(window.value_hi, shape.mask.hi) << shape.lo_weight);
+                    if(hts[2*i].contains(kmer_fwd)) {
                         found_kmers++;
-                        break;
+                        found = true;
+                        // break;
                     }
+                    kmers++;
                 }
-                kmers++;
+                // kmers += query.size() - shape.length + 1;
             }
+            found_queries += found;
         }
+        // for (auto& query : queries) {
+        //     bool found = false;
+        //     for (auto&& window : query | rshash::views::longkmerview({.window_size = shapes.length})) {
+        //         for(size_t i = 0; i < shapes.shapes.size() && !found; i++) {
+        //             const Shape64 shape = shapes.shapes[i];
+        //             const uint64_t kmer_fwd = _pext_u64(window.value_lo, shape.w_mask.lo) | (_pext_u64(window.value_hi, shape.w_mask.hi) << shape.w_lo_weight);
+        //             if(hts[2*i].contains(kmer_fwd)) {
+        //                 found_kmers++;
+        //                 found = true;
+        //                 break;
+        //             }
+        //         }
+        //         kmers++;
+        //         // kmers += query.size() - shape.length + 1;
+        //     }
+        //     found_queries += found;
+        // }
     }
     else {
         for (auto& query : queries) {
-            for (auto&& window : query | rshash::views::kmerview({.window_size = args.k})) {
+            bool query_found = false;
+            for (auto&& window : query | rshash::views::kmer_view({.window_size = args.k})) {
                 uint64_t kmer_value = std::min<uint64_t>(window.value, window.value_rev);
-                found_kmers += hts[0].contains(kmer_value);
+                bool found = hts[0].contains(kmer_value);
+                query_found |= found;
+                found_kmers += found;
                 kmers++;
             }
+            found_queries += query_found;
         }
     }
     
@@ -141,12 +178,16 @@ int main(int argc, char** argv)
     std::chrono::nanoseconds elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
         
     double ns_per_kmer = (double) elapsed.count() / kmers;
+    double ns_per_read = (double) elapsed.count() / queries.size();
         
     std::cout << "==== query report:\n";
     std::cout << "num_kmers = " << kmers << '\n';
+    std::cout << "num_reads = " << queries.size() << '\n';
     std::cout << "num_positive_kmers = " << found_kmers << " (" << (double) found_kmers/kmers*100 << "%)\n";
-    std::cout << "num_positions = " << found_positions << '\n';
+    // std::cout << "num_positions = " << found_positions << '\n';
     std::cout << "time_per_kmer = " << ns_per_kmer << '\n';
+    std::cout << "time_per_read = " << ns_per_read << '\n';
+    std::cout << "num_found_queries = " << found_queries << " (" << (double) found_queries/queries.size()*100 << "%)\n";
 
     // report ht size
  

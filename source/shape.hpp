@@ -4,13 +4,49 @@
 #include "util.hpp"
 
 
+struct mask128_t {
+    uint64_t lo;
+    uint64_t hi;
+};
+
+static inline constexpr mask128_t compute_mask128(unsigned n)
+{
+    if (n == 0)
+        return {0, 0};
+    if (n < 64)
+        return {(1ULL << n) - 1, 0};
+    if (n == 64)
+        return {UINT64_MAX, 0};
+    if (n < 128)
+        return {UINT64_MAX, (1ULL << (n - 64)) - 1};
+    return {UINT64_MAX, UINT64_MAX};
+}
+
 static inline uint64_t compute_shape_mask(uint32_t const shape) {
     uint64_t x = _pdep_u64(shape, 0x5555555555555555ULL);
     return x | (x << 1);
 }
 
+static inline mask128_t compute_shape_mask(uint64_t shape)
+{
+    uint32_t lo_shape = static_cast<uint32_t>(shape);
+    uint32_t hi_shape = static_cast<uint32_t>(shape >> 32);
+
+    uint64_t lo = _pdep_u64(lo_shape, 0x5555555555555555ULL);
+    uint64_t hi = _pdep_u64(hi_shape, 0x5555555555555555ULL);
+
+    return {
+        lo | (lo << 1),
+        hi | (hi << 1)
+    };
+}
+
 static inline constexpr uint32_t bit_length(uint32_t x) {
     return x == 0 ? 0 : 32 - __builtin_clz(x);
+}
+
+static inline constexpr uint32_t bit_length(uint64_t x) {
+    return std::bit_width(x);
 }
 
 static inline constexpr uint32_t reverse32(uint32_t x) {
@@ -22,11 +58,30 @@ static inline constexpr uint32_t reverse32(uint32_t x) {
     return x;
 }
 
+static inline constexpr uint64_t reverse64(uint64_t x)
+{
+    x = ((x >> 1)  & 0x5555555555555555ULL) | ((x & 0x5555555555555555ULL) << 1);
+    x = ((x >> 2)  & 0x3333333333333333ULL) | ((x & 0x3333333333333333ULL) << 2);
+    x = ((x >> 4)  & 0x0F0F0F0F0F0F0F0FULL) | ((x & 0x0F0F0F0F0F0F0F0FULL) << 4);
+    x = ((x >> 8)  & 0x00FF00FF00FF00FFULL) | ((x & 0x00FF00FF00FF00FFULL) << 8);
+    x = ((x >> 16) & 0x0000FFFF0000FFFFULL) | ((x & 0x0000FFFF0000FFFFULL) << 16);
+
+    x = (x >> 32) | (x << 32);
+
+    return x;
+}
+
+
 static inline constexpr uint32_t reverse_shape(uint32_t x) {
     assert(x != 0);
-
     uint32_t len = 32 - __builtin_clz(x);
     return reverse32(x) >> (32 - len);
+}
+
+static inline constexpr uint64_t reverse_shape(uint64_t x) {
+    assert(x != 0);
+    uint64_t len = std::bit_width(x);
+    return reverse64(x) >> (64 - len);
 }
 
 
@@ -63,20 +118,33 @@ static inline constexpr run_t find_long_run(uint32_t shape)
     return best;
 }
 
+static inline constexpr run_t find_long_run(uint64_t shape)
+{
+    run_t best{64, 64, 0};
 
-static inline constexpr unsigned sum_runs(uint32_t shape, unsigned m) {
-    unsigned sum = 0;
-    while(shape) {
-        unsigned start = __builtin_ctz(shape);
-        shape >>= start;
-        unsigned len = __builtin_ctz(~shape);
-        if (len > m)
-            sum += len;
+    unsigned pos = 0;
+    uint64_t x = shape;
 
-        shape >>= len;
+    while (x) {
+        unsigned zeros = std::countr_zero(x);
+        pos += zeros;
+        x >>= zeros;
+
+        unsigned len = std::countr_zero(~x);
+
+        if (len > best.len) {
+            best.start = pos;
+            best.len = len;
+            best.end = pos + len;
+        }
+
+        pos += len;
+        x >>= len;
     }
-    return sum;
+
+    return best;
 }
+
 
 static inline constexpr bool canonical_shape(uint32_t x)
 {
@@ -93,25 +161,62 @@ static inline constexpr bool canonical_shape(uint32_t x)
     return true;
 }
 
+static inline constexpr bool canonical_shape(uint64_t x)
+{
+    if (x == 0)
+        return true;
+
+    unsigned n = std::bit_width(x);
+
+    return x == reverse64(x) >> (64 - n);
+}
+
 
 
 typedef struct {
     uint32_t value;
     uint64_t mask;
     uint64_t w_mask;
-    size_t weight;
-    size_t length;
-    size_t overlap;
+    unsigned weight;
+    unsigned length;
+    unsigned kernel_length;
+    unsigned overlap;
+    unsigned overlap_left;
+    unsigned overlap_right;
+    bool is_canonical;
 } Shape32;
-
 
 typedef struct {
     std::vector<Shape32> shapes;
-    size_t length;
-    size_t overlap;
-    size_t kernel_length;
+    unsigned length;
+    unsigned overlap;
+    unsigned kernel_length;
     uint64_t kernel_mask;
 } Shapes32;
+
+
+typedef struct {
+    uint64_t value;
+    mask128_t mask;
+    mask128_t w_mask;
+    unsigned weight;
+    unsigned lo_weight;
+    unsigned w_lo_weight;
+    unsigned length;
+    unsigned kernel_length;
+    unsigned overlap;
+    unsigned overlap_left;
+    unsigned overlap_right;
+    bool is_canonical;
+} Shape64;
+
+typedef struct {
+    std::vector<Shape64> shapes;
+    unsigned length;
+    unsigned overlap;
+    unsigned kernel_length;
+    mask128_t kernel_mask;
+} Shapes64;
 
 
 
@@ -122,6 +227,8 @@ static inline void print_shape(const Shape32 &shape) {
     std::cout << "Weight: " << shape.weight << "\n";
     std::cout << "Length: " << shape.length << "\n";
     std::cout << "Overlap: " << shape.overlap<< "\n";
+    std::cout << "Overlap Left: " << shape.overlap_left << "\n";
+    std::cout << "Overlap Right: " << shape.overlap_right << "\n";
 }
 
 static inline void print_shapes(const Shapes32 &shapes) {
@@ -131,6 +238,44 @@ static inline void print_shapes(const Shapes32 &shapes) {
     std::cout << "Shapes overlap: " << shapes.overlap << "\n";
     std::cout << "Shapes kernel length: " << shapes.kernel_length << "\n";
     std::cout << "Shapes kernel mask: " << std::bitset<64>(shapes.kernel_mask) << "\n";
+}
+
+static inline void print_mask128(const mask128_t &mask) {
+    std::cout << std::bitset<64>(mask.hi) << std::bitset<64>(mask.lo);
+}
+
+static inline void print_shape(const Shape64 &shape)
+{
+    std::cout << "Shape value: "  << std::bitset<64>(shape.value) << "\n";
+    std::cout << "Mask: ";
+    print_mask128(shape.mask);
+    std::cout << "\n";
+    std::cout << "aligned mask: ";
+    print_mask128(shape.w_mask);
+    std::cout << "\n";
+    std::cout << "Weight: " << shape.weight << "\n";
+    std::cout << "Weight aligned mask low: " << shape.w_lo_weight << "\n";
+    std::cout << "Length: " << shape.length << "\n";
+    std::cout << "Kernel length: " << shape.kernel_length << "\n";
+    std::cout << "Overlap: " << shape.overlap << "\n";
+    std::cout << "Overlap Left: " << shape.overlap_left << "\n";
+    std::cout << "Overlap Right: " << shape.overlap_right << "\n";
+    run_t run = find_long_run(shape.value);
+    std::cout << "Shapes run start: " << run.start << "\n";
+    std::cout << "Shapes run end: " << run.end << "\n";
+}
+
+static inline void print_shapes(const Shapes64 &shapes)
+{
+    for (const Shape64 &shape : shapes.shapes)
+        print_shape(shape);
+
+    std::cout << "Shapes length: " << shapes.length << "\n";
+    std::cout << "Shapes overlap: " << shapes.overlap << "\n";
+    std::cout << "Shapes kernel length: " << shapes.kernel_length << "\n";
+    std::cout << "Shapes kernel mask: ";
+    print_mask128(shapes.kernel_mask);
+    std::cout << "\n";
 }
 
 
@@ -150,14 +295,74 @@ static inline Shape32 shape32_create(uint32_t value) {
     shape.weight = __builtin_popcount(value);
     shape.length = bit_length(value);
     run_t run = find_long_run(value);
-    shape.overlap = shape.length - run.end;
+    shape.kernel_length = run.len;
+    shape.overlap_right = run.start;
+    shape.overlap_left = shape.length - run.end;
+    shape.overlap = std::max(shape.overlap_left, shape.overlap_right);
+    shape.is_canonical = canonical_shape(value);
 
     return shape;
 }
 
+static inline Shape64 shape64_create(uint64_t value)
+{
+    Shape64 shape;
+    shape.value = value;
+
+    if (value == UINT64_MAX) {
+        shape.mask.lo = UINT64_MAX;
+        shape.mask.hi = UINT64_MAX;
+        shape.weight = 64;
+        shape.length = 64;
+        shape.overlap = 0;
+        shape.w_mask = shape.mask;
+        shape.w_lo_weight = 0;
+        return shape;
+    }
+
+    shape.weight = std::popcount(value);
+    if(shape.weight > 32) {
+        std::cerr << "shape weight > 32 not supported\n";
+        exit(1);
+    }
+
+    shape.mask = compute_shape_mask(value);
+    shape.lo_weight = std::popcount(shape.mask.lo);
+    shape.length = std::bit_width(value);
+    run_t run = find_long_run(value);
+    shape.kernel_length = run.len;
+    shape.overlap_right = run.start;
+    shape.overlap_left = shape.length - run.end;
+    shape.overlap = std::max(shape.overlap_left, shape.overlap_right);
+    shape.is_canonical = canonical_shape(value);
+    
+    return shape;
+}
+
+static inline constexpr mask128_t mask128_shl(mask128_t x, unsigned shift) {
+    if (shift == 0)
+        return x;
+    if (shift < 64)
+        return {x.lo << shift, (x.hi << shift) | (x.lo >> (64 - shift))};
+    if (shift < 128)
+        return {0, x.lo << (shift - 64)};
+    return {0, 0};
+}
+
 static inline void align_shapes(Shapes32 &shapes) {
     for (Shape32 &shape : shapes.shapes) {
-        shape.w_mask = shape.mask << (2 * (shapes.overlap - shape.overlap));
+        unsigned shift = 2 * (shapes.overlap - shape.overlap_right);
+        shape.w_mask = shape.mask << shift;
+    }
+}
+
+static inline void align_shapes(Shapes64 &shapes)
+{
+    for (Shape64 &shape : shapes.shapes) {
+        unsigned shift = 2 * (shapes.overlap - shape.overlap_right);
+
+        shape.w_mask = mask128_shl(shape.mask, shift);
+        shape.w_lo_weight = std::popcount(shape.w_mask.lo);
     }
 }
 
@@ -167,14 +372,14 @@ static inline Shapes32 shape32_create(const std::vector<uint32_t> &values)
     window.overlap = 0;
     window.kernel_length = 32;
     for(uint32_t shape_val : values) {
-        if(!canonical_shape(shape_val)) {
-            std::cerr << "shape " << std::bitset<32>(shape_val) << " is not canonical\n";
-            exit(1);
-        }
+        // if(!canonical_shape(shape_val)) {
+        //     std::cerr << "shape " << std::bitset<32>(shape_val) << " is not canonical\n";
+        //     exit(1);
+        // }
         Shape32 shape = shape32_create(shape_val);
         window.shapes.emplace_back(shape);
         window.overlap = std::max(window.overlap, shape.overlap);
-        window.kernel_length = std::min(window.kernel_length, shape.length - 2*shape.overlap);
+        window.kernel_length = std::min(window.kernel_length, shape.kernel_length);
     }
     
     window.length = window.kernel_length + 2*window.overlap;
@@ -184,6 +389,38 @@ static inline Shapes32 shape32_create(const std::vector<uint32_t> &values)
     }
     window.kernel_mask = compute_mask(2u * window.kernel_length) << (2 * window.overlap);
 
+    align_shapes(window);
+    print_shapes(window);
+
+    return window;
+}
+
+static inline Shapes64 shape64_create(const std::vector<uint64_t> &values)
+{
+    Shapes64 window;
+    window.overlap = 0;
+    window.kernel_length = 64;
+    for (uint64_t shape_val : values) {
+        // if (!canonical_shape(shape_val)) {
+        //     std::cerr << "shape " << std::bitset<64>(shape_val) << " is not canonical\n";
+        //     exit(1);
+        // }
+
+        Shape64 shape = shape64_create(shape_val);
+        window.shapes.emplace_back(shape);
+        window.overlap = std::max(window.overlap, shape.overlap);
+
+        window.kernel_length = std::min(window.kernel_length, shape.kernel_length);
+    }
+
+    window.length = window.kernel_length + 2 * window.overlap;
+
+    if (window.length > 64) {
+        std::cerr << "aligned shapes length > 64 not supported\n";
+        exit(1);
+    }
+
+    window.kernel_mask = mask128_shl(compute_mask128(2 * window.kernel_length), 2 * window.overlap);
     align_shapes(window);
     print_shapes(window);
 
@@ -200,11 +437,34 @@ void serialize(Archive& ar, Shape32& shape) {
        shape.w_mask,
        shape.weight,
        shape.length,
-       shape.overlap);
+       shape.overlap,
+       shape.is_canonical);
 }
 
 template <class Archive>
 void serialize(Archive& ar, Shapes32& window) {
+    ar(window.shapes,
+       window.overlap,
+       window.length,
+       window.kernel_length,
+       window.kernel_mask);
+}
+
+template <class Archive>
+void serialize(Archive& ar, Shape64& shape) {
+    ar(shape.value,
+       shape.mask,
+       shape.w_mask,
+       shape.w_lo_weight,
+       shape.lo_weight,
+       shape.weight,
+       shape.length,
+       shape.overlap,
+       shape.is_canonical);
+}
+
+template <class Archive>
+void serialize(Archive& ar, Shapes64& window) {
     ar(window.shapes,
        window.overlap,
        window.length,
