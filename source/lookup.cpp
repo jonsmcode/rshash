@@ -359,7 +359,7 @@ inline bool RSHash::extend_in_text(uint64_t &text_pos, uint64_t start, uint64_t 
 
             for(int i = 0; i < no_shapes; i++) {
                 Shape64 shape = shapes.shapes[i];
-                if(shapes_fwd[2*i] == (window_lo & shape.w_mask.lo) && shapes_fwd[2*i + 1] == (window_hi & shape.w_mask.hi) && text_pos - shapes.overlap + shape.overlap_right < end) // text_pos - shape.dist_right < end
+                if(shapes_fwd[2*i] == (window_lo & shape.w_mask.lo) && shapes_fwd[2*i + 1] == (window_hi & shape.w_mask.hi) && text_pos - shape.w_dist_right < end)
                     return true;
             }
         }
@@ -371,7 +371,7 @@ inline bool RSHash::extend_in_text(uint64_t &text_pos, uint64_t start, uint64_t 
             
             for(int i = 0; i < no_shapes; i++) {
                 Shape64 shape = shapes.shapes[i];
-                if(shapes_rev[2*i] == (window_lo & shape.w_mask_rev.lo) && shapes_rev[2*i + 1] == (window_hi & shape.w_mask_rev.hi) && text_pos + shapes.overlap - shape.overlap_left >= start) // text_pos + shape.dist_left >= start
+                if(shapes_rev[2*i] == (window_lo & shape.w_mask_rev.lo) && shapes_rev[2*i + 1] == (window_hi & shape.w_mask_rev.hi) && text_pos + shape.w_rev_dist_left >= start)
                     return true;
             }
         }
@@ -825,12 +825,12 @@ uint64_t RSHash::streaming_lookup1(const seqan3::bitpacked_sequence<seqan3::dna4
             }
         }
 
-        // if(found && extend_in_text<no_shapes>(text_pos, sequence_begin, sequence_end, forward, window.value, window.value_rev, shapes_fwd, shapes_rev, text_kmer_lo, text_kmer_hi)) {
-        //     occurences++;
-        //     extensions++;
-        //     rolling = false;
-        // }
-        // else {
+        if(found && extend_in_text<no_shapes>(text_pos, sequence_begin, sequence_end, forward, window.value, window.value_rev, shapes_fwd, shapes_rev, text_kmer_lo, text_kmer_hi)) {
+            occurences++;
+            extensions++;
+            rolling = false;
+        }
+        else {
             if constexpr (no_shapes > 0) {
                 kernel = (window.value & shapes.kernel_mask.lo) >> 2*shapes.overlap | ((window.value_hi & shapes.kernel_mask.hi) << shapes.kernel_length_lo);
                 kernel_rev = (window.value_rev & shapes.kernel_mask.lo) >> 2*shapes.overlap | ((window.value_rev_hi & shapes.kernel_mask.hi) << shapes.kernel_length_lo);
@@ -865,7 +865,7 @@ uint64_t RSHash::streaming_lookup1(const seqan3::bitpacked_sequence<seqan3::dna4
                 found = false;
                 current_neg_minimiser1 = minimiser1;
             }
-        // }
+        }
     }
 
     delete[] offsets1;
@@ -913,13 +913,13 @@ uint64_t RSHash::streaming_lookup2(const seqan3::bitpacked_sequence<seqan3::dna4
             }
         }
 
-        // if(found && extend_in_text<no_shapes>(text_pos, sequence_begin, sequence_end, forward, window.value, window.value_rev, shapes_fwd, shapes_rev, text_kmer_lo, text_kmer_hi)) {
-        //     occurences++;
-        //     extensions++;
-        //     rolling1 = false;
-        //     rolling2 = false;
-        // }
-        // else {
+        if(found && extend_in_text<no_shapes>(text_pos, sequence_begin, sequence_end, forward, window.value, window.value_rev, shapes_fwd, shapes_rev, text_kmer_lo, text_kmer_hi)) {
+            occurences++;
+            extensions++;
+            rolling1 = false;
+            rolling2 = false;
+        }
+        else {
             if constexpr (no_shapes > 0) {
                 kernel = (window.value & shapes.kernel_mask.lo) >> 2*shapes.overlap | ((window.value_hi & shapes.kernel_mask.hi) << shapes.kernel_length_lo);
                 kernel_rev = (window.value_rev & shapes.kernel_mask.lo) >> 2*shapes.overlap | ((window.value_rev_hi & shapes.kernel_mask.hi) << shapes.kernel_length_lo);
@@ -980,7 +980,7 @@ uint64_t RSHash::streaming_lookup2(const seqan3::bitpacked_sequence<seqan3::dna4
                     current_neg_minimiser2 = minimiser2;
                 }
             }
-        // }
+        }
     }
 
     delete[] offsets1;
@@ -1035,14 +1035,14 @@ uint64_t RSHash::streaming_lookup3(const seqan3::bitpacked_sequence<seqan3::dna4
             }
         }
 
-        // if(found && extend_in_text<no_shapes>(text_pos, sequence_begin, sequence_end, forward, window.value, window.value_rev, shapes_fwd, shapes_rev, text_kmer_lo, text_kmer_hi)) {
-        //     occurences++;
-        //     extensions++;
-        //     rolling1 = false;
-        //     rolling2 = false;
-        //     rolling3 = false;
-        // }
-        // else {
+        if(found && extend_in_text<no_shapes>(text_pos, sequence_begin, sequence_end, forward, window.value, window.value_rev, shapes_fwd, shapes_rev, text_kmer_lo, text_kmer_hi)) {
+            occurences++;
+            extensions++;
+            rolling1 = false;
+            rolling2 = false;
+            rolling3 = false;
+        }
+        else {
             if constexpr (no_shapes > 0) {
                 kernel = (window.value & shapes.kernel_mask.lo) >> 2*shapes.overlap | ((window.value_hi & shapes.kernel_mask.hi) << shapes.kernel_length_lo);
                 kernel_rev = (window.value_rev & shapes.kernel_mask.lo) >> 2*shapes.overlap | ((window.value_rev_hi & shapes.kernel_mask.hi) << shapes.kernel_length_lo);
@@ -1132,7 +1132,7 @@ uint64_t RSHash::streaming_lookup3(const seqan3::bitpacked_sequence<seqan3::dna4
                     }
                 }
             }
-        // }
+        }
     }
 
     delete[] offsets1;
