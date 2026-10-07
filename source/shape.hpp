@@ -4,23 +4,6 @@
 #include "util.hpp"
 
 
-struct mask128_t {
-    uint64_t lo;
-    uint64_t hi;
-};
-
-static inline constexpr mask128_t compute_mask128(unsigned n)
-{
-    if (n == 0)
-        return {0, 0};
-    if (n < 64)
-        return {(1ULL << n) - 1, 0};
-    if (n == 64)
-        return {UINT64_MAX, 0};
-    if (n < 128)
-        return {UINT64_MAX, (1ULL << (n - 64)) - 1};
-    return {UINT64_MAX, UINT64_MAX};
-}
 
 static inline uint64_t compute_shape_mask(uint32_t const shape) {
     uint64_t x = _pdep_u64(shape, 0x5555555555555555ULL);
@@ -199,9 +182,17 @@ typedef struct {
     uint64_t value;
     mask128_t mask;
     mask128_t w_mask;
+    mask128_t mask_rev;
+    mask128_t w_mask_rev;
     unsigned weight;
     unsigned lo_weight;
+    unsigned rev_lo_weight;
     unsigned w_lo_weight;
+    unsigned w_rev_lo_weight;
+    unsigned w_dist_right;
+    unsigned w_dist_left;
+    unsigned w_rev_dist_right;
+    unsigned w_rev_dist_left;
     unsigned length;
     unsigned kernel_length;
     unsigned overlap;
@@ -216,6 +207,7 @@ typedef struct {
     unsigned overlap;
     unsigned kernel_length;
     mask128_t kernel_mask;
+    unsigned kernel_length_lo;
 } Shapes64;
 
 
@@ -241,7 +233,7 @@ static inline void print_shapes(const Shapes32 &shapes) {
 }
 
 static inline void print_mask128(const mask128_t &mask) {
-    std::cout << std::bitset<64>(mask.hi) << std::bitset<64>(mask.lo);
+    std::cout << std::bitset<64>(mask.hi) << " " << std::bitset<64>(mask.lo);
 }
 
 static inline void print_shape(const Shape64 &shape)
@@ -253,8 +245,19 @@ static inline void print_shape(const Shape64 &shape)
     std::cout << "aligned mask: ";
     print_mask128(shape.w_mask);
     std::cout << "\n";
+    std::cout << "Mask rev: ";
+    print_mask128(shape.mask_rev);
+    std::cout << "\n";
+    std::cout << "aligned rev mask: ";
+    print_mask128(shape.w_mask_rev);
+    std::cout << "\n";
     std::cout << "Weight: " << shape.weight << "\n";
-    std::cout << "Weight aligned mask low: " << shape.w_lo_weight << "\n";
+    std::cout << "Weight mask low: " << shape.w_lo_weight << "\n";
+    std::cout << "Weight rev mask low: " << shape.w_rev_lo_weight << "\n";
+    std::cout << "left dist aligned mask: " << shape.w_dist_left << "\n";
+    std::cout << "right dist aligned mask: " << shape.w_dist_right << "\n";
+    std::cout << "left dist aligned rev mask: " << shape.w_rev_dist_left << "\n";
+    std::cout << "right dist aligned rev mask: " << shape.w_rev_dist_right << "\n";
     std::cout << "Length: " << shape.length << "\n";
     std::cout << "Kernel length: " << shape.kernel_length << "\n";
     std::cout << "Overlap: " << shape.overlap << "\n";
@@ -273,6 +276,7 @@ static inline void print_shapes(const Shapes64 &shapes)
     std::cout << "Shapes length: " << shapes.length << "\n";
     std::cout << "Shapes overlap: " << shapes.overlap << "\n";
     std::cout << "Shapes kernel length: " << shapes.kernel_length << "\n";
+    std::cout << "Shapes kernel length low: " << shapes.kernel_length_lo << "\n";
     std::cout << "Shapes kernel mask: ";
     print_mask128(shapes.kernel_mask);
     std::cout << "\n";
@@ -327,7 +331,9 @@ static inline Shape64 shape64_create(uint64_t value)
     }
 
     shape.mask = compute_shape_mask(value);
+    shape.mask_rev = compute_shape_mask(reverse_shape(value));
     shape.lo_weight = std::popcount(shape.mask.lo);
+    shape.rev_lo_weight = std::popcount(shape.mask_rev.lo);
     shape.length = std::bit_width(value);
     run_t run = find_long_run(value);
     shape.kernel_length = run.len;
@@ -359,10 +365,15 @@ static inline void align_shapes(Shapes32 &shapes) {
 static inline void align_shapes(Shapes64 &shapes)
 {
     for (Shape64 &shape : shapes.shapes) {
-        unsigned shift = 2 * (shapes.overlap - shape.overlap_right);
-
-        shape.w_mask = mask128_shl(shape.mask, shift);
+        shape.w_dist_right = shapes.overlap - shape.overlap_right;
+        shape.w_mask = mask128_shl(shape.mask, 2 * shape.w_dist_right);
+        shape.w_dist_left = (64 -std::bit_width(shape.w_mask.hi))/2;
         shape.w_lo_weight = std::popcount(shape.w_mask.lo);
+
+        shape.w_rev_dist_right = shapes.overlap - shape.overlap_left;
+        shape.w_mask_rev = mask128_shl(shape.mask_rev, 2 * shape.w_rev_dist_right);
+        shape.w_rev_lo_weight = std::popcount(shape.w_mask_rev.lo);
+        shape.w_rev_dist_left = (64 -std::bit_width(shape.w_mask_rev.hi))/2;
     }
 }
 
@@ -421,6 +432,7 @@ static inline Shapes64 shape64_create(const std::vector<uint64_t> &values)
     }
 
     window.kernel_mask = mask128_shl(compute_mask128(2 * window.kernel_length), 2 * window.overlap);
+    window.kernel_length_lo = std::popcount(window.kernel_mask.lo);
     align_shapes(window);
     print_shapes(window);
 
@@ -453,10 +465,22 @@ void serialize(Archive& ar, Shapes32& window) {
 template <class Archive>
 void serialize(Archive& ar, Shape64& shape) {
     ar(shape.value,
-       shape.mask,
-       shape.w_mask,
+       shape.mask.lo,
+       shape.mask.hi,
+       shape.w_mask.lo,
+       shape.w_mask.hi,
+       shape.mask_rev.lo,
+       shape.mask_rev.hi,
+       shape.w_mask_rev.lo,
+       shape.w_mask_rev.hi,
        shape.w_lo_weight,
+       shape.w_rev_lo_weight,
        shape.lo_weight,
+       shape.rev_lo_weight,
+       shape.w_dist_right,
+       shape.w_dist_left,
+       shape.w_rev_dist_right,
+       shape.w_rev_dist_left,
        shape.weight,
        shape.length,
        shape.overlap,
@@ -469,7 +493,9 @@ void serialize(Archive& ar, Shapes64& window) {
        window.overlap,
        window.length,
        window.kernel_length,
-       window.kernel_mask);
+       window.kernel_mask.lo,
+       window.kernel_mask.hi,
+       window.kernel_length_lo);
 }
 
 }

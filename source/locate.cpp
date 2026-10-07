@@ -112,16 +112,16 @@ uint64_t RSHash::locate1(const std::vector<uint64_t> &kmers, std::vector<uint64_
     uint64_t minimiser, minimiser_rank, kmer_rank;;
     uint64_t kernel, kernel_rev;
     size_t left_minimiser_position, right_minimiser_position;
-    Shape32 shape = shapes.shapes[0]; // todo: multiple shapes
+    Shape64 shape = shapes.shapes[0]; // todo: multiple shapes
 
     for(uint64_t kmer : kmers) {
         uint64_t kmer_rc = crc(kmer, window_size);
 
         if constexpr (use_shape) {
-            kernel = (kmer & shapes.kernel_mask) >> 2*shapes.overlap;
-            kernel_rev = (kmer_rc & shapes.kernel_mask) >> 2*shapes.overlap;
-            kmer = _pext_u64(kmer, shape.mask);
-            kmer_rc = _pext_u64(kmer_rc, shape.mask);
+            kernel = (kmer & shapes.kernel_mask.lo) >> 2*shapes.overlap;
+            kernel_rev = (kmer_rc & shapes.kernel_mask.lo) >> 2*shapes.overlap;
+            kmer = _pext_u64(kmer, shape.mask.lo);
+            kmer_rc = _pext_u64(kmer_rc, shape.mask.lo);
         }
         else {
             kernel = kmer;
@@ -152,16 +152,16 @@ uint64_t RSHash::locate2(const std::vector<uint64_t> &kmers, std::vector<uint64_
     uint64_t minimiser, minimiser_rank, kmer_rank;
     uint64_t kernel, kernel_rev;
     size_t left_minimiser_position, right_minimiser_position;
-    Shape32 shape = shapes.shapes[0]; // todo: multiple shapes
+    Shape64 shape = shapes.shapes[0]; // todo: multiple shapes
 
     for(uint64_t kmer : kmers) {
         uint64_t kmer_rc = crc(kmer, window_size);
 
         if constexpr (use_shape) {
-            kernel = (kmer & shapes.kernel_mask) >> 2*shapes.overlap;
-            kernel_rev = (kmer_rc & shapes.kernel_mask) >> 2*shapes.overlap;
-            kmer = _pext_u64(kmer, shape.mask);
-            kmer_rc = _pext_u64(kmer_rc, shape.mask);
+            kernel = (kmer & shapes.kernel_mask.lo) >> 2*shapes.overlap;
+            kernel_rev = (kmer_rc & shapes.kernel_mask.lo) >> 2*shapes.overlap;
+            kmer = _pext_u64(kmer, shape.mask.lo);
+            kmer_rc = _pext_u64(kmer_rc, shape.mask.lo);
         }
         else {
             kernel = kmer;
@@ -200,16 +200,16 @@ uint64_t RSHash::locate3(const std::vector<uint64_t> &kmers, std::vector<uint64_
     uint64_t minimiser, minimiser_rank, kmer_rank;
     uint64_t kernel, kernel_rev;
     size_t left_minimiser_position, right_minimiser_position;
-    Shape32 shape = shapes.shapes[0]; // todo: multiple shapes
+    Shape64 shape = shapes.shapes[0]; // todo: multiple shapes
 
     for(uint64_t kmer : kmers) {
         uint64_t kmer_rc = crc(kmer, window_size);
 
         if constexpr (use_shape) {
-            kernel = (kmer & shapes.kernel_mask) >> 2*shapes.overlap;
-            kernel_rev = (kmer_rc & shapes.kernel_mask) >> 2*shapes.overlap;
-            kmer = _pext_u64(kmer, shape.mask);
-            kmer_rc = _pext_u64(kmer_rc, shape.mask);
+            kernel = (kmer & shapes.kernel_mask.lo) >> 2*shapes.overlap;
+            kernel_rev = (kmer_rc & shapes.kernel_mask.lo) >> 2*shapes.overlap;
+            kmer = _pext_u64(kmer, shape.mask.lo);
+            kmer_rc = _pext_u64(kmer_rc, shape.mask.lo);
         }
         else {
             kernel = kmer;
@@ -273,18 +273,18 @@ inline uint64_t RSHash::check_pos(const uint64_t kmer, const uint64_t kmer_rc,
     }
 
     uint64_t positions = 0;
-    Shape32 shape = shapes.shapes[0]; // todo: multiple shapes
+    Shape64 shape = shapes.shapes[0]; // todo: multiple shapes
     for(size_t i = 0; i < no_skmers; i++) {
         uint64_t offset = offsets[i];
         uint64_t pos = span-1-left_minimiser_position;
         uint64_t pos_rc = left_minimiser_position;
 
-        uint64_t hash_fwd = get_word64(offset + pos - shape.overlap) & windowmask;
-        uint64_t hash_rc = get_word64(offset + pos_rc - shape.overlap) & windowmask;
+        uint64_t hash_fwd = get_word64(offset + pos - shape.overlap) & windowmask.lo;
+        uint64_t hash_rc = get_word64(offset + pos_rc - shape.overlap) & windowmask.lo;
 
         if constexpr (use_shape) {
-            hash_fwd = _pext_u64(hash_fwd, shape.mask);
-            hash_rc = _pext_u64(hash_rc, shape.mask);
+            hash_fwd = _pext_u64(hash_fwd, shape.mask.lo);
+            hash_rc = _pext_u64(hash_rc, shape.mask.lo);
         }
 
         positions += kmer == hash_fwd;
@@ -294,12 +294,12 @@ inline uint64_t RSHash::check_pos(const uint64_t kmer, const uint64_t kmer_rc,
             pos = right_minimiser_position;
             pos_rc = span-1-right_minimiser_position;
 
-            hash_fwd = get_word64(offset + pos - shape.overlap) & windowmask;
-            hash_rc = get_word64(offset + pos_rc - shape.overlap) & windowmask;
+            hash_fwd = get_word64(offset + pos - shape.overlap) & windowmask.lo;
+            hash_rc = get_word64(offset + pos_rc - shape.overlap) & windowmask.lo;
 
             if constexpr (use_shape) {
-                hash_fwd = _pext_u64(hash_fwd, shape.mask);
-                hash_rc = _pext_u64(hash_rc, shape.mask);
+                hash_fwd = _pext_u64(hash_fwd, shape.mask.lo);
+                hash_rc = _pext_u64(hash_rc, shape.mask.lo);
             }
 
             positions += kmer == hash_fwd;
@@ -327,13 +327,13 @@ inline bool RSHash::report_minimiser_pos(uint64_t *buffer, uint64_t offset,
         span = span3;
 
     uint64_t candidate, candidate_rc, pos, pos_rc;
-    Shape32 shape = shapes.shapes[0]; // todo: multiple shapes
+    Shape64 shape = shapes.shapes[0]; // todo: multiple shapes
     if constexpr (use_shape) {
         pos = overlap - shape.overlap + span-1-minimiser_pos;
         pos_rc = overlap - shape.overlap + minimiser_pos;
         offset -= overlap;
-        candidate = _pext_u64(buffer[s + pos], shape.mask);
-        candidate_rc = _pext_u64(buffer[s + pos_rc], shape.mask);
+        candidate = _pext_u64(buffer[s + pos], shape.mask.lo);
+        candidate_rc = _pext_u64(buffer[s + pos_rc], shape.mask.lo);
     }
     else {
         pos = span-1-minimiser_pos;
@@ -375,16 +375,16 @@ inline bool RSHash::report_minimiser_pos2(uint64_t *buffer, uint64_t offset,
 
     uint64_t left_candidate, left_candidate_rc, right_candidate, right_candidate_rc;
     uint64_t left_pos, left_pos_rc, right_pos, right_pos_rc;
-    Shape32 shape = shapes.shapes[0]; // todo: multiple shapes
+    Shape64 shape = shapes.shapes[0]; // todo: multiple shapes
     if constexpr (use_shape) {
         left_pos = overlap - shape.overlap + span-1-left_minimiser_pos;
         left_pos_rc = overlap - shape.overlap + left_minimiser_pos;
         right_pos = overlap - shape.overlap + right_minimiser_pos;
         right_pos_rc = overlap - shape.overlap + span-1-right_minimiser_pos;
-        left_candidate = _pext_u64(buffer[s + left_pos], shape.mask);
-        left_candidate_rc = _pext_u64(buffer[s + left_pos_rc], shape.mask);
-        right_candidate = _pext_u64(buffer[s + right_pos], shape.mask);
-        right_candidate_rc = _pext_u64(buffer[s + right_pos_rc], shape.mask);
+        left_candidate = _pext_u64(buffer[s + left_pos], shape.mask.lo);
+        left_candidate_rc = _pext_u64(buffer[s + left_pos_rc], shape.mask.lo);
+        right_candidate = _pext_u64(buffer[s + right_pos], shape.mask.lo);
+        right_candidate_rc = _pext_u64(buffer[s + right_pos_rc], shape.mask.lo);
         offset -= overlap;
     }
     else {
@@ -484,15 +484,15 @@ uint64_t RSHash::streaming_locate1(const seqan3::bitpacked_sequence<seqan3::dna4
     size_t left_minimiser_position, right_minimiser_position;
     bool begin = true;
     uint64_t kernel, kernel_rev, kmer, kmer_rc;
-    Shape32 shape = shapes.shapes[0]; // todo: multiple shapes
+    Shape64 shape = shapes.shapes[0]; // todo: multiple shapes
 
-    for (auto&& window : query | rshash::views::kmerview({.window_size = window_size}))
+    for (auto&& window : query | rshash::views::kmer_view({.window_size = window_size}))
     {
         if constexpr (use_shape) {
-            kernel = (kmer & shapes.kernel_mask) >> 2*shapes.overlap;
-            kernel_rev = (kmer_rc & shapes.kernel_mask) >> 2*shapes.overlap;
-            kmer = _pext_u64(window.value, shape.mask);
-            kmer_rc = _pext_u64(window.value_rev, shape.mask);
+            kernel = (kmer & shapes.kernel_mask.lo) >> 2*shapes.overlap;
+            kernel_rev = (kmer_rc & shapes.kernel_mask.lo) >> 2*shapes.overlap;
+            kmer = _pext_u64(window.value, shape.mask.lo);
+            kmer_rc = _pext_u64(window.value_rev, shape.mask.lo);
         }
         else {
             kernel = window.value;
@@ -556,15 +556,15 @@ uint64_t RSHash::streaming_locate2(const seqan3::bitpacked_sequence<seqan3::dna4
     bool rolling1 = false;
     bool rolling2 = false;
     uint64_t kernel, kernel_rev, kmer, kmer_rc;
-    Shape32 shape = shapes.shapes[0]; // todo: multiple shapes
+    Shape64 shape = shapes.shapes[0]; // todo: multiple shapes
 
-    for (auto&& window : query | rshash::views::kmerview({.window_size = window_size}))
+    for (auto&& window : query | rshash::views::kmer_view({.window_size = window_size}))
     {
         if constexpr (use_shape) {
-            kernel = (kmer & shapes.kernel_mask) >> 2*shapes.overlap;
-            kernel_rev = (kmer_rc & shapes.kernel_mask) >> 2*shapes.overlap;
-            kmer = _pext_u64(window.value, shape.mask);
-            kmer_rc = _pext_u64(window.value_rev, shape.mask);
+            kernel = (kmer & shapes.kernel_mask.lo) >> 2*shapes.overlap;
+            kernel_rev = (kmer_rc & shapes.kernel_mask.lo) >> 2*shapes.overlap;
+            kmer = _pext_u64(window.value, shape.mask.lo);
+            kmer_rc = _pext_u64(window.value_rev, shape.mask.lo);
         }
         else {
             kernel = window.value;
@@ -663,15 +663,15 @@ uint64_t RSHash::streaming_locate3(const seqan3::bitpacked_sequence<seqan3::dna4
     bool rolling2 = false;
     bool rolling3 = false;
     uint64_t kernel, kernel_rev, kmer, kmer_rc;
-    Shape32 shape = shapes.shapes[0]; // todo: multiple shapes
+    Shape64 shape = shapes.shapes[0]; // todo: multiple shapes
 
-    for (auto&& window : query | rshash::views::kmerview({.window_size = window_size}))
+    for (auto&& window : query | rshash::views::kmer_view({.window_size = window_size}))
     {
         if constexpr (use_shape) {
-            kernel = (window.value & shapes.kernel_mask) >> 2*shapes.overlap;
-            kernel_rev = (window.value_rev & shapes.kernel_mask) >> 2*shapes.overlap;
-            kmer = _pext_u64(window.value, shape.mask);
-            kmer_rc = _pext_u64(window.value_rev, shape.mask);
+            kernel = (window.value & shapes.kernel_mask.lo) >> 2*shapes.overlap;
+            kernel_rev = (window.value_rev & shapes.kernel_mask.lo) >> 2*shapes.overlap;
+            kmer = _pext_u64(window.value, shape.mask.lo);
+            kmer_rc = _pext_u64(window.value_rev, shape.mask.lo);
         }
         else {
             kernel = window.value;

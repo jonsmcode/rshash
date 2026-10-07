@@ -111,7 +111,7 @@ int RSHash::save(const std::filesystem::path &filepath) {
     std::ofstream out(filepath, std::ios::binary);
     cereal::BinaryOutputArchive archive(out);
 
-    archive(k, number_shapes, shapes, windowmask, windowshift, window_size, overlap,
+    archive(k, number_shapes, shapes, windowmask.lo, windowmask.hi, windowshift, window_size, overlap,
         mmermask1, mmermask2, mmermask3,
         level, m1, m2, m3, m_thres1, m_thres2, m_thres3, threshold, span1, span2, span3,
         s1, s2, s3, s4, s5, endpoints, r1, r2, r3, r4, r5, offsets1, offsets2, offsets3, offsets4, offsets5, text,
@@ -125,7 +125,7 @@ int RSHash::load(const std::filesystem::path &filepath) {
     std::ifstream in(filepath, std::ios::binary);
     cereal::BinaryInputArchive archive(in);
 
-    archive(k, number_shapes, shapes, windowmask, windowshift, window_size, overlap,
+    archive(k, number_shapes, shapes, windowmask.lo, windowmask.hi, windowshift, window_size, overlap,
         mmermask1, mmermask2, mmermask3,
         level, m1, m2, m3, m_thres1, m_thres2, m_thres3, threshold, span1, span2, span3,
         s1, s2, s3, s4, s5, endpoints, r1, r2, r3, r4, r5, offsets1, offsets2, offsets3, offsets4, offsets5, text,

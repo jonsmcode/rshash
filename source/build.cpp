@@ -2,6 +2,7 @@
 #include "minimiser_views.hpp"
 #include "kxsort.h"
 
+
 inline uint64_t mark_sequences(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input, const size_t k,
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> &endpoints)
 {
@@ -295,11 +296,11 @@ gtl::flat_hash_map<uint64_t, uint16_t> RSHash::count_kmers(
         size_t s = (skmer_info.start > shapes.overlap) ? skmer_info.start - shapes.overlap : 0;
         size_t e = std::min(skmer_info.end + shapes.overlap, input[skmer_info.seq_id].size());
         auto skmer = input[skmer_info.seq_id] | std::views::drop(s) | std::views::take(e - s);
-        for(auto && kmer : skmer | rshash::views::kmerview({.window_size = window_size})) {
+        for(auto && kmer : skmer | rshash::views::kmer_view({.window_size = window_size})) {
             if(number_shapes > 0) {
                 // todo: multiple shapes
-                uint64_t shape_val = _pext_u64(kmer.value, shapes.shapes[0].mask);
-                uint64_t shape_val_rev = _pext_u64(kmer.value_rev, shapes.shapes[0].mask);
+                uint64_t shape_val = _pext_u64(kmer.value, shapes.shapes[0].mask.lo);
+                uint64_t shape_val_rev = _pext_u64(kmer.value_rev, shapes.shapes[0].mask.lo);
                 uint64_t canonical_shape = std::min<uint64_t>(shape_val, shape_val_rev);
                 if(kmer_counts[canonical_shape] < threshold)
                     kmer_counts[canonical_shape]++;
@@ -315,48 +316,46 @@ gtl::flat_hash_map<uint64_t, uint16_t> RSHash::count_kmers(
 }
 
 
-template <typename AddForward>
-void RSHash::process_freq_kmers(AddForward&& add,
+// template <typename AddForward>
+// void RSHash::process_freq_kmers(AddForward&& add,
+//     const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& input,
+//     const std::vector<SkmerInfo> &freq_skmers,
+//     gtl::flat_hash_map<uint64_t, uint16_t> &kmer_counts)
+// {
+//     for (const auto& skmer_info : freq_skmers) {
+//         auto skmer = input[skmer_info.seq_id] | std::views::drop(skmer_info.start) | std::views::take(skmer_info.end - skmer_info.start);
+//         uint32_t pos = endpoints.select(skmer_info.seq_id + 1) + skmer_info.start;
+//         for (auto&& kmer : skmer | rshash::views::kmer_view({.window_size = window_size})) {
+//             uint64_t canonical_kmer = std::min<uint64_t>(kmer.value, kmer.value_rev);
+//             if(threshold == 0 || kmer_counts[canonical_kmer] < threshold)
+//                 add(canonical_kmer, pos);
+//             ++pos;
+//         }
+//     }
+// }
+
+
+template <typename AddForward, typename AddReverse>
+void RSHash::process_freq_kmers(AddForward&& addfwd, AddReverse&& addrev,
     const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& input,
     const std::vector<SkmerInfo> &freq_skmers,
-    gtl::flat_hash_map<uint64_t, uint16_t> &kmer_counts)
+    gtl::flat_hash_map<uint64_t, uint16_t> &kmer_counts, Shape64 &shape)
 {
     for (const auto& skmer_info : freq_skmers) {
-        auto skmer = input[skmer_info.seq_id] | std::views::drop(skmer_info.start) | std::views::take(skmer_info.end - skmer_info.start);
-        uint32_t pos = endpoints.select(skmer_info.seq_id + 1) + skmer_info.start;
-        for (auto&& kmer : skmer | rshash::views::kmerview({.window_size = window_size})) {
-            uint64_t canonical_kmer = std::min<uint64_t>(kmer.value, kmer.value_rev);
-            if(threshold == 0 || kmer_counts[canonical_kmer] < threshold)
-                add(canonical_kmer, pos);
-            ++pos;
-        }
-    }
-}
-
-
-template <typename AddForward>
-void RSHash::process_freq_kmers(AddForward&& add,
-    const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& input,
-    const std::vector<SkmerInfo> &freq_skmers,
-    gtl::flat_hash_map<uint64_t, uint16_t> &kmer_counts, Shape32 &shape)
-{
-    for (const auto& skmer_info : freq_skmers) {
-        size_t s = (skmer_info.start > shape.overlap) ? skmer_info.start - shape.overlap : 0;
-        size_t e = std::min(skmer_info.end + shape.overlap, input[skmer_info.seq_id].size());
-        auto skmer = input[skmer_info.seq_id] | std::views::drop(s) | std::views::take(e - s);
-
         uint32_t pos = endpoints.select(skmer_info.seq_id + 1) + skmer_info.start;
 
-        for (auto&& kmer : skmer | rshash::views::kmerview({.window_size = shape.length})) {
+            size_t s = (skmer_info.start > shape.overlap) ? skmer_info.start - shape.overlap : 0;
+            size_t e = std::min(skmer_info.end + shape.overlap, input[skmer_info.seq_id].size());
+            
+            auto skmer = input[skmer_info.seq_id] | std::views::drop(s) | std::views::take(e - s);
 
-            uint64_t shape_val     = _pext_u64(kmer.value, shape.mask);
-            uint64_t shape_val_rc  = _pext_u64(kmer.value_rev, shape.mask);
-            uint64_t canonical_shape = std::min<uint64_t>(shape_val, shape_val_rc);
-
-            add(canonical_shape, pos);
-
-            ++pos;
-        }
+            for (auto&& kmer : skmer | rshash::views::kmer_view({.window_size = shape.length})) {
+                const uint64_t shape_fwd = _pext_u64(kmer.value, shape.mask.lo) | (_pext_u64(kmer.value_hi, shape.mask.hi) << shape.lo_weight);
+                const uint64_t shape_rev = _pext_u64(kmer.value, shape.mask_rev.lo) | (_pext_u64(kmer.value_hi, shape.mask_rev.hi) << shape.rev_lo_weight);
+                addfwd(shape_fwd, pos);
+                addrev(shape_rev, pos);
+                ++pos;
+            }
     }
 }
 
@@ -411,17 +410,21 @@ void RSHash::last_level(const std::vector<seqan3::bitpacked_sequence<seqan3::dna
         if(loc) {
             if(number_shapes > 0) {
                 for(int i = 0; i < number_shapes; i++) {
-                    FlatMapBuilder builder;
+                    FlatMapBuilder builder, builder_rc;
                     process_freq_kmers([&](uint64_t key, uint32_t pos) {builder.add(key, pos);},
+                                       [&](uint64_t key, uint32_t pos) {builder_rc.add(key, pos);},
                                        input, freq_skmers, kmer_counts, shapes.shapes[i]);
                     hashmaps.push_back(std::move(builder).build());
+                    hashmaps.push_back(std::move(builder_rc).build());
                 }
             }
             else {
                 FlatMapBuilder builder, builder_rc;
                 process_freq_kmers([&](uint64_t key, uint32_t pos) {builder.add(key, pos);},
-                                   input, freq_skmers, kmer_counts);
+                                [&](uint64_t key, uint32_t pos) {builder_rc.add(key, pos);},
+                                   input, freq_skmers, kmer_counts, shapes.shapes[0]);
                 hashmaps.push_back(std::move(builder).build());
+                hashmaps.push_back(std::move(builder_rc).build());
             }
         }
         else {
@@ -429,43 +432,48 @@ void RSHash::last_level(const std::vector<seqan3::bitpacked_sequence<seqan3::dna
                 for(int i = 0; i < number_shapes; i++) {
                     gtl::flat_hash_set<uint64_t> hashset, hashset_rc;
                     process_freq_kmers([&](uint64_t key, uint32_t) {hashset.insert(key);},
+                                        [&](uint64_t key, uint32_t) {hashset_rc.insert(key);}, 
                                        input, freq_skmers, kmer_counts, shapes.shapes[i]);
                     hashsets.push_back(hashset);
+                    hashsets.push_back(hashset_rc);
                 }
             }
             else {
                 gtl::flat_hash_set<uint64_t> hashset, hashset_rc;
                 process_freq_kmers([&](uint64_t key, uint32_t) {hashset.insert(key);},
-                                   input, freq_skmers, kmer_counts);
+                                [&](uint64_t key, uint32_t) {hashset_rc.insert(key);}, 
+                                   input, freq_skmers, kmer_counts, shapes.shapes[0]);
                 hashsets.push_back(hashset);
+                hashsets.push_back(hashset_rc);
             }
         }
     }
-    else {
-        if(loc) {
-            gtl::flat_hash_map<uint64_t, std::vector<uint64_t>> freq_kmers_map; // todo: 32 bit pos if possible
+    // todo: reverse
+    // else {
+    //     if(loc) {
+    //         gtl::flat_hash_map<uint64_t, std::vector<uint64_t>> freq_kmers_map; // todo: 32 bit pos if possible
 
-            process_freq_kmers([&](uint64_t key, uint32_t pos) {freq_kmers_map[key].push_back(pos);},
-                               input, freq_skmers, kmer_counts);
+    //         process_freq_kmers([&](uint64_t key, uint32_t pos) {freq_kmers_map[key].push_back(pos);},
+    //                            input, freq_skmers, kmer_counts);
 
-            build_level<4>(freq_kmers_map, r4, offsets4);
-        }
-        else {
-            gtl::flat_hash_set<uint64_t> freq_kmers_map;
+    //         build_level<4>(freq_kmers_map, r4, offsets4);
+    //     }
+    //     else {
+    //         gtl::flat_hash_set<uint64_t> freq_kmers_map;
 
-            process_freq_kmers([&](uint64_t key, uint32_t) {freq_kmers_map.insert(key);},
-                               input, freq_skmers, kmer_counts);
+    //         process_freq_kmers([&](uint64_t key, uint32_t) {freq_kmers_map.insert(key);},
+    //                            input, freq_skmers, kmer_counts);
 
-            auto build_ef = [&](auto& set, auto& ef) {
-                std::vector<uint64_t> keys(set.begin(), set.end());
-                set.clear();
-                std::ranges::sort(keys);
-                ef = sux::bits::EliasFano(keys, 1ULL << (2 * window_size));
-            };
+    //         auto build_ef = [&](auto& set, auto& ef) {
+    //             std::vector<uint64_t> keys(set.begin(), set.end());
+    //             set.clear();
+    //             std::ranges::sort(keys);
+    //             ef = sux::bits::EliasFano(keys, 1ULL << (2 * window_size));
+    //         };
 
-            build_ef(freq_kmers_map, r4);
-        }
-    }
+    //         build_ef(freq_kmers_map, r4);
+    //     }
+    // }
 
 }
 

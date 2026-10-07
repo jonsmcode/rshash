@@ -6,6 +6,7 @@
 #include "compact_vector.hpp"
 #include "EliasFano.hpp"
 #include "minimiser_views.hpp"
+#include "kmer_view.hpp"
 #include "shape.hpp"
 #include "flat_map.hpp"
 
@@ -63,13 +64,15 @@ struct RadixTraitsMinimizer64 {
 class RSHash
 {
 private:
-    Shapes32 shapes;
+    Shapes64 shapes;
     int number_shapes;
     size_t overlap;
     uint64_t k, window_size;
     uint64_t level, m1, m_thres1, m2, m_thres2, m3, m_thres3, threshold;
     uint64_t span1, span2, span3;
-    uint64_t windowmask, windowshift, mmermask1, mmermask2, mmermask3;
+    mask128_t windowmask;
+    uint64_t windowshift;
+    uint64_t mmermask1, mmermask2, mmermask3;
     bool loc, use_ht;
     mixer_64 m_hasher1, m_hasher2, m_hasher3;
     uint64_t no_text_kmers;
@@ -101,10 +104,10 @@ private:
     template<int level>
     size_t get_frequent_skmers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &, const std::vector<SkmerInfo> &, std::vector<SkmerInfo> &);
     gtl::flat_hash_map<uint64_t, uint16_t> count_kmers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &);
-    template <typename AddForward>
-    void process_freq_kmers(AddForward&& add, const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &, gtl::flat_hash_map<uint64_t, uint16_t> &);
-    template <typename AddForward>
-    void process_freq_kmers(AddForward&& add, const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &, gtl::flat_hash_map<uint64_t, uint16_t> &, Shape32&);
+    template <typename AddForward, typename AddReverse>
+    void process_freq_kmers(AddForward&&, AddReverse&& , const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &, gtl::flat_hash_map<uint64_t, uint16_t> &, Shape64 &);
+    // template <typename AddForward>
+    // void process_freq_kmers(AddForward&&, const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &, gtl::flat_hash_map<uint64_t, uint16_t> &);
     template <size_t MarkId, typename EF, typename Offsets>
     void build_level(gtl::flat_hash_map<uint64_t, std::vector<uint64_t>>&, EF&, Offsets&);
     void last_level(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &);
@@ -116,10 +119,16 @@ private:
     inline bool check(const uint64_t, const uint64_t, uint64_t*, const size_t, const size_t, const size_t, const size_t);
     template<int level, bool use_shape>
     inline uint64_t check_pos(const uint64_t, const uint64_t, uint64_t*, const size_t, const size_t, const size_t, const size_t);
+    template<int level, int no_shapes>
+    inline bool check_shape(uint64_t *, uint64_t, const uint64_t, const uint64_t, uint64_t*, uint64_t*, const size_t, const size_t, bool &, uint64_t &, uint64_t &, uint64_t &, uint64_t &, uint64_t &);
+    template<int level, int no_shapes>
+    inline bool check_shape2(uint64_t *, uint64_t, const uint64_t, const uint64_t, uint64_t*, uint64_t*, const size_t, const size_t, const size_t, bool &, uint64_t &, uint64_t &, uint64_t &, uint64_t &, uint64_t &);
     template<int level>
     inline void fill_buffer(uint64_t *, uint64_t *, size_t, size_t);
     template<int level>
     inline void fill_buffer2(uint64_t *, uint64_t *, uint64_t *, size_t, size_t);
+    template<int level>
+    inline void fill_buffer128(uint64_t *, uint64_t *, size_t, size_t);
     inline bool check_overlap(uint64_t, uint64_t &, uint64_t &, uint64_t);
     template<int level, int no_shapes>
     inline bool check_minimiser_pos(uint64_t*, uint64_t, const uint64_t, const uint64_t, uint64_t*, uint64_t*, const size_t, const size_t, bool &, uint64_t &, uint64_t &, uint64_t &, uint64_t &, uint64_t &);
@@ -127,8 +136,10 @@ private:
     inline bool check_minimiser_pos2(uint64_t*, uint64_t, const uint64_t, const uint64_t, uint64_t*, uint64_t*, const size_t, const size_t, const size_t, bool &, uint64_t &, uint64_t &, uint64_t &, uint64_t &, uint64_t &);
     template<int level, int no_shapes>
     inline bool lookup_buffer(uint64_t *, uint64_t *, const size_t, const uint64_t, const uint64_t, uint64_t*, uint64_t*, uint64_t &, const size_t, const size_t, bool &, uint64_t &, uint64_t &, uint64_t &, uint64_t &);
+    template<int level, int no_shapes>
+    inline bool lookup_buffer128(uint64_t*, uint64_t *, const size_t, const uint64_t, const uint64_t, uint64_t*, uint64_t*, uint64_t &, const size_t, const size_t, bool &, uint64_t &, uint64_t &, uint64_t &, uint64_t &);
     template<int no_shapes, bool use_ht, bool locate>
-    inline bool lookup_last_level(const uint64_t, const uint64_t, uint64_t*, uint64_t*);
+    inline bool lookup_last_level(const uint64_t, const uint64_t, const uint64_t, const uint64_t);
     template<bool use_shape, bool use_ht>
     inline bool locate_last_level(const uint64_t, const uint64_t, std::vector<uint64_t>&, uint64_t&);
     template<int no_shapes>
@@ -185,12 +196,12 @@ public:
     RSHash(uint8_t const k, uint8_t const level, uint8_t const m1, uint8_t const m2, uint8_t const m3,
             uint8_t const m_thres1, uint8_t const m_thres2, uint8_t const m_thres3, uint16_t const threshold, bool const loc, bool const ht)
         : 
-        shapes(shape32_create(std::vector<uint32_t>{std::numeric_limits<uint32_t>::max()})),
+        shapes(shape64_create(std::vector<uint64_t>{std::numeric_limits<uint64_t>::max()})),
         number_shapes(0), k(k),
         level(level), m1(m1), m2(m2), m3(m3), m_thres1(m_thres1), m_thres2(m_thres2), m_thres3(m_thres3), threshold(threshold),
         loc(loc), use_ht(ht),
         span1(k-m1+1), span2(k-m2+1), span3(k-m3+1),
-        window_size(k), windowmask(compute_mask(2u * k)), windowshift(2 * (k-1)),
+        window_size(k), windowmask(compute_mask128(2u * k)), windowshift(2 * (k-1)),
         mmermask1(compute_mask(2u * m1)), mmermask2(compute_mask(2u * m2)), mmermask3(compute_mask(2u * m3)),
         endpoints(std::vector<uint64_t>{}, 1),
         r1(std::vector<uint64_t>{}, 1),
@@ -200,7 +211,7 @@ public:
         r5(std::vector<uint64_t>{}, 1),
         m_hasher1(seed1), m_hasher2(seed2), m_hasher3(seed3)
     {}
-    RSHash(Shapes32 const &shapes, uint8_t const level, uint8_t const m1, uint8_t const m2, uint8_t const m3,
+    RSHash(Shapes64 const &shapes, uint8_t const level, uint8_t const m1, uint8_t const m2, uint8_t const m3,
             uint8_t const m_thres1, uint8_t const m_thres2, uint8_t const m_thres3, uint16_t const threshold, bool const loc, bool const ht)
         :
         shapes(shapes), number_shapes(shapes.shapes.size()),
@@ -208,7 +219,9 @@ public:
         level(level), m1(m1), m2(m2), m3(m3), m_thres1(m_thres1), m_thres2(m_thres2), m_thres3(m_thres3), threshold(threshold),
         loc(loc), use_ht(ht),
         span1(this->k-m1+1), span2(this->k-m2+1), span3(this->k-m3+1),
-        window_size(this->shapes.length), windowmask(compute_mask(2u * window_size)), windowshift(2 * (this->shapes.length-1)),
+        window_size(this->shapes.length), windowmask(compute_mask128(2u * window_size)),
+        // windowshift(2 * (this->shapes.length-1)),
+        windowshift(2 * (this->shapes.length-33)),
         mmermask1(compute_mask(2u * m1)), mmermask2(compute_mask(2u * m2)), mmermask3(compute_mask(2u * m3)),
         endpoints(std::vector<uint64_t>{}, 1),
         r1(std::vector<uint64_t>{}, 1),
@@ -219,7 +232,7 @@ public:
         m_hasher1(seed1), m_hasher2(seed2), m_hasher3(seed3)
     {}
     uint8_t getk() { return k; }
-    Shapes32 getshapes() { return shapes; }
+    Shapes64 getshapes() { return shapes; }
     bool has_locate() { return loc; }
     uint64_t number_unitigs() { return endpoints.rank(endpoints.size()); }
     size_t unitig_size(uint64_t unitig_id) { return endpoints.select(unitig_id+1) - endpoints.select(unitig_id) - k + 1; }
@@ -383,7 +396,7 @@ const inline uint64_t RSHash::get_base(uint64_t pos) {
 
 
 const inline uint64_t RSHash::access(const size_t offset) {
-    return get_word64(offset) & windowmask;
+    return get_word64(offset) & windowmask.lo;
 }
 
 
@@ -411,8 +424,8 @@ inline void RSHash::fill_buffer(uint64_t *offsets, uint64_t *buffer, size_t p, s
         uint64_t s = offsets[i] - shapes.overlap;
         uint64_t e = s + span-1;
             
-        uint64_t window = get_word64(s) & windowmask;
-        uint64_t bits = get_word64(s + window_size); // assert span + overlap <= 32
+        uint64_t window = get_word64(s) & windowmask.lo;
+        uint64_t bits = get_word64(s + window_size); // assert span <= 32
         
         *buffer++ = window;
         for(uint64_t j=s; j < e; j++) {
@@ -424,6 +437,51 @@ inline void RSHash::fill_buffer(uint64_t *offsets, uint64_t *buffer, size_t p, s
     }
 
 }
+
+template<int level>
+inline void RSHash::fill_buffer128(uint64_t *offsets, uint64_t *buffer, size_t p, size_t N)
+{
+    uint64_t span;
+    if constexpr (level == 1)
+        span = span1;
+    if constexpr (level == 2)
+        span = span2;
+    if constexpr (level == 3)
+        span = span3;
+    
+    for(size_t i = 0; i < N; i++) {
+        if constexpr (level == 1)
+            offsets[i] = offsets1.access(p+i) + 1 - span;
+        if constexpr (level == 2)
+            offsets[i] = offsets2.access(p+i) + 1 - span;
+        if constexpr (level == 3)
+            offsets[i] = offsets3.access(p+i) + 1 - span;
+    }
+    
+    for(uint64_t i = 0; i < N; i++) {
+        uint64_t s = offsets[i] - shapes.overlap;
+        uint64_t e = s + span - 1;
+            
+        uint64_t window_lo = get_word64(s);
+        uint64_t window_hi = get_word64(s + 32) & windowmask.hi;
+        uint64_t bits = get_word64(s + window_size); // assert span + overlap <= 32
+        
+        *buffer++ = window_lo;
+        *buffer++ = window_hi;
+        for(uint64_t j=s; j < e; j++) {
+            uint64_t const next_base = bits & 3ULL;
+            bits >>= 2;
+            
+            window_lo = (window_lo >> 2) | ((window_hi & 3ULL) << 62);
+            window_hi = (window_hi >> 2) | (next_base << windowshift);
+
+            *buffer++ = window_lo;
+            *buffer++ = window_hi;
+        }
+    }
+
+}
+
 
 template<int level>
 inline void RSHash::fill_buffer2(uint64_t *offsets, uint64_t *buffer, uint64_t *endpositions, size_t p, size_t N)
@@ -455,7 +513,7 @@ inline void RSHash::fill_buffer2(uint64_t *offsets, uint64_t *buffer, uint64_t *
         uint64_t s = offsets[i] - shapes.overlap;
         uint64_t e = s + span-1;
             
-        uint64_t window = get_word64(s) & windowmask;
+        uint64_t window = get_word64(s) & windowmask.lo;
         uint64_t bits = get_word64(s + window_size); // assert span + overlap <= 32
         
         *buffer++ = window;

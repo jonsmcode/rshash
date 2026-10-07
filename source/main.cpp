@@ -36,7 +36,7 @@ struct cmd_arguments {
     uint16_t t{0};
     bool loc{false};
     bool ht{false};
-    std::vector<uint32_t> shapes{std::numeric_limits<uint32_t>::max()};
+    std::vector<uint64_t> shape{std::numeric_limits<uint64_t>::max()};
 };
 
 void initialise_argument_parser(sharg::parser &parser, cmd_arguments &args)
@@ -56,7 +56,7 @@ void initialise_argument_parser(sharg::parser &parser, cmd_arguments &args)
     parser.add_option(args.t, sharg::config{.short_id = 't', .description = "max k-mer/shape frequency threshold"});
     parser.add_flag(args.loc, sharg::config{.long_id = "loc", .description = "enable locate"});
     parser.add_flag(args.ht, sharg::config{.long_id = "ht", .description = "do not use hashtable on last level"});
-    parser.add_option(args.shapes, sharg::config{.long_id = "shapes", .description = "list of shape values"});
+    parser.add_option(args.shape, sharg::config{.long_id = "shape", .description = "shape value. multiple values can be given."});
 }
 
 int check_arguments(sharg::parser &parser, cmd_arguments &args) {
@@ -120,10 +120,10 @@ int main(int argc, char** argv)
 
         std::cout << "building dict...\n";
         RSHash index;
-        if(args.shapes[0] == std::numeric_limits<uint32_t>::max())
+        if(args.shape[0] == std::numeric_limits<uint64_t>::max())
             index = RSHash(args.k, args.level, args.m1, args.m2, args.m3, args.t1, args.t2, args.t3, args.t, args.loc, !args.ht);
         else {
-            const Shapes32 shapes = shape32_create(args.shapes);
+            const Shapes64 shapes = shape64_create(args.shape);
             index = RSHash(shapes, args.level, args.m1, args.m2, args.m3, args.t1, args.t2, args.t3, args.t, args.loc, !args.ht);
         }
         index.build(text);
@@ -141,12 +141,13 @@ int main(int argc, char** argv)
         std::chrono::nanoseconds elapsed;
         RSHash index = RSHash();
         index.load(args.d);
+        print_shapes(index.getshapes());
         std::cout << "querying...\n";
 
         std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
         for (auto query : queries) {
             found += index.streaming_lookup(query, extensions);
-            if(index.getshapes().shapes[0].value != std::numeric_limits<uint32_t>::max())
+            if(index.getshapes().shapes[0].value != std::numeric_limits<uint64_t>::max())
                 kmers += query.size() - index.getshapes().length + 1;
             else
                 kmers += query.size() - index.getk() + 1;
@@ -190,7 +191,7 @@ int main(int argc, char** argv)
         for (auto query : queries) {
             found_kmers += index.streaming_locate(query, positions, found_positions);
             found_positions += positions.size();
-            if(index.getshapes().shapes[0].value != std::numeric_limits<uint32_t>::max())
+            if(index.getshapes().shapes[0].value != std::numeric_limits<uint64_t>::max())
                 kmers += query.size() - index.getshapes().length + 1;
             else
                 kmers += query.size() - index.getk() + 1;
