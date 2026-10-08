@@ -350,228 +350,33 @@ inline bool RSHash::extend_in_text(uint64_t &text_pos, uint64_t start, uint64_t 
     }
     else {
         if(forward) {
-            const uint64_t next_base = get_base(++text_pos);
+            if(++text_pos < end) {
+                const uint64_t next_base = get_base(text_pos);
+                window_lo = (window_lo >> 2) | ((window_hi & 3ULL) << 62);
+                window_hi = (window_hi >> 2) | (next_base << windowshift);
 
-            window_lo = (window_lo >> 2) | ((window_hi & 3ULL) << 62);
-            window_hi = (window_hi >> 2) | (next_base << windowshift);
-            // todo: window_lo = get_word64(text_pos);
-            // window_hi = get_word64(text_pos+32); faster?
-
-            for(int i = 0; i < no_shapes; i++) {
-                Shape64 shape = shapes.shapes[i];
-                if(shapes_fwd[2*i] == (window_lo & shape.w_mask.lo) && shapes_fwd[2*i + 1] == (window_hi & shape.w_mask.hi) && text_pos - shape.w_dist_right < end)
-                    return true;
+                for(int i = 0; i < no_shapes; i++) {
+                    Shape64 shape = shapes.shapes[i];
+                    if(shapes_fwd[2*i] == (window_lo & shape.w_mask.lo) && shapes_fwd[2*i + 1] == (window_hi & shape.w_mask.hi) && text_pos - shape.w_dist_right < end)
+                        return true;
+                }
             }
         }
         else {
-            const uint64_t new_rank = get_base(--text_pos);
-
-            window_hi = ((window_hi << 2) | (window_lo >> 62)) & windowmask.hi;
-            window_lo = (window_lo << 2) | new_rank;
+            if(--text_pos >= start) {
+                const uint64_t new_rank = get_base(text_pos);
+                window_hi = ((window_hi << 2) | (window_lo >> 62)) & windowmask.hi;
+                window_lo = (window_lo << 2) | new_rank;
             
-            for(int i = 0; i < no_shapes; i++) {
-                Shape64 shape = shapes.shapes[i];
-                if(shapes_rev[2*i] == (window_lo & shape.w_mask_rev.lo) && shapes_rev[2*i + 1] == (window_hi & shape.w_mask_rev.hi) && text_pos + shape.w_rev_dist_left >= start)
-                    return true;
+                for(int i = 0; i < no_shapes; i++) {
+                    Shape64 shape = shapes.shapes[i];
+                    if(shapes_rev[2*i] == (window_lo & shape.w_mask_rev.lo) && shapes_rev[2*i + 1] == (window_hi & shape.w_mask_rev.hi) && text_pos + shape.w_rev_dist_left >= start)
+                        return true;
+                }
             }
         }
         return false;
     }
-}
-
-
-template<int level, int no_shapes>
-inline bool RSHash::check_minimiser_pos(uint64_t *buffer, uint64_t offset,
-    const uint64_t kmer, const uint64_t kmer_rc, uint64_t* shapes_fwd, uint64_t* shapes_rev,
-    const size_t s, const size_t minimiser_pos,
-    bool &forward, uint64_t &text_pos, uint64_t &start_pos, uint64_t &end_pos,
-    uint64_t &text_kmer, uint64_t &text_kmer_rc)
-{
-    size_t span;
-    if constexpr (level == 1)
-        span = span1;
-    else if constexpr (level == 2)
-        span = span2;
-    else if constexpr (level == 3)
-        span = span3;
-
-    auto check_candidate_fwd = [&](uint64_t candidate, uint64_t query,
-        uint64_t window, uint64_t window_pos, uint64_t shape_pos, uint64_t shape_length) -> bool
-    {
-        if (candidate == query && check_overlap(shape_pos, start_pos, end_pos, shape_length)) {
-            forward = true;
-            text_pos = window_pos + window_size - 1;
-            text_kmer = window;
-            return true;
-        }
-        return false;
-    };
-    auto check_candidate_rev = [&](uint64_t candidate, uint64_t query,
-        uint64_t window_rev, uint64_t window_pos, uint64_t shape_pos, uint64_t shape_length) -> bool
-    {
-        if (candidate == query && check_overlap(shape_pos, start_pos, end_pos, shape_length)) {
-            forward = false;
-            text_pos = window_pos;
-            text_kmer_rc = window_rev;
-            return true;
-        }
-        return false;
-    };
-
-    const uint64_t pos = span-1-minimiser_pos;
-    const uint64_t kmer_pos = offset + pos;
-    const uint64_t pos_rc = minimiser_pos;
-    const uint64_t kmer_pos_rc = offset + pos_rc;
-    const uint64_t window = buffer[s + pos];
-    const uint64_t window_rc = buffer[s + pos_rc];
-
-    if constexpr (no_shapes > 0) {
-        const uint64_t window_pos = kmer_pos - shapes.overlap;
-        const uint64_t window_pos_rc = kmer_pos_rc - shapes.overlap;
-        for(int i = 0; i < no_shapes; ++i) {
-            Shape64 shape = shapes.shapes[i];
-            uint64_t candidate = _pext_u64(window, shape.w_mask.lo);
-            if(check_candidate_fwd(candidate, shapes_fwd[i], window, window_pos, kmer_pos - shape.overlap, shape.length))
-                return true;
-
-            uint64_t candidate_rc = _pext_u64(window_rc, shape.w_mask.lo);
-            if(check_candidate_rev(candidate_rc, shapes_rev[i], window_rc, window_pos_rc, kmer_pos_rc - shape.overlap, shape.length))
-                return true;
-        }
-    }
-    else {
-        return check_candidate_fwd(window, kmer, window, kmer_pos, kmer_pos, window_size)
-            || check_candidate_rev(window_rc, kmer_rc, window_rc, kmer_pos_rc, kmer_pos_rc, window_size);
-    }
-
-    return false;
-}
-
-
-template<int level, int no_shapes>
-inline bool RSHash::check_minimiser_pos2(uint64_t *buffer, uint64_t offset,
-    const uint64_t kmer, const uint64_t kmer_rc, uint64_t* shapes_fwd, uint64_t* shapes_rev,
-    const size_t s, const size_t left_minimiser_pos, const size_t right_minimiser_pos,
-    bool &forward, uint64_t &text_pos, uint64_t &start_pos, uint64_t &end_pos,
-    uint64_t &text_kmer, uint64_t &text_kmer_rc)
-{   
-    size_t span;
-    if constexpr (level == 1)
-        span = span1;
-    else if constexpr (level == 2)
-        span = span2;
-    else if constexpr (level == 3)
-        span = span3;
-
-    auto check_candidate_fwd = [&](uint64_t candidate, uint64_t query,
-        uint64_t window, uint64_t window_pos, uint64_t shape_pos, uint64_t shape_length) -> bool
-    {
-        if (candidate == query && check_overlap(shape_pos, start_pos, end_pos, shape_length)) {
-            forward = true;
-            text_pos = window_pos + window_size - 1;
-            text_kmer = window;
-            return true;
-        }
-        return false;
-    };
-    auto check_candidate_rev = [&](uint64_t candidate, uint64_t query,
-        uint64_t window_rev, uint64_t window_pos, uint64_t shape_pos, uint64_t shape_length) -> bool
-    {
-        if (candidate == query && check_overlap(shape_pos, start_pos, end_pos, shape_length)) {
-            forward = false;
-            text_pos = window_pos;
-            text_kmer_rc = window_rev;
-            return true;
-        }
-        return false;
-    };
-
-    uint64_t left_pos = span-1-left_minimiser_pos;
-    uint64_t left_kmer_pos = offset + left_pos;
-    uint64_t left_pos_rc = left_minimiser_pos;
-    uint64_t left_kmer_pos_rc = offset + left_pos_rc;
-    uint64_t right_pos = right_minimiser_pos;
-    uint64_t right_kmer_pos = offset + right_pos;
-    uint64_t right_pos_rc = span-1-right_minimiser_pos;
-    uint64_t right_kmer_pos_rc = offset + right_pos_rc;
-    uint64_t left_window = buffer[s + left_pos];
-    uint64_t left_window_rev = buffer[s + left_pos_rc];    
-    uint64_t right_window = buffer[s + right_pos];    
-    uint64_t right_window_rev = buffer[s + right_pos_rc];
-
-    if constexpr (no_shapes > 0) {
-        for(int i = 0; i < no_shapes; ++i) {
-            Shape64 shape = shapes.shapes[i];
-
-            uint64_t left_candidate = _pext_u64(left_window, shape.w_mask.lo);
-            uint64_t left_shape_pos = left_kmer_pos - shape.overlap;
-            if(check_candidate_fwd(left_candidate, shapes_fwd[i], left_window, left_kmer_pos - shapes.overlap, left_shape_pos, shape.length))
-                return true;
-
-            uint64_t left_candidate_rc = _pext_u64(left_window_rev, shape.w_mask.lo);
-            uint64_t left_shape_pos_rc = left_kmer_pos_rc - shape.overlap;
-            if(check_candidate_rev(left_candidate_rc, shapes_rev[i], left_window_rev, left_kmer_pos_rc - shapes.overlap, left_shape_pos_rc, shape.length))
-                return true;
-
-            uint64_t right_candidate = _pext_u64(right_window, shape.w_mask.lo);
-            uint64_t right_shape_pos = right_kmer_pos - shape.overlap;
-            if(check_candidate_fwd(right_candidate, shapes_fwd[i], right_window, right_kmer_pos - shapes.overlap, right_shape_pos, shape.length))
-                return true;
-
-            uint64_t right_candidate_rc = _pext_u64(right_window_rev, shape.w_mask.lo);
-            uint64_t right_shape_pos_rc = right_kmer_pos_rc - shape.overlap;
-            if(check_candidate_rev(right_candidate_rc, shapes_rev[i], right_window_rev, right_kmer_pos_rc - shapes.overlap, right_shape_pos_rc, shape.length))
-                return true;
-        }
-    }
-    else {
-        return check_candidate_fwd(left_window, kmer, left_window, left_kmer_pos, left_kmer_pos, window_size) ||
-                check_candidate_rev(left_window_rev, kmer_rc, left_window_rev, left_kmer_pos_rc, left_kmer_pos_rc, window_size) ||
-                check_candidate_fwd(right_window, kmer, right_window, right_kmer_pos, right_kmer_pos, window_size) ||
-                check_candidate_rev(right_window_rev, kmer_rc, right_window_rev, right_kmer_pos_rc, right_kmer_pos_rc, window_size);
-    }
-
-    return false;
-}
-
-
-template<int level, int no_shapes>
-inline bool RSHash::lookup_buffer(uint64_t* buffer, uint64_t *offsets, const size_t no_skmers,
-    const uint64_t kmer, const uint64_t kmer_rc, uint64_t* shapes_fwd, uint64_t* shapes_rev,
-    uint64_t &text_pos, const size_t left_minimiser_pos, const size_t right_minimiser_pos,
-    bool &forward, uint64_t &start_pos, uint64_t &end_pos, uint64_t &text_kmer, uint64_t &text_kmer_rc)
-{
-    size_t span, m;
-    if constexpr (level == 1) {
-        span = span1;
-        m = m1;
-    }
-    if constexpr (level == 2) {
-        span = span2;
-        m = m2;
-    }
-    if constexpr (level == 3) {
-        span = span3;
-        m = m3;
-    }
-
-    size_t s = 0;
-    if(left_minimiser_pos != k-m-right_minimiser_pos) {
-        for(size_t i = 0; i < no_skmers; i++) {
-            if(check_minimiser_pos2<level, no_shapes>(buffer, offsets[i], kmer, kmer_rc, shapes_fwd, shapes_rev, s, left_minimiser_pos, right_minimiser_pos, forward, text_pos, start_pos, end_pos, text_kmer, text_kmer_rc))
-                return true;
-            s += span;
-        }
-    }
-    else {
-        for(size_t i = 0; i < no_skmers; i++) {
-            if(check_minimiser_pos<level, no_shapes>(buffer, offsets[i], kmer, kmer_rc, shapes_fwd, shapes_rev, s, left_minimiser_pos, forward, text_pos, start_pos, end_pos, text_kmer, text_kmer_rc))
-                return true;
-            s += span;
-        }
-    }
-    
-    return false;
 }
 
 

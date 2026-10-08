@@ -484,6 +484,8 @@ void serialize(Archive& ar, Shape64& shape) {
        shape.weight,
        shape.length,
        shape.overlap,
+       shape.overlap_left,
+       shape.overlap_right,
        shape.is_canonical);
 }
 
