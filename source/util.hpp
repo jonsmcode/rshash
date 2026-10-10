@@ -36,21 +36,30 @@ static inline constexpr mask128_t compute_mask128(unsigned n)
     return {UINT64_MAX, UINT64_MAX};
 }
 
+static inline constexpr uint64_t rc64(uint64_t x) {
+    x = __builtin_bswap64(~x);
+
+    constexpr uint64_t m4 = 0x0f0f0f0f0f0f0f0f;
+    constexpr uint64_t m2 = 0x3333333333333333;
+
+    x = ((x & m4) << 4) | ((x & ~m4) >> 4);
+    x = ((x & m2) << 2) | ((x & ~m2) >> 2);
+
+    return x;
+}
+
 static inline constexpr uint64_t crc(uint64_t x, uint64_t k) {
-    // assert(k <= 32);
-    uint64_t c = ~x;
+    return rc64(x) >> (64 - 2 * k);
+}
 
-    /* swap byte order */
-    uint64_t res = __builtin_bswap64(c);
+static inline constexpr mask128_t crc128(mask128_t x, uint64_t k) {
+    const uint64_t n = k - 32;
 
-    /* Swap nuc order in bytes */
-    const uint64_t c1 = 0x0f0f0f0f0f0f0f0f;              // ...0000.1111.0000.1111
-    const uint64_t c2 = 0x3333333333333333;              // ...0011.0011.0011.0011
-    res = ((res & c1) << 4) | ((res & (c1 << 4)) >> 4);  // swap 2-nuc order in bytes
-    res = ((res & c2) << 2) | ((res & (c2 << 2)) >> 2);  // swap nuc order in 2-nuc
+    const uint64_t rhi = rc64(x.lo);
+    const uint64_t rlo = crc(x.hi, n);
 
-    /* Realign to the right */
-    res >>= 64 - 2 * k;
-
-    return res;
+    return {
+        .lo = (rhi << (2 * n)) | rlo,
+        .hi = rhi >> (64 - 2 * n)
+    };
 }

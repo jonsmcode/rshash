@@ -85,7 +85,7 @@ private:
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> endpoints;
     std::vector<uint64_t> text;
     using StreamingLookupFn = uint64_t (RSHash::*)(const seqan3::bitpacked_sequence<seqan3::dna4>&, uint64_t&);
-    using LookupFn = uint64_t (RSHash::*)(const std::vector<uint64_t> &);
+    using LookupFn = uint64_t (RSHash::*)(const std::vector<mask128_t> &);
     StreamingLookupFn streaming_lookup_fn = nullptr;
     LookupFn lookup_fn = nullptr;
     using StreamingLocateFn = uint64_t (RSHash::*)(const seqan3::bitpacked_sequence<seqan3::dna4>&, std::vector<uint64_t> &, size_t &);
@@ -116,7 +116,7 @@ private:
     template<int level>
     inline void update_minimiser(const uint64_t, const uint64_t, uint64_t&, size_t &, size_t &);
     template<int level, int no_shapes>
-    inline bool check(const uint64_t, const uint64_t, uint64_t*, const size_t, const size_t, const size_t, const size_t);
+    inline bool check(const uint64_t*, const uint64_t*, uint64_t*, const size_t, const size_t, const size_t, const size_t);
     template<int level, bool use_shape>
     inline uint64_t check_pos(const uint64_t, const uint64_t, uint64_t*, const size_t, const size_t, const size_t, const size_t);
     template<int level, int no_shapes>
@@ -160,11 +160,11 @@ private:
     template<bool use_shape, bool use_ht>
     uint64_t streaming_locate3(const seqan3::bitpacked_sequence<seqan3::dna4>&, std::vector<uint64_t>&, uint64_t &);
     template<int no_shapes, bool use_ht, bool locate>
-    uint64_t lookup1(const std::vector<uint64_t>&);
+    uint64_t lookup1(const std::vector<mask128_t> &);
     template<int no_shapes, bool use_ht, bool locate>
-    uint64_t lookup2(const std::vector<uint64_t>&);
+    uint64_t lookup2(const std::vector<mask128_t> &);
     template<int no_shapes, bool use_ht, bool locate>
-    uint64_t lookup3(const std::vector<uint64_t>&);
+    uint64_t lookup3(const std::vector<mask128_t> &);
     template<bool use_shape, bool use_ht>
     uint64_t locate1(const std::vector<uint64_t>&, std::vector<uint64_t>&);
     template<bool use_shape, bool use_ht>
@@ -231,15 +231,16 @@ public:
         r5(std::vector<uint64_t>{}, 1),
         m_hasher1(seed1), m_hasher2(seed2), m_hasher3(seed3)
     {}
-    uint8_t getk() { return k; }
+    uint8_t getk() { return window_size; }
     Shapes64 getshapes() { return shapes; }
     bool has_locate() { return loc; }
     uint64_t number_unitigs() { return endpoints.rank(endpoints.size()); }
     size_t unitig_size(uint64_t unitig_id) { return endpoints.select(unitig_id+1) - endpoints.select(unitig_id) - k + 1; }
-    const inline uint64_t access(const size_t);
+    // const inline uint64_t access(const size_t);
+    const inline mask128_t access(const size_t);
     void initialise_lookupfn();
     void initialise_locatefn();
-    uint64_t lookup(const std::vector<uint64_t>&);
+    uint64_t lookup(const std::vector<mask128_t>&);
     uint64_t locate(const std::vector<uint64_t>&, std::vector<uint64_t>&);
     void build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&);
     uint64_t streaming_lookup(const seqan3::bitpacked_sequence<seqan3::dna4>&, uint64_t&);
@@ -350,10 +351,10 @@ public:
     
         std::cout << "total: " << (double) (no_skmers1*offset_width+no_skmers2*offset_width+no_skmers3*offset_width+2*N+r1.bitCount()+r2.bitCount()+r3.bitCount()+no_skmers1+1+s1_select.bitCount()+no_skmers2+1+s2_select.bitCount()+no_skmers3+1+s3_select.bitCount()+endpoints.bitCount()+freq_space)/no_text_kmers << "\n";
     }
-    std::vector<uint64_t> rand_text_kmers(const uint64_t n) {
+    std::vector<mask128_t> rand_text_kmers(const uint64_t n) {
         std::uniform_int_distribution<uint32_t> distr;
         std::mt19937 m_rand(1);
-        std::vector<std::uint64_t> kmers;
+        std::vector<mask128_t> kmers;
         kmers.reserve(n);
         const size_t l = (text.size()-1)*32;
 
@@ -366,11 +367,11 @@ public:
             if(offset + 64 >= next_endpoint)
                 continue;
 
-            const uint64_t kmer = access(offset);
+            const mask128_t kmer = access(offset);
 
-            if ((i & 1) == 0)
-                kmers.push_back(crc(kmer, window_size));
-            else
+            // if ((i & 1) == 0)
+            //     kmers.push_back(crc128(kmer, window_size));
+            // else
                 kmers.push_back(kmer);
         }
 
@@ -395,8 +396,12 @@ const inline uint64_t RSHash::get_base(uint64_t pos) {
 }
 
 
-const inline uint64_t RSHash::access(const size_t offset) {
-    return get_word64(offset) & windowmask.lo;
+// const inline uint64_t RSHash::access(const size_t offset) {
+//     return get_word64(offset) & windowmask.lo;
+// }
+
+const inline mask128_t RSHash::access(const size_t offset) {
+    return mask128_t{get_word64(offset), get_word64(offset + 32) & windowmask.hi};
 }
 
 
@@ -461,7 +466,8 @@ inline void RSHash::fill_buffer128(uint64_t *offsets, uint64_t *buffer, size_t p
     for(uint64_t i = 0; i < N; i++) {
         uint64_t s = offsets[i] - shapes.overlap;
         uint64_t e = s + span - 1;
-            
+        
+        // todo: one cache line load?!
         uint64_t window_lo = get_word64(s);
         uint64_t window_hi = get_word64(s + 32) & windowmask.hi;
         uint64_t bits = get_word64(s + window_size); // assert span + overlap <= 32

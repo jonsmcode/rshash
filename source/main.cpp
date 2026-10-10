@@ -2,18 +2,19 @@
 #include "rshash.hpp"
 
 
-std::vector<uint64_t> rand_kmers(const uint64_t n, const uint64_t k)
+std::vector<mask128_t> rand_kmers(const uint64_t n, const uint64_t k)
 {
-    const uint64_t mask = compute_mask(2u * k);
+    const uint64_t mask_hi = compute_mask(2*(k - 32));
 
     std::uniform_int_distribution<uint64_t> distr;
     std::mt19937_64 m_rand(1);
-    std::vector<uint64_t> kmers;
+    std::vector<mask128_t> kmers;
     kmers.reserve(n);
 
     for (uint64_t i = 0; i < n; ++i) {
-        const uint64_t kmer = distr(m_rand) & mask;
-        kmers.push_back(kmer);
+        const uint64_t kmer_lo = distr(m_rand);
+        const uint64_t kmer_hi = distr(m_rand) & mask_hi;
+        kmers.push_back(mask128_t{kmer_lo, kmer_hi});
     }
 
     return kmers;
@@ -214,7 +215,7 @@ int main(int argc, char** argv)
         uint64_t found = 0;
         double ns_per_kmer;
         const int rounds = 5;
-        std::vector<uint64_t> kmers;
+        std::vector<mask128_t> kmers;
 
         RSHash index = RSHash();
         index.load(args.d);
@@ -275,65 +276,65 @@ int main(int argc, char** argv)
         std::cout << "neg_time_per_kmer = " << std::accumulate(times.begin(), times.end(), 0.0) / times.size() << '\n';
         std::cout << "neg_time_per_kmer_variance = " << std::sqrt(std::accumulate(times.begin(), times.end(), 0.0, [&](double acc, double x) { return acc + (x - (lookup_time_sum/round)) * (x - (lookup_time_sum/round)) ; }) / times.size()) << '\n';
 
-        if(index.has_locate()) {
-            std::cout << "bench locate...\n";
+        // if(index.has_locate()) {
+        //     std::cout << "bench locate...\n";
 
-            std::cout << "bench pos locate...\n";
-            round = 0;
-            error = 0.0;
-            lookup_time_sum = 0.0;
-            times.clear();
-            std::vector<uint64_t> positions;
-            // positions.reserve(100000);
+        //     std::cout << "bench pos locate...\n";
+        //     round = 0;
+        //     error = 0.0;
+        //     lookup_time_sum = 0.0;
+        //     times.clear();
+        //     std::vector<uint64_t> positions;
+        //     // positions.reserve(100000);
 
-            while((round < 10 || error/round > 0.05 * (lookup_time_sum/round)) && round <= 50) {
-                kmers = index.rand_text_kmers(1000000);
-                t_start = std::chrono::high_resolution_clock::now();
-                found = index.locate(kmers, positions);
-                t_stop = std::chrono::high_resolution_clock::now();
-                elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
-                ns_per_kmer = (double) elapsed.count() / kmers.size();
-                lookup_time_sum += ns_per_kmer;
-                round++;
-                error += std::abs((lookup_time_sum/round) - ns_per_kmer);
-                times.push_back(ns_per_kmer);
-                std::cout << "round " << round << " time per kmer: " << ns_per_kmer << ", avg: " << (lookup_time_sum/round) << ", error: " << error/round << '\n';
-            }
+        //     while((round < 10 || error/round > 0.05 * (lookup_time_sum/round)) && round <= 50) {
+        //         kmers = index.rand_text_kmers(1000000);
+        //         t_start = std::chrono::high_resolution_clock::now();
+        //         found = index.locate(kmers, positions);
+        //         t_stop = std::chrono::high_resolution_clock::now();
+        //         elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
+        //         ns_per_kmer = (double) elapsed.count() / kmers.size();
+        //         lookup_time_sum += ns_per_kmer;
+        //         round++;
+        //         error += std::abs((lookup_time_sum/round) - ns_per_kmer);
+        //         times.push_back(ns_per_kmer);
+        //         std::cout << "round " << round << " time per kmer: " << ns_per_kmer << ", avg: " << (lookup_time_sum/round) << ", error: " << error/round << '\n';
+        //     }
 
-            std::cout << "==== locate:\n";
-            std::cout << "num_kmers = " << kmers.size() << '\n';
-            std::cout << "num_positive_positions = " << found << " (" << (double) found/kmers.size()*100 << "%)\n";
-            std::cout << "pos_locate_time_per_kmer = " << std::accumulate(times.begin(), times.end(), 0.0) / times.size() << '\n';
-            std::cout << "pos_locate_time_per_kmer_variance = " << std::sqrt(std::accumulate(times.begin(), times.end(), 0.0, [&](double acc, double x) { return acc + (x - (lookup_time_sum/round)) * (x - (lookup_time_sum/round)); }) / times.size()) << '\n';
+        //     std::cout << "==== locate:\n";
+        //     std::cout << "num_kmers = " << kmers.size() << '\n';
+        //     std::cout << "num_positive_positions = " << found << " (" << (double) found/kmers.size()*100 << "%)\n";
+        //     std::cout << "pos_locate_time_per_kmer = " << std::accumulate(times.begin(), times.end(), 0.0) / times.size() << '\n';
+        //     std::cout << "pos_locate_time_per_kmer_variance = " << std::sqrt(std::accumulate(times.begin(), times.end(), 0.0, [&](double acc, double x) { return acc + (x - (lookup_time_sum/round)) * (x - (lookup_time_sum/round)); }) / times.size()) << '\n';
 
 
-            std::cout << "bench neg locate...\n";
-            round = 0;
-            error = 0.0;
-            lookup_time_sum = 0.0;
-            times.clear();
+        //     std::cout << "bench neg locate...\n";
+        //     round = 0;
+        //     error = 0.0;
+        //     lookup_time_sum = 0.0;
+        //     times.clear();
 
-            while((round < 10 || error/round > 0.05 * (lookup_time_sum/round)) && round <= 50) {
-                kmers = rand_kmers(1000000, index.getk());
-                t_start = std::chrono::high_resolution_clock::now();
-                found = index.locate(kmers, positions);
-                t_stop = std::chrono::high_resolution_clock::now();
-                elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
-                ns_per_kmer = (double) elapsed.count() / kmers.size();
-                lookup_time_sum += ns_per_kmer;
-                round++;
-                error += std::abs((lookup_time_sum/round) - ns_per_kmer);
-                times.push_back(ns_per_kmer);
-                std::cout << "round " << round << " time per kmer: " << ns_per_kmer << ", avg: " << (lookup_time_sum/round) << ", error: " << error/round << '\n';
-            }
+        //     while((round < 10 || error/round > 0.05 * (lookup_time_sum/round)) && round <= 50) {
+        //         kmers = rand_kmers(1000000, index.getk());
+        //         t_start = std::chrono::high_resolution_clock::now();
+        //         found = index.locate(kmers, positions);
+        //         t_stop = std::chrono::high_resolution_clock::now();
+        //         elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
+        //         ns_per_kmer = (double) elapsed.count() / kmers.size();
+        //         lookup_time_sum += ns_per_kmer;
+        //         round++;
+        //         error += std::abs((lookup_time_sum/round) - ns_per_kmer);
+        //         times.push_back(ns_per_kmer);
+        //         std::cout << "round " << round << " time per kmer: " << ns_per_kmer << ", avg: " << (lookup_time_sum/round) << ", error: " << error/round << '\n';
+        //     }
 
-            std::cout << "==== locate:\n";
-            std::cout << "num_kmers = " << kmers.size() << '\n';
-            std::cout << "num_negative_positions = " << found << " (" << (double) found/kmers.size()*100 << "%)\n";
-            std::cout << "neg_locate_time_per_kmer = " << std::accumulate(times.begin(), times.end(), 0.0) / times.size() << '\n';
-            std::cout << "neg_locate_time_per_kmer_variance = " << std::sqrt(std::accumulate(times.begin(), times.end(), 0.0, [&](double acc, double x) { return acc + (x - (lookup_time_sum/round)) * (x - (lookup_time_sum/round)); }) / times.size()) << '\n';
+        //     std::cout << "==== locate:\n";
+        //     std::cout << "num_kmers = " << kmers.size() << '\n';
+        //     std::cout << "num_negative_positions = " << found << " (" << (double) found/kmers.size()*100 << "%)\n";
+        //     std::cout << "neg_locate_time_per_kmer = " << std::accumulate(times.begin(), times.end(), 0.0) / times.size() << '\n';
+        //     std::cout << "neg_locate_time_per_kmer_variance = " << std::sqrt(std::accumulate(times.begin(), times.end(), 0.0, [&](double acc, double x) { return acc + (x - (lookup_time_sum/round)) * (x - (lookup_time_sum/round)); }) / times.size()) << '\n';
 
-        }
+        // }
     }
  
     return 0;

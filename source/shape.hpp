@@ -208,6 +208,7 @@ typedef struct {
     unsigned kernel_length;
     mask128_t kernel_mask;
     unsigned kernel_length_lo;
+    unsigned w_dist;
 } Shapes64;
 
 
@@ -374,6 +375,10 @@ static inline void align_shapes(Shapes64 &shapes)
         shape.w_mask_rev = mask128_shl(shape.mask_rev, 2 * shape.w_rev_dist_right);
         shape.w_rev_lo_weight = std::popcount(shape.w_mask_rev.lo);
         shape.w_rev_dist_left = (64 -std::bit_width(shape.w_mask_rev.hi))/2;
+
+        shapes.w_dist = std::max(shape.w_dist_left, shape.w_dist_right);
+        shapes.w_dist = std::max(shapes.w_dist, shape.w_rev_dist_right);
+        shapes.w_dist = std::max(shapes.w_dist, shape.w_rev_dist_left);
     }
 }
 
@@ -497,7 +502,8 @@ void serialize(Archive& ar, Shapes64& window) {
        window.kernel_length,
        window.kernel_mask.lo,
        window.kernel_mask.hi,
-       window.kernel_length_lo);
+       window.kernel_length_lo,
+       window.w_dist);
 }
 
 }
