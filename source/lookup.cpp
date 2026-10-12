@@ -105,11 +105,8 @@ inline bool RSHash::lookup_last_level(const uint64_t kmer, const uint64_t kmer_h
         else
             return contains_impl<no_shapes>(hashsets, shapes.shapes, kmer, kmer_hi, kmer_rc, kmer_rc_hi);
     }
-    return false;
-    // todo: multiple Rs for multiple shapes!
-    // else {
-    //     return contains_impl<no_shapes>(r4, r5, kmer, kmer_rc, shapes_fwd, shapes_rev);
-    // }
+    else
+        return contains_impl<no_shapes>(ri, shapes.shapes, kmer, kmer_hi, kmer_rc, kmer_rc_hi);
 }
 
 
@@ -314,11 +311,16 @@ inline bool RSHash::check(const uint64_t* shapes_fwd, const uint64_t* shapes_rev
         // one cache line?!
 
         if constexpr (no_shapes > 0) {
+            uint64_t start_pos, end_pos;
             for(int j = 0; j < no_shapes; ++j) {
                 const Shape64& shape = shapes.shapes[j];
 
-                if((shapes_fwd[2 * j] == (word_fwd_lo & shape.w_mask.lo) && shapes_fwd[2 * j + 1] == (word_fwd_hi & shape.w_mask.hi)) ||
-                   (shapes_rev[2 * j] == (word_rc_lo & shape.w_mask_rev.lo) && shapes_rev[2 * j + 1] == (word_rc_hi & shape.w_mask_rev.hi)))
+                // the shape (not the whole window) has to lie within one sequence
+                if(shapes_fwd[2 * j] == (word_fwd_lo & shape.w_mask.lo) && shapes_fwd[2 * j + 1] == (word_fwd_hi & shape.w_mask.hi) &&
+                   check_overlap(pos + shape.w_dist_right, start_pos, end_pos, shape.length))
+                    return true;
+                if(shapes_rev[2 * j] == (word_rc_lo & shape.w_mask_rev.lo) && shapes_rev[2 * j + 1] == (word_rc_hi & shape.w_mask_rev.hi) &&
+                   check_overlap(pos_rc + shape.w_rev_dist_right, start_pos, end_pos, shape.length))
                     return true;
             }
         }

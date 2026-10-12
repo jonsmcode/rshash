@@ -172,17 +172,9 @@ inline std::vector<uint64_t> pack_dna4_to_uint64(const std::vector<seqan3::bitpa
     return packed;
 }
 
-template<int level>
-void RSHash::mark_occurences(const size_t total_occs, const std::vector<uint16_t> &occurences)
+static void mark_occurences(const size_t total_occs, const std::vector<uint16_t> &occurences,
+    bit_vector &s, sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> &s_select)
 {
-    auto & s = [&]() -> auto& {
-    if constexpr (level == 1) return s1;
-    if constexpr (level == 2) return s2;
-    if constexpr (level == 3) return s3;
-    if constexpr (level == 4) return s4;
-    if constexpr (level == 5) return s5;
-    }();
-
     s = bit_vector(total_occs+1, 0);
     s[0] = 1;
     uint64_t j = 0;
@@ -191,16 +183,18 @@ void RSHash::mark_occurences(const size_t total_occs, const std::vector<uint16_t
         s[j] = 1;
     }
 
+    s_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s.data()), total_occs+1, 3);
+}
+
+template<int level>
+void RSHash::mark_occurences(const size_t total_occs, const std::vector<uint16_t> &occurences)
+{
     if constexpr (level == 1)
-        s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s.data()), total_occs+1, 3);
+        ::mark_occurences(total_occs, occurences, s1, s1_select);
     if constexpr (level == 2)
-        s2_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s.data()), total_occs+1, 3);
+        ::mark_occurences(total_occs, occurences, s2, s2_select);
     if constexpr (level == 3)
-        s3_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s.data()), total_occs+1, 3);
-    if constexpr (level == 4)
-        s4_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s.data()), total_occs+1, 3);
-    if constexpr (level == 5)
-        s5_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s.data()), total_occs+1, 3);
+        ::mark_occurences(total_occs, occurences, s3, s3_select);
 }
 
 
@@ -360,9 +354,21 @@ void RSHash::process_freq_kmers(AddForward&& addfwd, AddReverse&& addrev,
 }
 
 
-template <size_t MarkId, typename EF, typename Offsets>
-void RSHash::build_level(gtl::flat_hash_map<uint64_t, std::vector<uint64_t>>& map, EF& ef, Offsets& offsets)
+// keys have to be sorted
+static inline sux::bits::EliasFano<sux::util::AllocType::MALLOC> build_ef(const std::vector<uint64_t> &keys)
 {
+    // shape values can use all 64 bits, so the universe is bounded by the largest key
+    // todo: a key of UINT64_MAX (e.g. poly-T for weight 32) cannot be represented
+    const uint64_t universe = keys.empty() ? 1 : std::max(keys.back(), keys.back() + 1);
+    return sux::bits::EliasFano(keys, universe);
+}
+
+
+// appends one rank structure to ri and fills the select bitvector and offsets at the same index
+void RSHash::build_level(gtl::flat_hash_map<uint64_t, std::vector<uint64_t>>& map)
+{
+    const size_t idx = ri.size();
+
     std::vector<decltype(map.cbegin())> order;
     order.reserve(map.size());
 
@@ -386,16 +392,16 @@ void RSHash::build_level(gtl::flat_hash_map<uint64_t, std::vector<uint64_t>>& ma
         keys.push_back(it->first);
         occurrences.push_back(it->second.size());
 
-        for (uint32_t pos : it->second)
+        for (uint64_t pos : it->second)
             builder.push_back(pos);
     }
 
     map.clear();
 
-    ef = sux::bits::EliasFano(keys, 1ULL << (2*window_size));
+    ri.push_back(build_ef(keys));
 
-    mark_occurences<MarkId>(total_positions, occurrences);
-    builder.build(offsets);
+    ::mark_occurences(total_positions, occurrences, si[idx], si_select[idx]);
+    builder.build(offsetsi[idx]);
 }
 
 
@@ -406,75 +412,63 @@ void RSHash::last_level(const std::vector<seqan3::bitpacked_sequence<seqan3::dna
     if(threshold > 0)
         kmer_counts = count_kmers(input, freq_skmers);
 
+    // contiguous k-mers are stored like a single shape
+    const int no_shapes = std::max(number_shapes, 1);
+
     if(use_ht) {
-        if(loc) {
-            if(number_shapes > 0) {
-                for(int i = 0; i < number_shapes; i++) {
-                    FlatMapBuilder builder, builder_rc;
-                    process_freq_kmers([&](uint64_t key, uint32_t pos) {builder.add(key, pos);},
-                                       [&](uint64_t key, uint32_t pos) {builder_rc.add(key, pos);},
-                                       input, freq_skmers, kmer_counts, shapes.shapes[i]);
-                    hashmaps.push_back(std::move(builder).build());
-                    hashmaps.push_back(std::move(builder_rc).build());
-                }
-            }
-            else {
+        for(int i = 0; i < no_shapes; i++) {
+            if(loc) {
                 FlatMapBuilder builder, builder_rc;
                 process_freq_kmers([&](uint64_t key, uint32_t pos) {builder.add(key, pos);},
-                                [&](uint64_t key, uint32_t pos) {builder_rc.add(key, pos);},
-                                   input, freq_skmers, kmer_counts, shapes.shapes[0]);
+                                   [&](uint64_t key, uint32_t pos) {builder_rc.add(key, pos);},
+                                   input, freq_skmers, kmer_counts, shapes.shapes[i]);
                 hashmaps.push_back(std::move(builder).build());
                 hashmaps.push_back(std::move(builder_rc).build());
-            }
-        }
-        else {
-            if(number_shapes > 0) {
-                for(int i = 0; i < number_shapes; i++) {
-                    gtl::flat_hash_set<uint64_t> hashset, hashset_rc;
-                    process_freq_kmers([&](uint64_t key, uint32_t) {hashset.insert(key);},
-                                        [&](uint64_t key, uint32_t) {hashset_rc.insert(key);}, 
-                                       input, freq_skmers, kmer_counts, shapes.shapes[i]);
-                    hashsets.push_back(hashset);
-                    hashsets.push_back(hashset_rc);
-                }
             }
             else {
                 gtl::flat_hash_set<uint64_t> hashset, hashset_rc;
                 process_freq_kmers([&](uint64_t key, uint32_t) {hashset.insert(key);},
-                                [&](uint64_t key, uint32_t) {hashset_rc.insert(key);}, 
-                                   input, freq_skmers, kmer_counts, shapes.shapes[0]);
+                                   [&](uint64_t key, uint32_t) {hashset_rc.insert(key);},
+                                   input, freq_skmers, kmer_counts, shapes.shapes[i]);
                 hashsets.push_back(hashset);
                 hashsets.push_back(hashset_rc);
             }
         }
     }
-    // todo: reverse
-    // else {
-    //     if(loc) {
-    //         gtl::flat_hash_map<uint64_t, std::vector<uint64_t>> freq_kmers_map; // todo: 32 bit pos if possible
+    else {
+        // ri[2*i] holds the forward, ri[2*i+1] the reverse values of shape i
+        ri.reserve(2 * no_shapes);
+        if(loc) {
+            // sized up front, the select structures point into si
+            si.resize(2 * no_shapes);
+            si_select.resize(2 * no_shapes);
+            offsetsi.resize(2 * no_shapes);
+        }
 
-    //         process_freq_kmers([&](uint64_t key, uint32_t pos) {freq_kmers_map[key].push_back(pos);},
-    //                            input, freq_skmers, kmer_counts);
+        for(int i = 0; i < no_shapes; i++) {
+            if(loc) {
+                gtl::flat_hash_map<uint64_t, std::vector<uint64_t>> map, map_rc;
+                process_freq_kmers([&](uint64_t key, uint32_t pos) {map[key].push_back(pos);},
+                                   [&](uint64_t key, uint32_t pos) {map_rc[key].push_back(pos);},
+                                   input, freq_skmers, kmer_counts, shapes.shapes[i]);
+                build_level(map);
+                build_level(map_rc);
+            }
+            else {
+                gtl::flat_hash_set<uint64_t> set, set_rc;
+                process_freq_kmers([&](uint64_t key, uint32_t) {set.insert(key);},
+                                   [&](uint64_t key, uint32_t) {set_rc.insert(key);},
+                                   input, freq_skmers, kmer_counts, shapes.shapes[i]);
 
-    //         build_level<4>(freq_kmers_map, r4, offsets4);
-    //     }
-    //     else {
-    //         gtl::flat_hash_set<uint64_t> freq_kmers_map;
-
-    //         process_freq_kmers([&](uint64_t key, uint32_t) {freq_kmers_map.insert(key);},
-    //                            input, freq_skmers, kmer_counts);
-
-    //         auto build_ef = [&](auto& set, auto& ef) {
-    //             std::vector<uint64_t> keys(set.begin(), set.end());
-    //             set.clear();
-    //             std::ranges::sort(keys);
-    //             ef = sux::bits::EliasFano(keys, 1ULL << (2 * window_size));
-    //         };
-
-    //         build_ef(freq_kmers_map, r4);
-    //     }
-    // }
-
+                for(auto *s : {&set, &set_rc}) {
+                    std::vector<uint64_t> keys(s->begin(), s->end());
+                    s->clear();
+                    std::ranges::sort(keys);
+                    ri.push_back(build_ef(keys));
+                }
+            }
+        }
+    }
 }
 
 

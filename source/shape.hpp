@@ -363,20 +363,28 @@ static inline void align_shapes(Shapes32 &shapes) {
     }
 }
 
+// w_dist_left: bases between the end of the aligned shape and the end of the window
+static inline unsigned window_dist_left(const Shapes64 &shapes, const unsigned dist_right, const unsigned length)
+{
+    return (dist_right + length < shapes.length) ? shapes.length - dist_right - length : 0;
+}
+
 static inline void align_shapes(Shapes64 &shapes)
 {
+    shapes.w_dist = 0;
     for (Shape64 &shape : shapes.shapes) {
         shape.w_dist_right = shapes.overlap - shape.overlap_right;
         shape.w_mask = mask128_shl(shape.mask, 2 * shape.w_dist_right);
-        shape.w_dist_left = (64 -std::bit_width(shape.w_mask.hi))/2;
+        shape.w_dist_left = window_dist_left(shapes, shape.w_dist_right, shape.length);
         shape.w_lo_weight = std::popcount(shape.w_mask.lo);
 
         shape.w_rev_dist_right = shapes.overlap - shape.overlap_left;
         shape.w_mask_rev = mask128_shl(shape.mask_rev, 2 * shape.w_rev_dist_right);
         shape.w_rev_lo_weight = std::popcount(shape.w_mask_rev.lo);
-        shape.w_rev_dist_left = (64 -std::bit_width(shape.w_mask_rev.hi))/2;
+        shape.w_rev_dist_left = window_dist_left(shapes, shape.w_rev_dist_right, shape.length);
 
-        shapes.w_dist = std::max(shape.w_dist_left, shape.w_dist_right);
+        shapes.w_dist = std::max(shapes.w_dist, shape.w_dist_left);
+        shapes.w_dist = std::max(shapes.w_dist, shape.w_dist_right);
         shapes.w_dist = std::max(shapes.w_dist, shape.w_rev_dist_right);
         shapes.w_dist = std::max(shapes.w_dist, shape.w_rev_dist_left);
     }
@@ -433,6 +441,13 @@ static inline Shapes64 shape64_create(const std::vector<uint64_t> &values)
 
     if (window.length > 64) {
         std::cerr << "aligned shapes length > 64 not supported\n";
+        exit(1);
+    }
+
+    // minimisers are computed on the kernel in a 64 bit word
+    const bool kmer_mode = values.size() == 1 && values[0] == UINT64_MAX;
+    if (!kmer_mode && window.kernel_length > 32) {
+        std::cerr << "kernel length " << window.kernel_length << " > 32 not supported\n";
         exit(1);
     }
 

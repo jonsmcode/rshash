@@ -92,12 +92,12 @@ inline bool RSHash::locate_last_level(const uint64_t kmer, const uint64_t kmer_r
             }
         };
         if constexpr (use_shape) {
-            locate(r4, s4_select, kmer);
+            locate(ri[0], si_select[0], kmer);
             if(kmer != kmer_rc)
-                locate(r5, s5_select, kmer_rc);
+                locate(ri[1], si_select[1], kmer_rc);
         }
         else
-            locate(r4, s4_select, std::min<uint64_t>(kmer, kmer_rc));
+            locate(ri[0], si_select[0], std::min<uint64_t>(kmer, kmer_rc));
     }
 
     return found;

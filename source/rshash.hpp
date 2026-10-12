@@ -76,12 +76,18 @@ private:
     bool loc, use_ht;
     mixer_64 m_hasher1, m_hasher2, m_hasher3;
     uint64_t no_text_kmers;
-    sux::bits::EliasFano<sux::util::AllocType::MALLOC> r1, r2, r3, r4, r5;
-    bit_vector s1, s2, s3, s4, s5;
-    sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s1_select, s2_select, s3_select, s4_select, s5_select;
-    bits::compact_vector offsets1, offsets2, offsets3, offsets4, offsets5;
+    sux::bits::EliasFano<sux::util::AllocType::MALLOC> r1, r2, r3;
+    bit_vector s1, s2, s3;
+    sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> s1_select, s2_select, s3_select;
+    bits::compact_vector offsets1, offsets2, offsets3;
     std::vector<gtl::flat_hash_set<uint64_t>> hashsets;
     std::vector<FlatMap> hashmaps;
+    // last level without hash tables: two rank structures per shape (forward, reverse),
+    // the select bitvectors and offsets are only built for locate
+    std::vector<sux::bits::EliasFano<sux::util::AllocType::MALLOC>> ri;
+    std::vector<bit_vector> si;
+    std::vector<sux::bits::SimpleSelect<sux::util::AllocType::MALLOC>> si_select;
+    std::vector<bits::compact_vector> offsetsi;
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> endpoints;
     std::vector<uint64_t> text;
     using StreamingLookupFn = uint64_t (RSHash::*)(const seqan3::bitpacked_sequence<seqan3::dna4>&, uint64_t&);
@@ -108,8 +114,7 @@ private:
     void process_freq_kmers(AddForward&&, AddReverse&& , const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &, gtl::flat_hash_map<uint64_t, uint16_t> &, Shape64 &);
     // template <typename AddForward>
     // void process_freq_kmers(AddForward&&, const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &, gtl::flat_hash_map<uint64_t, uint16_t> &);
-    template <size_t MarkId, typename EF, typename Offsets>
-    void build_level(gtl::flat_hash_map<uint64_t, std::vector<uint64_t>>&, EF&, Offsets&);
+    void build_level(gtl::flat_hash_map<uint64_t, std::vector<uint64_t>>&);
     void last_level(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &);
     template<int level>
     inline uint64_t find_minimiser(const uint64_t, const uint64_t, size_t &, size_t &);
@@ -189,8 +194,6 @@ public:
         r1(std::vector<uint64_t>{}, 1),
         r2(std::vector<uint64_t>{}, 1),
         r3(std::vector<uint64_t>{}, 1),
-        r4(std::vector<uint64_t>{}, 1),
-        r5(std::vector<uint64_t>{}, 1),
         m_hasher1(seed1), m_hasher2(seed2), m_hasher3(seed3)
     {}
     RSHash(uint8_t const k, uint8_t const level, uint8_t const m1, uint8_t const m2, uint8_t const m3,
@@ -207,8 +210,6 @@ public:
         r1(std::vector<uint64_t>{}, 1),
         r2(std::vector<uint64_t>{}, 1),
         r3(std::vector<uint64_t>{}, 1),
-        r4(std::vector<uint64_t>{}, 1),
-        r5(std::vector<uint64_t>{}, 1),
         m_hasher1(seed1), m_hasher2(seed2), m_hasher3(seed3)
     {}
     RSHash(Shapes64 const &shapes, uint8_t const level, uint8_t const m1, uint8_t const m2, uint8_t const m3,
@@ -227,8 +228,6 @@ public:
         r1(std::vector<uint64_t>{}, 1),
         r2(std::vector<uint64_t>{}, 1),
         r3(std::vector<uint64_t>{}, 1),
-        r4(std::vector<uint64_t>{}, 1),
-        r5(std::vector<uint64_t>{}, 1),
         m_hasher1(seed1), m_hasher2(seed2), m_hasher3(seed3)
     {}
     uint8_t getk() { return window_size; }
@@ -259,54 +258,32 @@ public:
         const uint64_t no_skmers2 = s2.size();
         const uint64_t no_minimizers3 = r3.rank(M3);
         const uint64_t no_skmers3 = s3.size();
-        const uint64_t no_kmers4 = s4.size();
+        uint64_t no_kmers4 = 0;
         size_t freq_space = 0;
         size_t freq_kmers = 0;
-        if(loc) {
-            if(number_shapes > 0) {
-                if(use_ht) {
-                    for(int i = 0; i < hashmaps.size(); i++) {
-                        freq_space += hashmaps[i].memory_bits();
-                        freq_kmers += hashmaps[i].size();
-                    }
-                }
-                else {
-                    freq_space = r4.bitCount() + no_kmers4*offset_width + no_kmers4 + s4_select.bitCount();
-                    freq_kmers = r4.rank(1ULL << (2*window_size));
+        if(use_ht) {
+            if(loc) {
+                const size_t n = (number_shapes > 0) ? hashmaps.size() : 1;
+                for(size_t i = 0; i < n; i++) {
+                    freq_space += hashmaps[i].memory_bits();
+                    freq_kmers += hashmaps[i].size();
                 }
             }
             else {
-                if(use_ht) {
-                    freq_space = hashmaps[0].memory_bits();
-                    freq_kmers = hashmaps[0].size();
-                }
-                else {
-                    freq_space = r4.bitCount() + no_kmers4*offset_width + no_kmers4 + s4_select.bitCount();
-                    freq_kmers = r4.rank(1ULL << (2*window_size));
+                const size_t n = (number_shapes > 0) ? hashsets.size() : 1;
+                for(size_t i = 0; i < n; i++) {
+                    freq_space += hashsets[i].capacity()*(sizeof(uint64_t) + 1)*8;
+                    freq_kmers += hashsets[i].size();
                 }
             }
         }
         else {
-            if(number_shapes > 0) {
-                if(use_ht) {
-                    for(int i = 0; i < hashsets.size(); i++) {
-                        freq_space += hashsets[i].capacity()*(sizeof(uint64_t) + 1)*8;
-                        freq_kmers += hashsets[i].size();
-                    }
-                }
-                else {
-                    freq_space = r4.bitCount();
-                    freq_kmers = r4.rank(1ULL << (2*window_size));
-                }
-            }
-            else {
-                if(use_ht) {
-                    freq_space += hashsets[0].capacity()*(sizeof(uint64_t) + 1)*8;
-                    freq_kmers += hashsets[0].size();
-                }
-                else {
-                    freq_space = r4.bitCount();
-                    freq_kmers = r4.rank(1ULL << (2*window_size));
+            for(size_t i = 0; i < ri.size(); i++) {
+                freq_space += ri[i].bitCount();
+                freq_kmers += ri[i].rank(ri[i].size());
+                if(loc) {
+                    no_kmers4 += offsetsi[i].size();
+                    freq_space += offsetsi[i].size()*offset_width + si[i].size() + si_select[i].bitCount();
                 }
             }
         }
@@ -343,11 +320,9 @@ public:
         std::cout << "R_1: " << (double) r1.bitCount()/no_text_kmers << "\n";
         std::cout << "R_2: " << (double) r2.bitCount()/no_text_kmers << "\n";
         std::cout << "R_3: " << (double) r3.bitCount()/no_text_kmers << "\n";
-        std::cout << "R_4: " << (double) r4.bitCount()/no_text_kmers << "\n";
         std::cout << "S_1: " << (double) (no_skmers1+1)/no_text_kmers << "\n";
         std::cout << "S_2: " << (double) (no_skmers2+1)/no_text_kmers << "\n";
         std::cout << "S_3: " << (double) (no_skmers3+1)/no_text_kmers << "\n";
-        std::cout << "S_4: " << (double) (no_kmers4+1)/no_text_kmers << "\n";
     
         std::cout << "total: " << (double) (no_skmers1*offset_width+no_skmers2*offset_width+no_skmers3*offset_width+2*N+r1.bitCount()+r2.bitCount()+r3.bitCount()+no_skmers1+1+s1_select.bitCount()+no_skmers2+1+s2_select.bitCount()+no_skmers3+1+s3_select.bitCount()+endpoints.bitCount()+freq_space)/no_text_kmers << "\n";
     }
@@ -356,7 +331,7 @@ public:
         std::mt19937 m_rand(1);
         std::vector<mask128_t> kmers;
         kmers.reserve(n);
-        const size_t l = (text.size()-1)*32;
+        const size_t l = endpoints.size() - 1; // last endpoint marks the end of the text
 
         for (uint64_t i = 0; i < n; i++) {
             const size_t offset = distr(m_rand) % l;

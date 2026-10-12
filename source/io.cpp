@@ -114,8 +114,13 @@ int RSHash::save(const std::filesystem::path &filepath) {
     archive(k, number_shapes, shapes, windowmask.lo, windowmask.hi, windowshift, window_size, overlap,
         mmermask1, mmermask2, mmermask3,
         level, m1, m2, m3, m_thres1, m_thres2, m_thres3, threshold, span1, span2, span3,
-        s1, s2, s3, s4, s5, endpoints, r1, r2, r3, r4, r5, offsets1, offsets2, offsets3, offsets4, offsets5, text,
+        s1, s2, s3, si, endpoints, r1, r2, r3, offsets1, offsets2, offsets3, offsetsi, text,
         loc, use_ht,  hashsets, hashmaps);
+
+    // EliasFano is not default constructible, so cereal cannot load a vector of it directly
+    archive(ri.size());
+    for(const auto &ef : ri)
+        archive(ef);
 
     out.close();
     return 0;
@@ -128,15 +133,26 @@ int RSHash::load(const std::filesystem::path &filepath) {
     archive(k, number_shapes, shapes, windowmask.lo, windowmask.hi, windowshift, window_size, overlap,
         mmermask1, mmermask2, mmermask3,
         level, m1, m2, m3, m_thres1, m_thres2, m_thres3, threshold, span1, span2, span3,
-        s1, s2, s3, s4, s5, endpoints, r1, r2, r3, r4, r5, offsets1, offsets2, offsets3, offsets4, offsets5, text,
+        s1, s2, s3, si, endpoints, r1, r2, r3, offsets1, offsets2, offsets3, offsetsi, text,
         loc, use_ht, hashsets, hashmaps);
+
+    size_t no_ri;
+    archive(no_ri);
+    ri.clear();
+    ri.reserve(no_ri);
+    for(size_t i = 0; i < no_ri; i++) {
+        ri.emplace_back(std::vector<uint64_t>{}, 1);
+        archive(ri.back());
+    }
     in.close();
 
     this->s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), s1.size(), 3);
     this->s2_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s2.data()), s2.size(), 3);
     this->s3_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s3.data()), s3.size(), 3);
-    this->s4_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s4.data()), s4.size(), 3);
-    this->s5_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s5.data()), s5.size(), 3);
+    si_select.clear();
+    si_select.resize(si.size());
+    for(size_t i = 0; i < si.size(); i++)
+        si_select[i] = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(si[i].data()), si[i].size(), 3);
 
     initialise_lookupfn();
     if(loc)
