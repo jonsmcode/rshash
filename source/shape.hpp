@@ -95,7 +95,7 @@ static inline constexpr run_t find_long_run(uint32_t shape)
         }
 
         pos += len;
-        x >>= len;
+        x = (len < 32) ? x >> len : 0; // shifting by the word width is undefined
     }
 
     return best;
@@ -122,7 +122,7 @@ static inline constexpr run_t find_long_run(uint64_t shape)
         }
 
         pos += len;
-        x >>= len;
+        x = (len < 64) ? x >> len : 0; // shifting by the word width is undefined
     }
 
     return best;

@@ -325,8 +325,13 @@ inline bool RSHash::check(const uint64_t* shapes_fwd, const uint64_t* shapes_rev
             }
         }
         else {
-            if((shapes_fwd[0] == word_fwd_lo && shapes_fwd[1] == (word_fwd_hi & windowmask.hi)) || 
-               (shapes_rev[0] == word_rc_lo && shapes_rev[1] == (word_rc_hi & windowmask.hi)))
+            // the k-mer has to lie within one sequence
+            uint64_t start_pos, end_pos;
+            if(shapes_fwd[0] == (word_fwd_lo & windowmask.lo) && shapes_fwd[1] == (word_fwd_hi & windowmask.hi) &&
+               check_overlap(pos, start_pos, end_pos, window_size))
+                return true;
+            if(shapes_rev[0] == (word_rc_lo & windowmask.lo) && shapes_rev[1] == (word_rc_hi & windowmask.hi) &&
+               check_overlap(pos_rc, start_pos, end_pos, window_size))
                 return true;
         }
 
@@ -493,8 +498,9 @@ inline bool RSHash::check_shape(uint64_t *buffer, uint64_t offset,
         }
     }
     else {
-        return check_candidate_fwd(window_lo, window_hi, kmer, kmer, kmer, kmer, kmer_pos, kmer_pos, window_size)
-            || check_candidate_rev(window_rc_lo, window_rc_hi, kmer_rc, kmer_rc, kmer_rc, kmer_rc, kmer_pos_rc, kmer_pos_rc, window_size);
+        // k-mers (k <= 32) lie in the low word, the high word is 0
+        return check_candidate_fwd(window_lo, window_hi, kmer, 0, window_lo, window_hi, kmer_pos, kmer_pos, window_size)
+            || check_candidate_rev(window_rc_lo, window_rc_hi, kmer_rc, 0, window_rc_lo, window_rc_hi, kmer_pos_rc, kmer_pos_rc, window_size);
     }
 
     return false;
@@ -590,10 +596,11 @@ inline bool RSHash::check_shape2(uint64_t *buffer, uint64_t offset,
         }
     }
     else {
-        return check_candidate_fwd(left_window_lo, left_window_hi, kmer, kmer, kmer, kmer, left_kmer_pos, left_kmer_pos, window_size) ||
-                check_candidate_rev(left_window_rev_lo, left_window_rev_hi, kmer_rc, kmer_rc, kmer_rc, kmer_rc, left_kmer_pos_rc, left_kmer_pos_rc, window_size) ||
-                check_candidate_fwd(right_window_lo, right_window_hi, kmer, kmer, kmer, kmer, right_kmer_pos, right_kmer_pos, window_size) ||
-                check_candidate_rev(right_window_rev_lo, right_window_rev_hi, kmer_rc, kmer_rc,kmer_rc, kmer_rc, right_kmer_pos_rc, right_kmer_pos_rc, window_size);
+        // k-mers (k <= 32) lie in the low word, the high word is 0
+        return check_candidate_fwd(left_window_lo, left_window_hi, kmer, 0, left_window_lo, left_window_hi, left_kmer_pos, left_kmer_pos, window_size) ||
+                check_candidate_rev(left_window_rev_lo, left_window_rev_hi, kmer_rc, 0, left_window_rev_lo, left_window_rev_hi, left_kmer_pos_rc, left_kmer_pos_rc, window_size) ||
+                check_candidate_fwd(right_window_lo, right_window_hi, kmer, 0, right_window_lo, right_window_hi, right_kmer_pos, right_kmer_pos, window_size) ||
+                check_candidate_rev(right_window_rev_lo, right_window_rev_hi, kmer_rc, 0, right_window_rev_lo, right_window_rev_hi, right_kmer_pos_rc, right_kmer_pos_rc, window_size);
     }
 
     return false;

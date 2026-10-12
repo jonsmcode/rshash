@@ -110,6 +110,8 @@ private:
     template<int level>
     size_t get_frequent_skmers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &, const std::vector<SkmerInfo> &, std::vector<SkmerInfo> &);
     gtl::flat_hash_map<uint64_t, uint16_t> count_kmers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &);
+    template <typename Add>
+    void process_canonical_kmers(Add&&, const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &);
     template <typename AddForward, typename AddReverse>
     void process_freq_kmers(AddForward&&, AddReverse&& , const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &, gtl::flat_hash_map<uint64_t, uint16_t> &, Shape64 &);
     // template <typename AddForward>
@@ -145,8 +147,8 @@ private:
     inline bool lookup_buffer128(uint64_t*, uint64_t *, const size_t, const uint64_t, const uint64_t, uint64_t*, uint64_t*, uint64_t &, const size_t, const size_t, bool &, uint64_t &, uint64_t &, uint64_t &, uint64_t &);
     template<int no_shapes, bool use_ht, bool locate>
     inline bool lookup_last_level(const uint64_t, const uint64_t, const uint64_t, const uint64_t);
-    template<bool use_shape, bool use_ht>
-    inline bool locate_last_level(const uint64_t, const uint64_t, std::vector<uint64_t>&, uint64_t&);
+    template<int no_shapes, bool use_ht>
+    inline bool locate_last_level(const uint64_t, const uint64_t, const uint64_t, const uint64_t, std::vector<uint64_t>&, uint64_t&);
     template<int no_shapes>
     inline bool extend_in_text(uint64_t&, uint64_t, uint64_t, bool, const uint64_t, const uint64_t, uint64_t*, uint64_t*, uint64_t&, uint64_t&);
     const inline uint64_t get_word64(uint64_t pos);
@@ -158,11 +160,11 @@ private:
     uint64_t streaming_lookup2(const seqan3::bitpacked_sequence<seqan3::dna4>&, uint64_t&);
     template<int no_shapes, bool use_ht, bool locate>
     uint64_t streaming_lookup3(const seqan3::bitpacked_sequence<seqan3::dna4>&, uint64_t&);
-    template<bool use_shape, bool use_ht>
+    template<int no_shapes, bool use_ht>
     uint64_t streaming_locate1(const seqan3::bitpacked_sequence<seqan3::dna4>&, std::vector<uint64_t>&, uint64_t &);
-    template<bool use_shape, bool use_ht>
+    template<int no_shapes, bool use_ht>
     uint64_t streaming_locate2(const seqan3::bitpacked_sequence<seqan3::dna4>&, std::vector<uint64_t>&, uint64_t &);
-    template<bool use_shape, bool use_ht>
+    template<int no_shapes, bool use_ht>
     uint64_t streaming_locate3(const seqan3::bitpacked_sequence<seqan3::dna4>&, std::vector<uint64_t>&, uint64_t &);
     template<int no_shapes, bool use_ht, bool locate>
     uint64_t lookup1(const std::vector<mask128_t> &);
@@ -170,24 +172,26 @@ private:
     uint64_t lookup2(const std::vector<mask128_t> &);
     template<int no_shapes, bool use_ht, bool locate>
     uint64_t lookup3(const std::vector<mask128_t> &);
-    template<bool use_shape, bool use_ht>
+    template<int no_shapes, bool use_ht>
     uint64_t locate1(const std::vector<uint64_t>&, std::vector<uint64_t>&);
-    template<bool use_shape, bool use_ht>
+    template<int no_shapes, bool use_ht>
     uint64_t locate2(const std::vector<uint64_t>&, std::vector<uint64_t>&);
-    template<bool use_shape, bool use_ht>
+    template<int no_shapes, bool use_ht>
     uint64_t locate3(const std::vector<uint64_t>&, std::vector<uint64_t>&);
-    template<int level, bool use_shape>
-    inline bool report_minimiser_pos(uint64_t *, uint64_t, const uint64_t, const uint64_t, size_t &, const size_t, const size_t, const uint64_t, const uint64_t, std::vector<uint64_t> &);
-    template<int level, bool use_shape>
-    inline bool report_minimiser_pos2(uint64_t *, uint64_t, const uint64_t, const uint64_t, size_t &, const size_t, const size_t, const size_t, const uint64_t, const uint64_t, std::vector<uint64_t> &);
-    template<int level, bool use_shape>
-    inline void locate_buffer(uint64_t*, uint64_t*, uint64_t *, const size_t, const uint64_t, const uint64_t, const size_t, const size_t, std::vector<uint64_t> &, uint64_t&, uint64_t&);
+    template<int no_shapes>
+    inline bool match_window(const uint64_t *, const uint64_t, const bool, const bool, const uint64_t *, const uint64_t *, const uint64_t, const uint64_t);
+    template<int level, int no_shapes>
+    inline void locate_buffer(uint64_t*, uint64_t*, uint64_t *, const size_t, const uint64_t *, const uint64_t *, const size_t, const size_t, std::vector<uint64_t> &, uint64_t&, uint64_t&);
+    template<int no_shapes, typename Window>
+    inline void locate_query_words(const Window &, uint64_t *, uint64_t *, uint64_t &, uint64_t &);
     template <int no_shapes, bool use_ht, bool locate>
     void initialise_lookupfn_impl();
     template<int no_shapes>
     void initialise_lookupfn_dispatch();
-    template <bool use_shape, bool use_ht>
+    template <int no_shapes, bool use_ht>
     void initialise_locatefn_impl();
+    template<int no_shapes>
+    void initialise_locatefn_dispatch();
 
 public:
     RSHash() : endpoints(std::vector<uint64_t>{}, 1),
@@ -376,7 +380,7 @@ const inline uint64_t RSHash::get_base(uint64_t pos) {
 // }
 
 const inline mask128_t RSHash::access(const size_t offset) {
-    return mask128_t{get_word64(offset), get_word64(offset + 32) & windowmask.hi};
+    return mask128_t{get_word64(offset) & windowmask.lo, get_word64(offset + 32) & windowmask.hi};
 }
 
 
@@ -443,7 +447,7 @@ inline void RSHash::fill_buffer128(uint64_t *offsets, uint64_t *buffer, size_t p
         uint64_t e = s + span - 1;
         
         // todo: one cache line load?!
-        uint64_t window_lo = get_word64(s);
+        uint64_t window_lo = get_word64(s) & windowmask.lo;
         uint64_t window_hi = get_word64(s + 32) & windowmask.hi;
         uint64_t bits = get_word64(s + window_size); // assert span + overlap <= 32
         
@@ -453,8 +457,14 @@ inline void RSHash::fill_buffer128(uint64_t *offsets, uint64_t *buffer, size_t p
             uint64_t const next_base = bits & 3ULL;
             bits >>= 2;
             
-            window_lo = (window_lo >> 2) | ((window_hi & 3ULL) << 62);
-            window_hi = (window_hi >> 2) | (next_base << windowshift);
+            if (window_size <= 32) {
+                // k-mers of at most 32 bases: the window lies in the low word, its last base at windowshift
+                window_lo = (window_lo >> 2) | (next_base << windowshift);
+            }
+            else {
+                window_lo = (window_lo >> 2) | ((window_hi & 3ULL) << 62);
+                window_hi = (window_hi >> 2) | (next_base << windowshift);
+            }
 
             *buffer++ = window_lo;
             *buffer++ = window_hi;
@@ -475,36 +485,13 @@ inline void RSHash::fill_buffer2(uint64_t *offsets, uint64_t *buffer, uint64_t *
     if constexpr (level == 3)
         span = span3;
     
-    for(size_t i = 0; i < N; i++) {
-        if constexpr (level == 1)
-            offsets[i] = offsets1.access(p+i) + 1 - span;
-        if constexpr (level == 2)
-            offsets[i] = offsets2.access(p+i) + 1 - span;
-        if constexpr (level == 3)
-            offsets[i] = offsets3.access(p+i) + 1 - span;
-    }
+    // same 128 bit windows (lo, hi interleaved) as for lookup, plus the sequence boundaries for each offset
+    fill_buffer128<level>(offsets, buffer, p, N);
 
     for(uint64_t i = 0; i < N; i++) {
         uint64_t next_endpoint;
         endpositions[2*i] = endpoints.select(endpoints.rank(offsets[i]+span) - 1, &next_endpoint);
         endpositions[2*i+1] = next_endpoint;
-    }
-    
-    for(uint64_t i = 0; i < N; i++) {
-        uint64_t s = offsets[i] - shapes.overlap;
-        uint64_t e = s + span-1;
-            
-        uint64_t window = get_word64(s) & windowmask.lo;
-        uint64_t bits = get_word64(s + window_size); // assert span + overlap <= 32
-        
-        *buffer++ = window;
-        for(uint64_t j=s; j < e; j++) {
-            uint64_t const next_base = bits & 3ULL;
-            bits >>= 2;
-            window = (window >> 2) | (next_base << windowshift);
-            *buffer++ = window;
-        }
-
     }
 }
 

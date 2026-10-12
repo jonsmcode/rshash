@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <span>
 #include <vector>
@@ -91,10 +92,13 @@ struct FlatMapBuilder {
     FlatMap build() && {
         FlatMap result;
 
-        // Compute total storage needed.
+        // Compute total storage needed; overlapping (extended) super-k-mers can add the same value twice.
         size_t total_values = 0;
-        for (const auto& [_, v] : map)
+        for (auto& [_, v] : map) {
+            std::sort(v.begin(), v.end());
+            v.erase(std::unique(v.begin(), v.end()), v.end());
             total_values += v.size();
+        }
 
         result.index.reserve(map.size());
         result.values.reserve(total_values);

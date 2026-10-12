@@ -46,29 +46,38 @@ inline void RSHash::filter_freq_minimizers(std::vector<MinimizerT> &minimizers,
     if constexpr (level == 3)
         threshold = m_thres3;
     
-    uint64_t current_minimizer = minimizers[0].first;
-    uint64_t start = 0;
     size_t write_pos_idx = 0, write_min_idx = 0;
+
+    // keeps the distinct positions of a minimiser if there are at most threshold of them; the radix sort does not
+    // order positions within small buckets, and at levels > 1 two super-k-mers can report the same position
+    auto keep_minimizer = [&](const size_t start, const size_t end) {
+        const uint64_t minimizer = minimizers[start].first;
+        std::sort(minimizers.begin() + start, minimizers.begin() + end, [](auto const &a, auto const &b) { return a.second < b.second; });
+        size_t occurences = 0;
+        for (size_t j = start; j < end; j++)
+            occurences += (j == start || minimizers[j].second != minimizers[j-1].second);
+        if(occurences > threshold)
+            return;
+
+        minimizers[write_min_idx++].first = minimizer;
+        uint64_t previous = 0;
+        for (size_t j = start; j < end; j++) {
+            const uint64_t position = minimizers[j].second;
+            if (j == start || position != previous)
+                minimizers[write_pos_idx++].second = position;
+            previous = position;
+        }
+        counts.push_back(static_cast<uint16_t>(occurences));
+    };
+
+    size_t start = 0;
     for(size_t i = 1; i < minimizers.size(); i++) {
-        if(minimizers[i].first != current_minimizer) {
-            size_t occurences = i - start;
-            if(occurences <= threshold) {
-                minimizers[write_min_idx++].first = current_minimizer;
-                for (size_t j = start; j < i; j++)
-                    minimizers[write_pos_idx++].second = minimizers[j].second;
-                counts.push_back(static_cast<uint16_t>(occurences));
-            }
-            current_minimizer = minimizers[i].first;
+        if(minimizers[i].first != minimizers[start].first) {
+            keep_minimizer(start, i);
             start = i;
         }
     }
-    size_t occurences = minimizers.size() - start;
-    if(minimizers.back().first == current_minimizer && occurences <= threshold) {
-        minimizers[write_min_idx++].first = current_minimizer;
-        for (size_t j = start; j < minimizers.size(); j++)
-            minimizers[write_pos_idx++].second = minimizers[j].second;
-        counts.push_back(static_cast<uint16_t>(occurences));
-    }
+    keep_minimizer(start, minimizers.size());
 
     no_minimizers = write_min_idx;
     no_skmers = write_pos_idx;
@@ -172,7 +181,8 @@ inline std::vector<uint64_t> pack_dna4_to_uint64(const std::vector<seqan3::bitpa
     return packed;
 }
 
-static void mark_occurences(const size_t total_occs, const std::vector<uint16_t> &occurences,
+template <typename Count>
+static void mark_occurences(const size_t total_occs, const std::vector<Count> &occurences,
     bit_vector &s, sux::bits::SimpleSelect<sux::util::AllocType::MALLOC> &s_select)
 {
     s = bit_vector(total_occs+1, 0);
@@ -336,9 +346,9 @@ void RSHash::process_freq_kmers(AddForward&& addfwd, AddReverse&& addrev,
     gtl::flat_hash_map<uint64_t, uint16_t> &kmer_counts, Shape64 &shape)
 {
     for (const auto& skmer_info : freq_skmers) {
-        uint32_t pos = endpoints.select(skmer_info.seq_id + 1) + skmer_info.start;
-
             size_t s = (skmer_info.start > shape.overlap) ? skmer_info.start - shape.overlap : 0;
+            // text position of the current shape window
+            uint32_t pos = endpoints.select(skmer_info.seq_id + 1) + s;
             size_t e = std::min(skmer_info.end + shape.overlap, input[skmer_info.seq_id].size());
             
             auto skmer = input[skmer_info.seq_id] | std::views::drop(s) | std::views::take(e - s);
@@ -350,6 +360,24 @@ void RSHash::process_freq_kmers(AddForward&& addfwd, AddReverse&& addrev,
                 addrev(shape_rev, pos);
                 ++pos;
             }
+    }
+}
+
+
+// canonical k-mers (minimum of the k-mer and its reverse complement) with their text positions, k <= 32
+template <typename Add>
+void RSHash::process_canonical_kmers(Add&& add,
+    const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& input,
+    const std::vector<SkmerInfo> &freq_skmers)
+{
+    for (const auto& skmer_info : freq_skmers) {
+        uint32_t pos = endpoints.select(skmer_info.seq_id + 1) + skmer_info.start;
+        auto skmer = input[skmer_info.seq_id] | std::views::drop(skmer_info.start) | std::views::take(skmer_info.end - skmer_info.start);
+
+        for (auto&& kmer : skmer | rshash::views::kmer_view({.window_size = window_size})) {
+            add(std::min<uint64_t>(kmer.value, kmer.value_rev), pos);
+            ++pos;
+        }
     }
 }
 
@@ -372,6 +400,12 @@ void RSHash::build_level(gtl::flat_hash_map<uint64_t, std::vector<uint64_t>>& ma
     std::vector<decltype(map.cbegin())> order;
     order.reserve(map.size());
 
+    // overlapping (extended) super-k-mers can add the same position twice
+    for (auto& [key, values] : map) {
+        std::ranges::sort(values);
+        values.erase(std::unique(values.begin(), values.end()), values.end());
+    }
+
     size_t total_positions = 0;
     for (auto it = map.cbegin(); it != map.cend(); ++it) {
         order.push_back(it);
@@ -381,7 +415,7 @@ void RSHash::build_level(gtl::flat_hash_map<uint64_t, std::vector<uint64_t>>& ma
     std::ranges::sort(order, {}, [](auto it) { return it->first; });
 
     std::vector<uint64_t> keys;
-    std::vector<uint16_t> occurrences;
+    std::vector<uint64_t> occurrences; // k-mers in repeats can occur more than 2^16 times
     bits::compact_vector::builder builder;
 
     keys.reserve(order.size());
@@ -412,55 +446,64 @@ void RSHash::last_level(const std::vector<seqan3::bitpacked_sequence<seqan3::dna
     if(threshold > 0)
         kmer_counts = count_kmers(input, freq_skmers);
 
-    // contiguous k-mers are stored like a single shape
+    // shapes: a forward and a reverse structure per shape, k-mers: one structure of the canonical k-mers
     const int no_shapes = std::max(number_shapes, 1);
+    const size_t no_structures = (number_shapes > 0) ? 2 * number_shapes : 1;
+
+    auto process = [&](const int i, auto &&add, auto &&add_rc) {
+        if(number_shapes > 0)
+            process_freq_kmers(add, add_rc, input, freq_skmers, kmer_counts, shapes.shapes[i]);
+        else
+            process_canonical_kmers(add, input, freq_skmers);
+    };
 
     if(use_ht) {
         for(int i = 0; i < no_shapes; i++) {
             if(loc) {
                 FlatMapBuilder builder, builder_rc;
-                process_freq_kmers([&](uint64_t key, uint32_t pos) {builder.add(key, pos);},
-                                   [&](uint64_t key, uint32_t pos) {builder_rc.add(key, pos);},
-                                   input, freq_skmers, kmer_counts, shapes.shapes[i]);
+                process(i, [&](uint64_t key, uint32_t pos) {builder.add(key, pos);},
+                           [&](uint64_t key, uint32_t pos) {builder_rc.add(key, pos);});
                 hashmaps.push_back(std::move(builder).build());
-                hashmaps.push_back(std::move(builder_rc).build());
+                if(number_shapes > 0)
+                    hashmaps.push_back(std::move(builder_rc).build());
             }
             else {
                 gtl::flat_hash_set<uint64_t> hashset, hashset_rc;
-                process_freq_kmers([&](uint64_t key, uint32_t) {hashset.insert(key);},
-                                   [&](uint64_t key, uint32_t) {hashset_rc.insert(key);},
-                                   input, freq_skmers, kmer_counts, shapes.shapes[i]);
+                process(i, [&](uint64_t key, uint32_t) {hashset.insert(key);},
+                           [&](uint64_t key, uint32_t) {hashset_rc.insert(key);});
                 hashsets.push_back(hashset);
-                hashsets.push_back(hashset_rc);
+                if(number_shapes > 0)
+                    hashsets.push_back(hashset_rc);
             }
         }
     }
     else {
-        // ri[2*i] holds the forward, ri[2*i+1] the reverse values of shape i
-        ri.reserve(2 * no_shapes);
+        // ri[2*i] holds the forward, ri[2*i+1] the reverse values of shape i (ri[0] the canonical k-mers)
+        ri.reserve(no_structures);
         if(loc) {
             // sized up front, the select structures point into si
-            si.resize(2 * no_shapes);
-            si_select.resize(2 * no_shapes);
-            offsetsi.resize(2 * no_shapes);
+            si.resize(no_structures);
+            si_select.resize(no_structures);
+            offsetsi.resize(no_structures);
         }
 
         for(int i = 0; i < no_shapes; i++) {
             if(loc) {
                 gtl::flat_hash_map<uint64_t, std::vector<uint64_t>> map, map_rc;
-                process_freq_kmers([&](uint64_t key, uint32_t pos) {map[key].push_back(pos);},
-                                   [&](uint64_t key, uint32_t pos) {map_rc[key].push_back(pos);},
-                                   input, freq_skmers, kmer_counts, shapes.shapes[i]);
+                process(i, [&](uint64_t key, uint32_t pos) {map[key].push_back(pos);},
+                           [&](uint64_t key, uint32_t pos) {map_rc[key].push_back(pos);});
                 build_level(map);
-                build_level(map_rc);
+                if(number_shapes > 0)
+                    build_level(map_rc);
             }
             else {
                 gtl::flat_hash_set<uint64_t> set, set_rc;
-                process_freq_kmers([&](uint64_t key, uint32_t) {set.insert(key);},
-                                   [&](uint64_t key, uint32_t) {set_rc.insert(key);},
-                                   input, freq_skmers, kmer_counts, shapes.shapes[i]);
+                process(i, [&](uint64_t key, uint32_t) {set.insert(key);},
+                           [&](uint64_t key, uint32_t) {set_rc.insert(key);});
 
                 for(auto *s : {&set, &set_rc}) {
+                    if(s == &set_rc && number_shapes == 0)
+                        break;
                     std::vector<uint64_t> keys(s->begin(), s->end());
                     s->clear();
                     std::ranges::sort(keys);

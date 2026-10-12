@@ -53,6 +53,9 @@ static inline constexpr uint64_t crc(uint64_t x, uint64_t k) {
 }
 
 static inline constexpr mask128_t crc128(mask128_t x, uint64_t k) {
+    if (k <= 32)
+        return {crc(x.lo, k), 0};
+
     const uint64_t n = k - 32;
 
     const uint64_t rhi = rc64(x.lo);

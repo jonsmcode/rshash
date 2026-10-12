@@ -66,6 +66,8 @@ int check_arguments(sharg::parser &parser, cmd_arguments &args) {
     if(args.cmd == "build") {
         if(!parser.is_option_set('i'))
             throw sharg::user_input_error("provide input file.");
+        if(!parser.is_option_set("shape") && args.k > 32)
+            throw sharg::user_input_error("k-mers (without shapes) are limited to k <= 32.");
     }
     else if(args.cmd == "lookup") {
         if(!parser.is_option_set('q'))
