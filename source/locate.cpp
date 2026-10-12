@@ -64,8 +64,8 @@ uint64_t RSHash::streaming_locate(const seqan3::bitpacked_sequence<seqan3::dna4>
     return (this->*streaming_locate_fn)(query, positions, no_positions);
 }
 
-uint64_t RSHash::locate(const std::vector<uint64_t> &kmers, std::vector<uint64_t> &positions) {
-    return (this->*locate_fn)(kmers, positions);
+uint64_t RSHash::locate(const std::vector<mask128_t> &kmers, std::vector<uint64_t> &positions, uint64_t &no_positions) {
+    return (this->*locate_fn)(kmers, positions, no_positions);
 }
 
 
@@ -143,235 +143,77 @@ inline bool RSHash::locate_last_level(const uint64_t kmer, const uint64_t kmer_h
 }
 
 
-template<int no_shapes, bool use_ht>
-uint64_t RSHash::locate1(const std::vector<uint64_t> &kmers, std::vector<uint64_t> &positions)
+// k-mers given one by one (k <= 32 or shape windows), cascading through the levels like the streaming locate
+template<int max_level, int no_shapes, bool use_ht>
+uint64_t RSHash::locate_kmers(const std::vector<mask128_t> &kmers, std::vector<uint64_t> &positions, uint64_t &no_positions)
 {
-    constexpr bool use_shape = no_shapes > 0;
-    uint64_t no_positions = 0;
-    uint64_t* offsets = new uint64_t[m_thres1];
-    uint64_t minimiser, minimiser_rank, kmer_rank;;
+    struct Window { uint64_t value, value_hi, value_rev, value_rev_hi; };
+    uint64_t* offsets = new uint64_t[std::max({m_thres1, m_thres2, m_thres3})];
+    uint64_t minimiser, minimiser_rank;
     uint64_t kernel, kernel_rev;
     size_t left_minimiser_position, right_minimiser_position;
-    Shape64 shape = shapes.shapes[0]; // todo: multiple shapes
+    uint64_t shapes_fwd[2*std::max(no_shapes, 1)], shapes_rev[2*std::max(no_shapes, 1)];
+    uint64_t found_kmers = 0;
 
-    for(uint64_t kmer : kmers) {
-        uint64_t kmer_rc = crc(kmer, window_size);
-        const uint64_t window = kmer, window_rc = kmer_rc; // k-mers of at most 32 bases
-
-        if constexpr (use_shape) {
-            kernel = (kmer & shapes.kernel_mask.lo) >> 2*shapes.overlap;
-            kernel_rev = (kmer_rc & shapes.kernel_mask.lo) >> 2*shapes.overlap;
-            kmer = _pext_u64(kmer, shape.mask.lo);
-            kmer_rc = _pext_u64(kmer_rc, shape.mask.lo);
-        }
-        else {
-            kernel = kmer;
-            kernel_rev = kmer_rc;
-        }
-
-        minimiser = find_minimiser<1>(kernel, kernel_rev, left_minimiser_position, right_minimiser_position);
-        if(r1.contains(minimiser, minimiser_rank)) {
-            size_t p = s1_select.select(minimiser_rank);
-            size_t no_minimiser = s1_select.select(minimiser_rank+1) - p;
-            no_positions += check_pos<1, use_shape>(kmer, kmer_rc, offsets, p, no_minimiser, left_minimiser_position, right_minimiser_position);
-        }
-        else {
-            locate_last_level<no_shapes, use_ht>(window, 0, window_rc, 0, positions, no_positions);
-        }
-    }
-
-    delete[] offsets;
-
-    return no_positions;
-}
-
-template<int no_shapes, bool use_ht>
-uint64_t RSHash::locate2(const std::vector<uint64_t> &kmers, std::vector<uint64_t> &positions)
-{
-    constexpr bool use_shape = no_shapes > 0;
-    uint64_t no_positions = 0;
-    uint64_t* offsets = new uint64_t[m_thres2];
-    uint64_t minimiser, minimiser_rank, kmer_rank;
-    uint64_t kernel, kernel_rev;
-    size_t left_minimiser_position, right_minimiser_position;
-    Shape64 shape = shapes.shapes[0]; // todo: multiple shapes
-
-    for(uint64_t kmer : kmers) {
-        uint64_t kmer_rc = crc(kmer, window_size);
-        const uint64_t window = kmer, window_rc = kmer_rc; // k-mers of at most 32 bases
-
-        if constexpr (use_shape) {
-            kernel = (kmer & shapes.kernel_mask.lo) >> 2*shapes.overlap;
-            kernel_rev = (kmer_rc & shapes.kernel_mask.lo) >> 2*shapes.overlap;
-            kmer = _pext_u64(kmer, shape.mask.lo);
-            kmer_rc = _pext_u64(kmer_rc, shape.mask.lo);
-        }
-        else {
-            kernel = kmer;
-            kernel_rev = kmer_rc;
-        }
-
-        minimiser = find_minimiser<1>(kernel, kernel_rev, left_minimiser_position, right_minimiser_position);
-        if(r1.contains(minimiser, minimiser_rank)) {
-            size_t p = s1_select.select(minimiser_rank);
-            size_t no_minimiser = s1_select.select(minimiser_rank+1) - p;
-            no_positions += check_pos<1, use_shape>(kmer, kmer_rc, offsets, p, no_minimiser, left_minimiser_position, right_minimiser_position);
-        }
-        else {
-            minimiser = find_minimiser<2>(kernel, kernel_rev, left_minimiser_position, right_minimiser_position);
-            if(r2.contains(minimiser, minimiser_rank)) {
-                size_t p = s2_select.select(minimiser_rank);
-                size_t no_minimiser = s2_select.select(minimiser_rank+1) - p;
-                no_positions += check_pos<2, use_shape>(kmer, kmer_rc, offsets, p, no_minimiser, left_minimiser_position, right_minimiser_position);
-            }
-            else {
-                locate_last_level<no_shapes, use_ht>(window, 0, window_rc, 0, positions, no_positions);
-            }
-        }
-    }
-
-    delete[] offsets;
-
-    return no_positions;
-}
-
-template<int no_shapes, bool use_ht>
-uint64_t RSHash::locate3(const std::vector<uint64_t> &kmers, std::vector<uint64_t> &positions)
-{
-    constexpr bool use_shape = no_shapes > 0;
-    uint64_t no_positions = 0;
-    uint64_t* offsets = new uint64_t[m_thres3];
-    uint64_t minimiser, minimiser_rank, kmer_rank;
-    uint64_t kernel, kernel_rev;
-    size_t left_minimiser_position, right_minimiser_position;
-    Shape64 shape = shapes.shapes[0]; // todo: multiple shapes
-
-    for(uint64_t kmer : kmers) {
-        uint64_t kmer_rc = crc(kmer, window_size);
-        const uint64_t window = kmer, window_rc = kmer_rc; // k-mers of at most 32 bases
-
-        if constexpr (use_shape) {
-            kernel = (kmer & shapes.kernel_mask.lo) >> 2*shapes.overlap;
-            kernel_rev = (kmer_rc & shapes.kernel_mask.lo) >> 2*shapes.overlap;
-            kmer = _pext_u64(kmer, shape.mask.lo);
-            kmer_rc = _pext_u64(kmer_rc, shape.mask.lo);
-        }
-        else {
-            kernel = kmer;
-            kernel_rev = kmer_rc;
-        }
-
-        minimiser = find_minimiser<1>(kernel, kernel_rev, left_minimiser_position, right_minimiser_position);
-
-        if(r1.contains(minimiser, minimiser_rank)) {
-            size_t p = s1_select.select(minimiser_rank);
-            size_t no_minimiser = s1_select.select(minimiser_rank+1) - p;
-            no_positions += check_pos<1, use_shape>(kmer, kmer_rc, offsets, p, no_minimiser, left_minimiser_position, right_minimiser_position);
-        }
-        else {
-            minimiser = find_minimiser<2>(kernel, kernel_rev, left_minimiser_position, right_minimiser_position);
-            if(r2.contains(minimiser, minimiser_rank)) {
-                size_t p = s2_select.select(minimiser_rank);
-                size_t no_minimiser = s2_select.select(minimiser_rank+1) - p;
-                no_positions += check_pos<2, use_shape>(kmer, kmer_rc, offsets, p, no_minimiser, left_minimiser_position, right_minimiser_position);
-            }
-            else {
-                minimiser = find_minimiser<3>(kernel, kernel_rev, left_minimiser_position, right_minimiser_position);
-                if(r3.contains(minimiser, minimiser_rank)) {
-                    size_t p = s3_select.select(minimiser_rank);
-                    size_t no_minimiser = s3_select.select(minimiser_rank+1) - p;
-                    no_positions += check_pos<3, use_shape>(kmer, kmer_rc, offsets, p, no_minimiser, left_minimiser_position, right_minimiser_position);
-                }
-                else {
-                    locate_last_level<no_shapes, use_ht>(window, 0, window_rc, 0, positions, no_positions);
-                }
-            }
-        }
-    }
-
-    delete[] offsets;
-
-    return no_positions;
-}
-
-
-
-template<int level, bool use_shape>
-inline uint64_t RSHash::check_pos(const uint64_t kmer, const uint64_t kmer_rc,
-    uint64_t* offsets, const size_t p, const size_t no_skmers,
-    const size_t left_minimiser_position, const size_t right_minimiser_position)
-{
-    size_t span;
-    if constexpr (level == 1)
-        span = span1;
-    if constexpr (level == 2)
-        span = span2;
-    if constexpr (level == 3)
-        span = span3;
-    
-    for(size_t i = 0; i < no_skmers; i++) {
-        if constexpr (level == 1)
-            offsets[i] = offsets1.access(p+i)-span+1;
-        if constexpr (level == 2)
-            offsets[i] = offsets2.access(p+i)-span+1;
-        if constexpr (level == 3)
-            offsets[i] = offsets3.access(p+i)-span+1;
-    }
-
-    uint64_t positions = 0;
-    Shape64 shape = shapes.shapes[0]; // todo: multiple shapes
-    for(size_t i = 0; i < no_skmers; i++) {
-        uint64_t offset = offsets[i];
-        uint64_t pos = span-1-left_minimiser_position;
-        uint64_t pos_rc = left_minimiser_position;
-
-        uint64_t hash_fwd = get_word64(offset + pos - shape.overlap) & windowmask.lo;
-        uint64_t hash_rc = get_word64(offset + pos_rc - shape.overlap) & windowmask.lo;
-
-        if constexpr (use_shape) {
-            hash_fwd = _pext_u64(hash_fwd, shape.mask.lo);
-            hash_rc = _pext_u64(hash_rc, shape.mask.lo);
-        }
-
-        positions += kmer == hash_fwd;
-        positions += kmer_rc == hash_rc;
-
-        if(left_minimiser_position != k-m1-right_minimiser_position) {
-            pos = right_minimiser_position;
-            pos_rc = span-1-right_minimiser_position;
-
-            hash_fwd = get_word64(offset + pos - shape.overlap) & windowmask.lo;
-            hash_rc = get_word64(offset + pos_rc - shape.overlap) & windowmask.lo;
-
-            if constexpr (use_shape) {
-                hash_fwd = _pext_u64(hash_fwd, shape.mask.lo);
-                hash_rc = _pext_u64(hash_rc, shape.mask.lo);
-            }
-
-            positions += kmer == hash_fwd;
-            positions += kmer_rc == hash_rc;
-        }
-
-    }
-
-    return positions;
-}
-
-
-// checks one text window of a super-k-mer buffer (lo, hi): forward against the query shapes,
-// reverse complement against the reverse query shapes
-template<int no_shapes>
-inline bool RSHash::match_window(const uint64_t *window, const uint64_t window_pos, const bool fwd, const bool rc,
-    const uint64_t *shapes_fwd, const uint64_t *shapes_rev, const uint64_t start_pos, const uint64_t end_pos)
-{
-    const uint64_t window_lo = window[0];
-    const uint64_t window_hi = window[1];
-
-    // the shape (not the whole window) has to lie within the sequence of the minimiser
-    auto in_sequence = [&](const uint64_t pos, const uint64_t length) {
-        return pos >= start_pos && pos + length - 1 < end_pos;
+    // looks the k-mer up in the given level; false if its minimiser is not stored there
+    auto locate_level = [&]<int level>(auto &r, auto &s_select) -> bool {
+        minimiser = find_minimiser<level>(kernel, kernel_rev, left_minimiser_position, right_minimiser_position);
+        if(!r.contains(minimiser, minimiser_rank))
+            return false;
+        const size_t p = s_select.select(minimiser_rank);
+        const size_t no_minimiser = s_select.select(minimiser_rank+1) - p;
+        found_kmers += locate_offsets<level, no_shapes>(offsets, p, no_minimiser, shapes_fwd, shapes_rev,
+            left_minimiser_position, right_minimiser_position, positions, no_positions);
+        return true;
     };
 
+    for(const mask128_t &kmer : kmers) {
+        const mask128_t kmer_rc = crc128(kmer, window_size);
+        locate_query_words<no_shapes>(Window{kmer.lo, kmer.hi, kmer_rc.lo, kmer_rc.hi}, shapes_fwd, shapes_rev, kernel, kernel_rev);
+
+        if(locate_level.template operator()<1>(r1, s1_select))
+            continue;
+        if constexpr (max_level >= 2)
+            if(locate_level.template operator()<2>(r2, s2_select))
+                continue;
+        if constexpr (max_level >= 3)
+            if(locate_level.template operator()<3>(r3, s3_select))
+                continue;
+        found_kmers += locate_last_level<no_shapes, use_ht>(kmer.lo, kmer.hi, kmer_rc.lo, kmer_rc.hi, positions, no_positions);
+    }
+
+    delete[] offsets;
+
+    return found_kmers;
+}
+
+template<int no_shapes, bool use_ht>
+uint64_t RSHash::locate1(const std::vector<mask128_t> &kmers, std::vector<uint64_t> &positions, uint64_t &no_positions)
+{
+    return locate_kmers<1, no_shapes, use_ht>(kmers, positions, no_positions);
+}
+
+template<int no_shapes, bool use_ht>
+uint64_t RSHash::locate2(const std::vector<mask128_t> &kmers, std::vector<uint64_t> &positions, uint64_t &no_positions)
+{
+    return locate_kmers<2, no_shapes, use_ht>(kmers, positions, no_positions);
+}
+
+template<int no_shapes, bool use_ht>
+uint64_t RSHash::locate3(const std::vector<mask128_t> &kmers, std::vector<uint64_t> &positions, uint64_t &no_positions)
+{
+    return locate_kmers<3, no_shapes, use_ht>(kmers, positions, no_positions);
+}
+
+
+
+// checks one text window (lo, hi): forward against the query shapes, reverse complement against the reverse query
+// shapes; in_sequence(pos, length) is only asked after the masks matched
+template<int no_shapes, typename InSequence>
+inline bool RSHash::match_window(const uint64_t window_lo, const uint64_t window_hi, const uint64_t window_pos,
+    const bool fwd, const bool rc, const uint64_t *shapes_fwd, const uint64_t *shapes_rev, InSequence &&in_sequence)
+{
+    // the shape (not the whole window) has to lie within one sequence
     bool match = false;
     if constexpr (no_shapes > 0) {
         for(int j = 0; j < no_shapes && !match; ++j) {
@@ -392,11 +234,14 @@ inline bool RSHash::match_window(const uint64_t *window, const uint64_t window_p
 }
 
 
-template<int level, int no_shapes>
-inline void RSHash::locate_buffer(uint64_t *buffer, uint64_t *offsets, uint64_t *sequence_ends, const size_t no_minimiser,
+// counts the text windows matching the query among the candidate windows of all minimiser offsets;
+// window_at(i, pos) gives the (lo, hi) words of the window at position pos of offset i,
+// in_sequence(i, pos, length) whether pos .. pos+length-1 lies within one sequence
+template<int level, int no_shapes, typename WindowAt, typename InSequence>
+inline bool RSHash::locate_windows(const uint64_t *offsets, const size_t no_minimiser,
     const uint64_t *shapes_fwd, const uint64_t *shapes_rev,
     const size_t left_minimiser_pos, const size_t right_minimiser_pos,
-    std::vector<uint64_t> &positions, uint64_t &no_positions, uint64_t &found_kmers)
+    std::vector<uint64_t> &positions, uint64_t &no_positions, WindowAt &&window_at, InSequence &&in_sequence)
 {
     size_t span;
     if constexpr (level == 1)
@@ -407,7 +252,7 @@ inline void RSHash::locate_buffer(uint64_t *buffer, uint64_t *offsets, uint64_t 
         span = span3;
 
     // windows of a super-k-mer that can hold the query: forward at span-1-left / right,
-    // reverse complement at left / span-1-right; the same buffer window is only checked once
+    // reverse complement at left / span-1-right; the same window is only checked once
     struct Candidate { size_t pos; bool fwd, rc, fwd_right, rc_right; };
     Candidate candidates[4];
     size_t no_candidates = 0;
@@ -445,10 +290,11 @@ inline void RSHash::locate_buffer(uint64_t *buffer, uint64_t *offsets, uint64_t 
 
         for(size_t c = 0; c < no_candidates; c++) {
             const Candidate &candidate = candidates[c];
-            const uint64_t *window = buffer + 2*(i*span + candidate.pos);
+            const mask128_t window = window_at(i, candidate.pos);
             const uint64_t window_pos = window_start + candidate.pos;
             auto matches = [&](const bool fwd, const bool rc) {
-                return match_window<no_shapes>(window, window_pos, fwd, rc, shapes_fwd, shapes_rev, sequence_ends[2*i], sequence_ends[2*i+1]);
+                return match_window<no_shapes>(window.lo, window.hi, window_pos, fwd, rc, shapes_fwd, shapes_rev,
+                    [&](const uint64_t pos, const uint64_t length) { return in_sequence(i, pos, length); });
             };
 
             // a match from a left minimiser occurrence always counts, a match from a right one only if
@@ -469,7 +315,70 @@ inline void RSHash::locate_buffer(uint64_t *buffer, uint64_t *offsets, uint64_t 
         }
     }
 
-    found_kmers += found;
+    return found;
+}
+
+
+// streaming: the windows of all offsets are in the buffer, the sequence of each minimiser is known
+template<int level, int no_shapes>
+inline void RSHash::locate_buffer(uint64_t *buffer, uint64_t *offsets, uint64_t *sequence_ends, const size_t no_minimiser,
+    const uint64_t *shapes_fwd, const uint64_t *shapes_rev,
+    const size_t left_minimiser_pos, const size_t right_minimiser_pos,
+    std::vector<uint64_t> &positions, uint64_t &no_positions, uint64_t &found_kmers)
+{
+    size_t span;
+    if constexpr (level == 1)
+        span = span1;
+    if constexpr (level == 2)
+        span = span2;
+    if constexpr (level == 3)
+        span = span3;
+
+    found_kmers += locate_windows<level, no_shapes>(offsets, no_minimiser, shapes_fwd, shapes_rev,
+        left_minimiser_pos, right_minimiser_pos, positions, no_positions,
+        [&](const size_t i, const size_t pos) { return mask128_t{buffer[2*(i*span + pos)], buffer[2*(i*span + pos) + 1]}; },
+        [&](const size_t i, const uint64_t pos, const uint64_t length) {
+            return pos >= sequence_ends[2*i] && pos + length - 1 < sequence_ends[2*i+1];
+        });
+}
+
+
+// single k-mers: only the candidate windows are read from the text, the sequence is only looked up for matches
+template<int level, int no_shapes>
+inline bool RSHash::locate_offsets(uint64_t *offsets, const size_t p, const size_t no_minimiser,
+    const uint64_t *shapes_fwd, const uint64_t *shapes_rev,
+    const size_t left_minimiser_pos, const size_t right_minimiser_pos,
+    std::vector<uint64_t> &positions, uint64_t &no_positions)
+{
+    size_t span;
+    if constexpr (level == 1)
+        span = span1;
+    if constexpr (level == 2)
+        span = span2;
+    if constexpr (level == 3)
+        span = span3;
+
+    for(size_t i = 0; i < no_minimiser; i++) {
+        if constexpr (level == 1)
+            offsets[i] = offsets1.access(p+i) + 1 - span;
+        if constexpr (level == 2)
+            offsets[i] = offsets2.access(p+i) + 1 - span;
+        if constexpr (level == 3)
+            offsets[i] = offsets3.access(p+i) + 1 - span;
+    }
+
+    return locate_windows<level, no_shapes>(offsets, no_minimiser, shapes_fwd, shapes_rev,
+        left_minimiser_pos, right_minimiser_pos, positions, no_positions,
+        [&](const size_t i, const size_t pos) {
+            uint64_t window_start = offsets[i] + pos;
+            if constexpr (no_shapes > 0)
+                window_start -= shapes.overlap;
+            return access(window_start);
+        },
+        [&](const size_t, const uint64_t pos, const uint64_t length) {
+            uint64_t start_pos, end_pos;
+            return check_overlap(pos, start_pos, end_pos, length);
+        });
 }
 
 

@@ -95,7 +95,7 @@ private:
     StreamingLookupFn streaming_lookup_fn = nullptr;
     LookupFn lookup_fn = nullptr;
     using StreamingLocateFn = uint64_t (RSHash::*)(const seqan3::bitpacked_sequence<seqan3::dna4>&, std::vector<uint64_t> &, size_t &);
-    using LocateFn = uint64_t (RSHash::*)(const std::vector<uint64_t> &, std::vector<uint64_t>&);
+    using LocateFn = uint64_t (RSHash::*)(const std::vector<mask128_t> &, std::vector<uint64_t>&, uint64_t &);
     StreamingLocateFn streaming_locate_fn = nullptr;
     LocateFn locate_fn = nullptr;
     template<int level, typename MinimizerT>
@@ -124,8 +124,6 @@ private:
     inline void update_minimiser(const uint64_t, const uint64_t, uint64_t&, size_t &, size_t &);
     template<int level, int no_shapes>
     inline bool check(const uint64_t*, const uint64_t*, uint64_t*, const size_t, const size_t, const size_t, const size_t);
-    template<int level, bool use_shape>
-    inline uint64_t check_pos(const uint64_t, const uint64_t, uint64_t*, const size_t, const size_t, const size_t, const size_t);
     template<int level, int no_shapes>
     inline bool check_shape(uint64_t *, uint64_t, const uint64_t, const uint64_t, uint64_t*, uint64_t*, const size_t, const size_t, bool &, uint64_t &, uint64_t &, uint64_t &, uint64_t &, uint64_t &);
     template<int level, int no_shapes>
@@ -173,13 +171,19 @@ private:
     template<int no_shapes, bool use_ht, bool locate>
     uint64_t lookup3(const std::vector<mask128_t> &);
     template<int no_shapes, bool use_ht>
-    uint64_t locate1(const std::vector<uint64_t>&, std::vector<uint64_t>&);
+    uint64_t locate1(const std::vector<mask128_t>&, std::vector<uint64_t>&, uint64_t &);
     template<int no_shapes, bool use_ht>
-    uint64_t locate2(const std::vector<uint64_t>&, std::vector<uint64_t>&);
+    uint64_t locate2(const std::vector<mask128_t>&, std::vector<uint64_t>&, uint64_t &);
     template<int no_shapes, bool use_ht>
-    uint64_t locate3(const std::vector<uint64_t>&, std::vector<uint64_t>&);
-    template<int no_shapes>
-    inline bool match_window(const uint64_t *, const uint64_t, const bool, const bool, const uint64_t *, const uint64_t *, const uint64_t, const uint64_t);
+    uint64_t locate3(const std::vector<mask128_t>&, std::vector<uint64_t>&, uint64_t &);
+    template<int no_shapes, typename InSequence>
+    inline bool match_window(const uint64_t, const uint64_t, const uint64_t, const bool, const bool, const uint64_t *, const uint64_t *, InSequence &&);
+    template<int level, int no_shapes, typename WindowAt, typename InSequence>
+    inline bool locate_windows(const uint64_t *, const size_t, const uint64_t *, const uint64_t *, const size_t, const size_t, std::vector<uint64_t> &, uint64_t &, WindowAt &&, InSequence &&);
+    template<int level, int no_shapes>
+    inline bool locate_offsets(uint64_t *, const size_t, const size_t, const uint64_t *, const uint64_t *, const size_t, const size_t, std::vector<uint64_t> &, uint64_t &);
+    template<int max_level, int no_shapes, bool use_ht>
+    uint64_t locate_kmers(const std::vector<mask128_t> &, std::vector<uint64_t> &, uint64_t &);
     template<int level, int no_shapes>
     inline void locate_buffer(uint64_t*, uint64_t*, uint64_t *, const size_t, const uint64_t *, const uint64_t *, const size_t, const size_t, std::vector<uint64_t> &, uint64_t&, uint64_t&);
     template<int no_shapes, typename Window>
@@ -244,7 +248,7 @@ public:
     void initialise_lookupfn();
     void initialise_locatefn();
     uint64_t lookup(const std::vector<mask128_t>&);
-    uint64_t locate(const std::vector<uint64_t>&, std::vector<uint64_t>&);
+    uint64_t locate(const std::vector<mask128_t>&, std::vector<uint64_t>&, uint64_t &);
     void build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&);
     uint64_t streaming_lookup(const seqan3::bitpacked_sequence<seqan3::dna4>&, uint64_t&);
     uint64_t streaming_locate(const seqan3::bitpacked_sequence<seqan3::dna4>&, std::vector<uint64_t>&, uint64_t&);
