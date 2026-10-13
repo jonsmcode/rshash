@@ -73,57 +73,28 @@ template<int no_shapes, bool use_ht>
 inline bool RSHash::locate_last_level(const uint64_t kmer, const uint64_t kmer_hi, const uint64_t kmer_rc, const uint64_t kmer_rc_hi,
     std::vector<uint64_t> &positions, uint64_t &no_positions)
 {
-    // structure j holds the forward (even j) or reverse (odd j) values of shape j/2
-    // does structure j match the window starting at text position window_pos
-    auto matches_window = [&](const size_t j, const uint64_t window_pos) -> bool {
-        const Shape64 &shape = shapes.shapes[j / 2];
-        const uint64_t window_lo = get_word64(window_pos);
-        const uint64_t window_hi = get_word64(window_pos + 32);
-        uint64_t start_pos, end_pos;
-        if(j % 2 == 0)
-            return (window_lo & shape.w_mask.lo) == (kmer & shape.w_mask.lo) && (window_hi & shape.w_mask.hi) == (kmer_hi & shape.w_mask.hi) &&
-                   check_overlap(window_pos + shape.w_dist_right, start_pos, end_pos, shape.length);
-        return (window_lo & shape.w_mask_rev.lo) == (kmer_rc & shape.w_mask_rev.lo) && (window_hi & shape.w_mask_rev.hi) == (kmer_rc_hi & shape.w_mask_rev.hi) &&
-               check_overlap(window_pos + shape.w_rev_dist_right, start_pos, end_pos, shape.length);
-    };
+    // structure j holds the forward (even j) or reverse (odd j) values of shape j/2;
+    // all occurrences of all structures are counted (windows found by several shapes are counted several times)
+    bool found = false;
 
-    uint64_t found_structures = 0; // bit j: key found in structure j
-
-    // counts the windows of the occurrences of key in structure j that no earlier found structure matches;
     // a structure stores the starts of the shape windows, the (aligned) window starts dist bases earlier
-    auto count = [&](const size_t j, const uint64_t key, const uint64_t dist) {
-        auto count_window = [&](const uint64_t shape_pos) {
-            const uint64_t window_pos = shape_pos - dist;
-            for(uint64_t earlier = found_structures; earlier; earlier &= earlier - 1)
-                if(matches_window(std::countr_zero(earlier), window_pos))
-                    return;
-            // positions.push_back(window_pos + shapes.overlap); // position of the kernel
-            no_positions++;
-        };
-
+    auto count = [&](const size_t j, const uint64_t key, [[maybe_unused]] const uint64_t dist) {
         if constexpr (use_ht) {
             const auto values = hashmaps[j].find(key);
             if(values.empty())
                 return;
-            if(found_structures == 0)
-                no_positions += values.size();
-            else
-                for(uint32_t v : values)
-                    count_window(v);
+            // for(uint32_t v : values) positions.push_back(v - dist + shapes.overlap); // position of the kernel
+            no_positions += values.size();
         }
         else {
             uint64_t rank;
             if(!ri[j].contains(key, rank))
                 return;
             const size_t p = si_select[j].select(rank);
-            const size_t occs = si_select[j].select(rank + 1) - p;
-            if(found_structures == 0)
-                no_positions += occs;
-            else
-                for(size_t o = 0; o < occs; o++)
-                    count_window(offsetsi[j].access(p + o));
+            // for(size_t o = p; o < si_select[j].select(rank + 1); o++) positions.push_back(offsetsi[j].access(o) - dist + shapes.overlap);
+            no_positions += si_select[j].select(rank + 1) - p;
         }
-        found_structures |= 1ULL << j;
+        found = true;
     };
 
     if constexpr (no_shapes > 0) {
@@ -139,7 +110,7 @@ inline bool RSHash::locate_last_level(const uint64_t kmer, const uint64_t kmer_h
     else
         count(0, std::min<uint64_t>(kmer, kmer_rc), 0);
 
-    return found_structures != 0;
+    return found;
 }
 
 
@@ -208,33 +179,35 @@ uint64_t RSHash::locate3(const std::vector<mask128_t> &kmers, std::vector<uint64
 
 
 // checks one text window (lo, hi): forward against the query shapes, reverse complement against the reverse query
-// shapes; in_sequence(pos, length) is only asked after the masks matched
+// shapes; in_sequence(pos, length) is only asked after the masks matched.
+// returns the number of shape occurrences in the window: every matching (shape, orientation) counts, like one
+// structure each on the last level; a k-mer window counts at most once, like the canonical k-mers on the last level
 template<int no_shapes, typename InSequence>
-inline bool RSHash::match_window(const uint64_t window_lo, const uint64_t window_hi, const uint64_t window_pos,
+inline uint64_t RSHash::match_window(const uint64_t window_lo, const uint64_t window_hi, const uint64_t window_pos,
     const bool fwd, const bool rc, const uint64_t *shapes_fwd, const uint64_t *shapes_rev, InSequence &&in_sequence)
 {
     // the shape (not the whole window) has to lie within one sequence
-    bool match = false;
+    uint64_t matches = 0;
     if constexpr (no_shapes > 0) {
-        for(int j = 0; j < no_shapes && !match; ++j) {
+        for(int j = 0; j < no_shapes; ++j) {
             const Shape64 &shape = shapes.shapes[j];
-            match = (fwd && shapes_fwd[2*j] == (window_lo & shape.w_mask.lo) && shapes_fwd[2*j + 1] == (window_hi & shape.w_mask.hi) &&
-                     in_sequence(window_pos + shape.w_dist_right, shape.length)) ||
-                    (rc && shapes_rev[2*j] == (window_lo & shape.w_mask_rev.lo) && shapes_rev[2*j + 1] == (window_hi & shape.w_mask_rev.hi) &&
-                     in_sequence(window_pos + shape.w_rev_dist_right, shape.length));
+            matches += fwd && shapes_fwd[2*j] == (window_lo & shape.w_mask.lo) && shapes_fwd[2*j + 1] == (window_hi & shape.w_mask.hi) &&
+                       in_sequence(window_pos + shape.w_dist_right, shape.length);
+            matches += rc && shapes_rev[2*j] == (window_lo & shape.w_mask_rev.lo) && shapes_rev[2*j + 1] == (window_hi & shape.w_mask_rev.hi) &&
+                       in_sequence(window_pos + shape.w_rev_dist_right, shape.length);
         }
     }
     else {
-        match = ((fwd && shapes_fwd[0] == window_lo && shapes_fwd[1] == window_hi) ||
-                 (rc && shapes_rev[0] == window_lo && shapes_rev[1] == window_hi)) &&
-                in_sequence(window_pos, window_size);
+        matches = ((fwd && shapes_fwd[0] == window_lo && shapes_fwd[1] == window_hi) ||
+                   (rc && shapes_rev[0] == window_lo && shapes_rev[1] == window_hi)) &&
+                  in_sequence(window_pos, window_size);
     }
 
-    return match;
+    return matches;
 }
 
 
-// counts the text windows matching the query among the candidate windows of all minimiser offsets;
+// counts the shape occurrences (k-mers) matching the query among the candidate windows of all minimiser offsets;
 // window_at(i, pos) gives the (lo, hi) words of the window at position pos of offset i,
 // in_sequence(i, pos, length) whether pos .. pos+length-1 lies within one sequence
 template<int level, int no_shapes, typename WindowAt, typename InSequence>
@@ -298,18 +271,25 @@ inline bool RSHash::locate_windows(const uint64_t *offsets, const size_t no_mini
             };
 
             // a match from a left minimiser occurrence always counts, a match from a right one only if
-            // the window's left occurrence is not an offset (only looked up after the window matched)
+            // the window's left occurrence is not an offset (only looked up after the window matched);
+            // shapes count per orientation, a k-mer window only once
             const bool fwd_left = candidate.fwd && !candidate.fwd_right;
             const bool rc_left = candidate.rc && !candidate.rc_right;
-            bool match = (fwd_left || rc_left) && matches(fwd_left, rc_left);
-            if(!match && candidate.fwd_right)
-                match = matches(true, false) && !is_offset(offsets[i] - d);
-            if(!match && candidate.rc_right)
-                match = matches(false, true) && !is_offset(offsets[i] + d);
+            uint64_t match = (fwd_left || rc_left) ? matches(fwd_left, rc_left) : 0;
+            if((no_shapes > 0 || !match) && candidate.fwd_right) {
+                const uint64_t m = matches(true, false);
+                if(m && !is_offset(offsets[i] - d))
+                    match += m;
+            }
+            if((no_shapes > 0 || !match) && candidate.rc_right) {
+                const uint64_t m = matches(false, true);
+                if(m && !is_offset(offsets[i] + d))
+                    match += m;
+            }
 
             if(match) {
                 // positions.push_back(window_pos + shapes.overlap); // position of the kernel
-                no_positions++;
+                no_positions += match;
                 found = true;
             }
         }

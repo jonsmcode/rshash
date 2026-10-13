@@ -177,7 +177,7 @@ private:
     template<int no_shapes, bool use_ht>
     uint64_t locate3(const std::vector<mask128_t>&, std::vector<uint64_t>&, uint64_t &);
     template<int no_shapes, typename InSequence>
-    inline bool match_window(const uint64_t, const uint64_t, const uint64_t, const bool, const bool, const uint64_t *, const uint64_t *, InSequence &&);
+    inline uint64_t match_window(const uint64_t, const uint64_t, const uint64_t, const bool, const bool, const uint64_t *, const uint64_t *, InSequence &&);
     template<int level, int no_shapes, typename WindowAt, typename InSequence>
     inline bool locate_windows(const uint64_t *, const size_t, const uint64_t *, const uint64_t *, const size_t, const size_t, std::vector<uint64_t> &, uint64_t &, WindowAt &&, InSequence &&);
     template<int level, int no_shapes>
