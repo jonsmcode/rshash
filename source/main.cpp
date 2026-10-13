@@ -37,6 +37,7 @@ struct cmd_arguments {
     uint16_t t{0};
     bool loc{false};
     bool ht{false};
+    bool threads{true};
     std::vector<uint64_t> shape{std::numeric_limits<uint64_t>::max()};
 };
 
@@ -57,6 +58,7 @@ void initialise_argument_parser(sharg::parser &parser, cmd_arguments &args)
     parser.add_option(args.t, sharg::config{.short_id = 't', .description = "max k-mer/shape frequency threshold"});
     parser.add_flag(args.loc, sharg::config{.long_id = "loc", .description = "enable locate"});
     parser.add_flag(args.ht, sharg::config{.long_id = "ht", .description = "do not use hashtable on last level"});
+    parser.add_option(args.threads, sharg::config{.long_id = "threads", .description = "build the last level with one thread per structure (2 per shape)"});
     parser.add_option(args.shape, sharg::config{.long_id = "shape", .description = "shape value. multiple values can be given."});
 }
 
@@ -129,6 +131,7 @@ int main(int argc, char** argv)
             const Shapes64 shapes = shape64_create(args.shape);
             index = RSHash(shapes, args.level, args.m1, args.m2, args.m3, args.t1, args.t2, args.t3, args.t, args.loc, !args.ht);
         }
+        index.set_parallel_last_level(args.threads);
         index.build(text);
         index.save(args.d);
     }

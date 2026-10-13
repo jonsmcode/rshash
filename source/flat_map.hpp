@@ -7,6 +7,32 @@
 #include <gtl/phmap.hpp>
 #include <cereal/cereal.hpp>
 #include <cereal/types/vector.hpp>
+#include "kxsort.h"
+
+
+// (key, value) pair of a structure built by sorting instead of hashing every pair
+struct [[gnu::packed]] KeyValue {
+    uint64_t key;
+    uint32_t value;
+};
+
+struct RadixTraitsKeyValue {
+    static const int nBytes = 12;
+    int kth_byte(const KeyValue &x, int k) {
+        if (k >= 4) return x.key >> ((k - 4) * 8) & 0xFF;
+        return x.value >> (k * 8) & 0xFF;
+    }
+    bool compare(const KeyValue &x, const KeyValue &y) {
+        return x.key < y.key || (x.key == y.key && x.value < y.value);
+    }
+};
+
+// sorts the pairs by key and value and removes duplicates (overlapping super-k-mers can add a pair twice)
+inline void sort_unique(std::vector<KeyValue> &pairs) {
+    kx::radix_sort(pairs.begin(), pairs.end(), RadixTraitsKeyValue());
+    pairs.erase(std::unique(pairs.begin(), pairs.end(),
+        [](const KeyValue &x, const KeyValue &y) { return x.key == y.key && x.value == y.value; }), pairs.end());
+}
 
 
 struct FlatMap {
@@ -35,6 +61,26 @@ struct FlatMap {
         return index.size();
     }
 
+    // from pairs sorted by sort_unique: every key is hashed once, the values are copied in order
+    static FlatMap from_sorted(const std::vector<KeyValue> &pairs) {
+        FlatMap result;
+        size_t no_keys = 0;
+        for (size_t i = 0; i < pairs.size(); i++)
+            no_keys += (i == 0 || pairs[i].key != pairs[i-1].key);
+
+        result.index.reserve(no_keys);
+        result.values.reserve(pairs.size());
+        for (size_t i = 0; i < pairs.size();) {
+            const Key key = pairs[i].key;
+            const uint32_t offset = static_cast<uint32_t>(i);
+            for (; i < pairs.size() && pairs[i].key == key; i++)
+                result.values.push_back(pairs[i].value);
+            result.index.emplace(key, Entry{.offset = offset, .size = static_cast<uint32_t>(i - offset)});
+        }
+
+        return result;
+    }
+
     size_t memory_bits() const {
         size_t total = 0;
 
@@ -56,8 +102,6 @@ private:
     gtl::flat_hash_map<Key, Entry> index;
     std::vector<Value> values;
 
-    friend struct FlatMapBuilder;
-
     template <class Archive>
     friend void save(Archive&, const FlatMap&);
 
@@ -65,61 +109,3 @@ private:
     friend void load(Archive&, FlatMap&);
 };
 
-
-struct FlatMapBuilder {
-    using Key = FlatMap::Key;
-    using Value = FlatMap::Value;
-    using Span = FlatMap::Span;
-
-    void reserve(size_t keys) {
-        map.reserve(keys);
-    }
-
-    void add(Key key, Value value) {
-        map[key].push_back(value);
-    }
-
-    void add(Key key, Span values) {
-        auto& v = map[key];
-        v.insert(v.end(), values.begin(), values.end());
-    }
-
-    template<typename Container>
-    void add(Key key, const Container& values) {
-        add(key, Span(values.data(), values.size()));
-    }
-
-    FlatMap build() && {
-        FlatMap result;
-
-        // Compute total storage needed; overlapping (extended) super-k-mers can add the same value twice.
-        size_t total_values = 0;
-        for (auto& [_, v] : map) {
-            std::sort(v.begin(), v.end());
-            v.erase(std::unique(v.begin(), v.end()), v.end());
-            total_values += v.size();
-        }
-
-        result.index.reserve(map.size());
-        result.values.reserve(total_values);
-
-        for (auto& [key, v] : map) {
-            FlatMap::Entry e{
-                .offset = static_cast<uint32_t>(result.values.size()),
-                .size   = static_cast<uint32_t>(v.size())
-            };
-
-            result.values.insert(
-                result.values.end(),
-                std::make_move_iterator(v.begin()),
-                std::make_move_iterator(v.end()));
-
-            result.index.emplace(key, e);
-        }
-
-        return result;
-    }
-
-private:
-    gtl::flat_hash_map<Key, std::vector<Value>> map;
-};

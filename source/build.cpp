@@ -1,6 +1,8 @@
 #include "rshash.hpp"
 #include "minimiser_views.hpp"
 #include "kxsort.h"
+#include <optional>
+#include <thread>
 
 
 inline uint64_t mark_sequences(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &input, const size_t k,
@@ -392,50 +394,27 @@ static inline sux::bits::EliasFano<sux::util::AllocType::MALLOC> build_ef(const 
 }
 
 
-// appends one rank structure to ri and fills the select bitvector and offsets at the same index
-void RSHash::build_level(gtl::flat_hash_map<uint64_t, std::vector<uint64_t>>& map)
+// fills the select bitvector and offsets of structure idx from pairs sorted by sort_unique and returns its rank structure
+RSHash::EF RSHash::build_level(const size_t idx, const std::vector<KeyValue>& pairs)
 {
-    const size_t idx = ri.size();
-
-    std::vector<decltype(map.cbegin())> order;
-    order.reserve(map.size());
-
-    // overlapping (extended) super-k-mers can add the same position twice
-    for (auto& [key, values] : map) {
-        std::ranges::sort(values);
-        values.erase(std::unique(values.begin(), values.end()), values.end());
-    }
-
-    size_t total_positions = 0;
-    for (auto it = map.cbegin(); it != map.cend(); ++it) {
-        order.push_back(it);
-        total_positions += it->second.size();
-    }
-
-    std::ranges::sort(order, {}, [](auto it) { return it->first; });
-
     std::vector<uint64_t> keys;
     std::vector<uint64_t> occurrences; // k-mers in repeats can occur more than 2^16 times
     bits::compact_vector::builder builder;
+    builder.resize(pairs.size(), std::bit_width(endpoints.size()));
 
-    keys.reserve(order.size());
-    occurrences.reserve(order.size());
-    builder.resize(total_positions, std::bit_width(endpoints.size()));
-
-    for (auto it : order) {
-        keys.push_back(it->first);
-        occurrences.push_back(it->second.size());
-
-        for (uint64_t pos : it->second)
-            builder.push_back(pos);
+    for (size_t i = 0; i < pairs.size(); i++) {
+        if (i == 0 || pairs[i].key != pairs[i-1].key) {
+            keys.push_back(pairs[i].key);
+            occurrences.push_back(0);
+        }
+        occurrences.back()++;
+        builder.push_back(pairs[i].value);
     }
 
-    map.clear();
-
-    ri.push_back(build_ef(keys));
-
-    ::mark_occurences(total_positions, occurrences, si[idx], si_select[idx]);
+    ::mark_occurences(pairs.size(), occurrences, si[idx], si_select[idx]);
     builder.build(offsetsi[idx]);
+
+    return build_ef(keys);
 }
 
 
@@ -457,17 +436,42 @@ void RSHash::last_level(const std::vector<seqan3::bitpacked_sequence<seqan3::dna
             process_canonical_kmers(add, input, freq_skmers);
     };
 
+    // with locate: structure j holds the forward (even j) or reverse (odd j) values of shape j/2 (0 the canonical
+    // k-mers); its (key, position) pairs are collected and sorted instead of hashed one by one
+    auto collect_sorted = [&](const size_t j) {
+        std::vector<KeyValue> pairs;
+        auto add = [&](uint64_t key, uint32_t pos) { pairs.push_back({key, pos}); };
+        auto skip = [](uint64_t, uint32_t) {};
+        if(j % 2 == 0)
+            process(j / 2, add, skip);
+        else
+            process(j / 2, skip, add);
+        sort_unique(pairs);
+        return pairs;
+    };
+
+    // runs task(j) for all structures, one thread each if parallel_last_level
+    auto for_each_structure = [&](auto &&task) {
+        if(!parallel_last_level) {
+            for(size_t j = 0; j < no_structures; j++)
+                task(j);
+            return;
+        }
+        std::vector<std::jthread> workers;
+        for(size_t j = 1; j < no_structures; j++)
+            workers.emplace_back([&task, j]() { task(j); });
+        task(0);
+    };
+
     if(use_ht) {
-        for(int i = 0; i < no_shapes; i++) {
-            if(loc) {
-                FlatMapBuilder builder, builder_rc;
-                process(i, [&](uint64_t key, uint32_t pos) {builder.add(key, pos);},
-                           [&](uint64_t key, uint32_t pos) {builder_rc.add(key, pos);});
-                hashmaps.push_back(std::move(builder).build());
-                if(number_shapes > 0)
-                    hashmaps.push_back(std::move(builder_rc).build());
-            }
-            else {
+        if(loc) {
+            std::vector<FlatMap> maps(no_structures);
+            for_each_structure([&](const size_t j) { maps[j] = FlatMap::from_sorted(collect_sorted(j)); });
+            for(auto &map : maps)
+                hashmaps.push_back(std::move(map));
+        }
+        else {
+            for(int i = 0; i < no_shapes; i++) {
                 gtl::flat_hash_set<uint64_t> hashset, hashset_rc;
                 process(i, [&](uint64_t key, uint32_t) {hashset.insert(key);},
                            [&](uint64_t key, uint32_t) {hashset_rc.insert(key);});
@@ -478,25 +482,20 @@ void RSHash::last_level(const std::vector<seqan3::bitpacked_sequence<seqan3::dna
         }
     }
     else {
-        // ri[2*i] holds the forward, ri[2*i+1] the reverse values of shape i (ri[0] the canonical k-mers)
         ri.reserve(no_structures);
         if(loc) {
-            // sized up front, the select structures point into si
+            // sized up front, the select structures point into si; each structure fills its own index
             si.resize(no_structures);
             si_select.resize(no_structures);
             offsetsi.resize(no_structures);
-        }
 
-        for(int i = 0; i < no_shapes; i++) {
-            if(loc) {
-                gtl::flat_hash_map<uint64_t, std::vector<uint64_t>> map, map_rc;
-                process(i, [&](uint64_t key, uint32_t pos) {map[key].push_back(pos);},
-                           [&](uint64_t key, uint32_t pos) {map_rc[key].push_back(pos);});
-                build_level(map);
-                if(number_shapes > 0)
-                    build_level(map_rc);
-            }
-            else {
+            std::vector<std::optional<EF>> efs(no_structures);
+            for_each_structure([&](const size_t j) { efs[j] = build_level(j, collect_sorted(j)); });
+            for(auto &ef : efs)
+                ri.push_back(std::move(*ef));
+        }
+        else {
+            for(int i = 0; i < no_shapes; i++) {
                 gtl::flat_hash_set<uint64_t> set, set_rc;
                 process(i, [&](uint64_t key, uint32_t) {set.insert(key);},
                            [&](uint64_t key, uint32_t) {set_rc.insert(key);});

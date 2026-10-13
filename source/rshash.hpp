@@ -74,6 +74,8 @@ private:
     uint64_t windowshift;
     uint64_t mmermask1, mmermask2, mmermask3;
     bool loc, use_ht;
+    // build option of the last level (not stored in the index)
+    bool parallel_last_level = true;
     mixer_64 m_hasher1, m_hasher2, m_hasher3;
     uint64_t no_text_kmers;
     sux::bits::EliasFano<sux::util::AllocType::MALLOC> r1, r2, r3;
@@ -116,7 +118,8 @@ private:
     void process_freq_kmers(AddForward&&, AddReverse&& , const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &, gtl::flat_hash_map<uint64_t, uint16_t> &, Shape64 &);
     // template <typename AddForward>
     // void process_freq_kmers(AddForward&&, const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &, gtl::flat_hash_map<uint64_t, uint16_t> &);
-    void build_level(gtl::flat_hash_map<uint64_t, std::vector<uint64_t>>&);
+    using EF = sux::bits::EliasFano<sux::util::AllocType::MALLOC>;
+    EF build_level(size_t, const std::vector<KeyValue>&);
     void last_level(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &);
     template<int level>
     inline uint64_t find_minimiser(const uint64_t, const uint64_t, size_t &, size_t &);
@@ -241,6 +244,8 @@ public:
     uint8_t getk() { return window_size; }
     Shapes64 getshapes() { return shapes; }
     bool has_locate() { return loc; }
+    // build the last level structures (one per shape and orientation) in parallel
+    void set_parallel_last_level(bool parallel) { parallel_last_level = parallel; }
     uint64_t number_unitigs() { return endpoints.rank(endpoints.size()); }
     size_t unitig_size(uint64_t unitig_id) { return endpoints.select(unitig_id+1) - endpoints.select(unitig_id) - k + 1; }
     // const inline uint64_t access(const size_t);
