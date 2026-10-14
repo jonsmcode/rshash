@@ -407,28 +407,38 @@ inline bool RSHash::extend_in_text(uint64_t &text_pos, uint64_t start, uint64_t 
         return false;
     }
     else {
+        // [start, end) is the sequence of the shape found before; a shape of the extended window only counts if it
+        // lies within this sequence (like in_sequence in locate), the window itself may cross the sequence ends
         if(forward) {
-            if(++text_pos < end - shapes.w_dist) {
+            // text_pos is the last base of the window, the window is extended until its end leaves the sequence
+            if(++text_pos < end) {
                 const uint64_t new_rank = get_base(text_pos);
                 window_lo = (window_lo >> 2) | ((window_hi & 3ULL) << 62);
                 window_hi = (window_hi >> 2) | (new_rank << windowshift);
 
+                // the shape starts at text_pos + 1 - window_size + w_dist_right
                 for(int i = 0; i < no_shapes; i++) {
                     Shape64 &shape = shapes.shapes[i];
-                    if(shapes_fwd[2*i] == (window_lo & shape.w_mask.lo) && shapes_fwd[2*i + 1] == (window_hi & shape.w_mask.hi))
+                    if(shapes_fwd[2*i] == (window_lo & shape.w_mask.lo) && shapes_fwd[2*i + 1] == (window_hi & shape.w_mask.hi) &&
+                       text_pos + 1 + shape.w_dist_right >= start + window_size &&
+                       text_pos + 1 + shape.w_dist_right + shape.length <= end + window_size)
                         return true;
                 }
             }
         }
         else {
-            if(--text_pos >= start + shapes.w_dist) {
-                const uint64_t new_rank = get_base(text_pos);
+            // text_pos is the first base of the window, the window is extended until its start leaves the sequence
+            if(text_pos > start) {
+                const uint64_t new_rank = get_base(--text_pos);
                 window_hi = ((window_hi << 2) | (window_lo >> 62)) & windowmask.hi;
                 window_lo = (window_lo << 2) | new_rank;
-            
+
+                // the shape starts at text_pos + w_rev_dist_right
                 for(int i = 0; i < no_shapes; i++) {
                     Shape64 &shape = shapes.shapes[i];
-                    if(shapes_rev[2*i] == (window_lo & shape.w_mask_rev.lo) && shapes_rev[2*i + 1] == (window_hi & shape.w_mask_rev.hi))
+                    if(shapes_rev[2*i] == (window_lo & shape.w_mask_rev.lo) && shapes_rev[2*i + 1] == (window_hi & shape.w_mask_rev.hi) &&
+                       text_pos + shape.w_rev_dist_right >= start &&
+                       text_pos + shape.w_rev_dist_right + shape.length <= end)
                         return true;
                 }
             }
