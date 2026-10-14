@@ -154,10 +154,7 @@ int main(int argc, char** argv)
         std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
         for (auto query : queries) {
             found_queries += index.streaming_lookup(query, found, extensions);
-            if(index.getshapes().shapes[0].value != std::numeric_limits<uint64_t>::max())
-                kmers += query.size() - index.getshapes().length + 1;
-            else
-                kmers += query.size() - index.getk() + 1;
+            kmers += index.query_windows(query.size());
         }
         std::chrono::high_resolution_clock::time_point t_stop = std::chrono::high_resolution_clock::now();
         elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
@@ -200,10 +197,7 @@ int main(int argc, char** argv)
         std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
         for (auto query : queries) {
             found_queries += index.streaming_locate(query, positions, found_kmers, found_positions);
-            if(index.getshapes().shapes[0].value != std::numeric_limits<uint64_t>::max())
-                kmers += query.size() - index.getshapes().length + 1;
-            else
-                kmers += query.size() - index.getk() + 1;
+            kmers += index.query_windows(query.size());
             // positions.clear();
         }
         std::chrono::high_resolution_clock::time_point t_stop = std::chrono::high_resolution_clock::now();

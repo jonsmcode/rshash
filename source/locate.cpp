@@ -76,7 +76,7 @@ uint64_t RSHash::locate(const std::vector<mask128_t> &kmers, std::vector<uint64_
 
 template<int no_shapes, bool use_ht>
 inline bool RSHash::locate_last_level(const uint64_t kmer, const uint64_t kmer_hi, const uint64_t kmer_rc, const uint64_t kmer_rc_hi,
-    std::vector<uint64_t> &positions, uint64_t &no_positions)
+    std::vector<uint64_t> &positions, uint64_t &no_positions, const uint64_t active)
 {
     // structure j holds the forward (even j) or reverse (odd j) values of shape j/2;
     // all occurrences of all structures are counted (windows found by several shapes are counted several times)
@@ -108,8 +108,11 @@ inline bool RSHash::locate_last_level(const uint64_t kmer, const uint64_t kmer_h
             // the shape values are only extracted when the last level is reached
             const uint64_t shape_fwd = _pext_u64(kmer, shape.w_mask.lo) | (_pext_u64(kmer_hi, shape.w_mask.hi) << shape.w_lo_weight);
             const uint64_t shape_rev = _pext_u64(kmer_rc, shape.w_mask_rev.lo) | (_pext_u64(kmer_rc_hi, shape.w_mask_rev.hi) << shape.w_rev_lo_weight);
-            count(2*i, shape_fwd, shape.w_dist_right);
-            count(2*i + 1, shape_rev, shape.w_rev_dist_right);
+            // only the placements within the query (bit 2i forward, 2i+1 reverse of active)
+            if((active >> (2*i)) & 1)
+                count(2*i, shape_fwd, shape.w_dist_right);
+            if((active >> (2*i + 1)) & 1)
+                count(2*i + 1, shape_rev, shape.w_rev_dist_right);
         }
     }
     else
@@ -411,33 +414,55 @@ bool RSHash::streaming_locate1(const seqan3::bitpacked_sequence<seqan3::dna4> &q
     uint64_t kernel, kernel_rev;
     uint64_t shapes_fwd[2*std::max(no_shapes, 1)], shapes_rev[2*std::max(no_shapes, 1)];
 
-    for (auto&& window : query | rshash::views::kmer_view({.window_size = window_size}))
-    {
-        locate_query_words<no_shapes>(window, shapes_fwd, shapes_rev, kernel, kernel_rev);
+    // shapes: the padded query, so that the shapes at the query ends are found as well
+    const int64_t query_length = query.size();
+    int64_t w = -1;   // window of the padded query
+    auto scan = [&](auto &&sequence) {
+        for (auto&& window : sequence | rshash::views::kmer_view({.window_size = window_size}))
+        {
+            uint64_t active = ~uint64_t{0};
+            if constexpr (no_shapes > 0) {
+                active = borders.active(++w, query_length);
+                if(!active) {
+                    // no placement within the query: the window is skipped
+                    rolling1 = false;
+                    continue;
+                }
+            }
+            locate_query_words<no_shapes>(window, shapes_fwd, shapes_rev, kernel, kernel_rev);
+            if constexpr (no_shapes > 0) {
+                if(active != borders.all)
+                    disable_placements<no_shapes>(active, shapes_fwd, shapes_rev);
+            }
 
-        if(!rolling1) {
-            minimiser1 = find_minimiser<1>(kernel, kernel_rev, left_minimiser_position1, right_minimiser_position1);
-            rolling1 = true;
-        }
-        else
-            update_minimiser<1>(kernel, kernel_rev, minimiser1, left_minimiser_position1, right_minimiser_position1);
+            if(!rolling1) {
+                minimiser1 = find_minimiser<1>(kernel, kernel_rev, left_minimiser_position1, right_minimiser_position1);
+                rolling1 = true;
+            }
+            else
+                update_minimiser<1>(kernel, kernel_rev, minimiser1, left_minimiser_position1, right_minimiser_position1);
 
-        if(minimiser1 == current_pos_minimiser1) {
-            locate_buffer<1, no_shapes>(kmer_buffer1, offsets1, sequence_ends1, no_minimiser1, shapes_fwd, shapes_rev, left_minimiser_position1, right_minimiser_position1, positions, no_positions, found_kmers);
-        }
-        else if(minimiser1 != current_neg_minimiser1 && r1.contains(minimiser1, minimiser_rank1)) {
-            const size_t minimiser_position1 = s1_select.select(minimiser_rank1);
-            no_minimiser1 = s1_select.select(minimiser_rank1+1) - minimiser_position1;
+            if(minimiser1 == current_pos_minimiser1) {
+                locate_buffer<1, no_shapes>(kmer_buffer1, offsets1, sequence_ends1, no_minimiser1, shapes_fwd, shapes_rev, left_minimiser_position1, right_minimiser_position1, positions, no_positions, found_kmers);
+            }
+            else if(minimiser1 != current_neg_minimiser1 && r1.contains(minimiser1, minimiser_rank1)) {
+                const size_t minimiser_position1 = s1_select.select(minimiser_rank1);
+                no_minimiser1 = s1_select.select(minimiser_rank1+1) - minimiser_position1;
 
-            fill_buffer2<1>(offsets1, kmer_buffer1, sequence_ends1, minimiser_position1, no_minimiser1);
-            locate_buffer<1, no_shapes>(kmer_buffer1, offsets1, sequence_ends1, no_minimiser1, shapes_fwd, shapes_rev, left_minimiser_position1, right_minimiser_position1, positions, no_positions, found_kmers);
-            current_pos_minimiser1 = minimiser1;
+                fill_buffer2<1>(offsets1, kmer_buffer1, sequence_ends1, minimiser_position1, no_minimiser1);
+                locate_buffer<1, no_shapes>(kmer_buffer1, offsets1, sequence_ends1, no_minimiser1, shapes_fwd, shapes_rev, left_minimiser_position1, right_minimiser_position1, positions, no_positions, found_kmers);
+                current_pos_minimiser1 = minimiser1;
+            }
+            else {
+                found_kmers += locate_last_level<no_shapes, use_ht>(window.value, window.value_hi, window.value_rev, window.value_rev_hi, positions, no_positions, active);
+                current_neg_minimiser1 = minimiser1;
+            }
         }
-        else {
-            found_kmers += locate_last_level<no_shapes, use_ht>(window.value, window.value_hi, window.value_rev, window.value_rev_hi, positions, no_positions);
-            current_neg_minimiser1 = minimiser1;
-        }
-    }
+    };
+    if constexpr (no_shapes > 0)
+        scan(padded_query(query, borders));
+    else
+        scan(query);
 
     delete[] kmer_buffer1;
     delete[] offsets1;
@@ -471,57 +496,80 @@ bool RSHash::streaming_locate2(const seqan3::bitpacked_sequence<seqan3::dna4> &q
     uint64_t kernel, kernel_rev;
     uint64_t shapes_fwd[2*std::max(no_shapes, 1)], shapes_rev[2*std::max(no_shapes, 1)];
 
-    for (auto&& window : query | rshash::views::kmer_view({.window_size = window_size}))
-    {
-        locate_query_words<no_shapes>(window, shapes_fwd, shapes_rev, kernel, kernel_rev);
+    // shapes: the padded query, so that the shapes at the query ends are found as well
+    const int64_t query_length = query.size();
+    int64_t w = -1;   // window of the padded query
+    auto scan = [&](auto &&sequence) {
+        for (auto&& window : sequence | rshash::views::kmer_view({.window_size = window_size}))
+        {
+            uint64_t active = ~uint64_t{0};
+            if constexpr (no_shapes > 0) {
+                active = borders.active(++w, query_length);
+                if(!active) {
+                    // no placement within the query: the window is skipped
+                    rolling1 = false;
+                    rolling2 = false;
+                    continue;
+                }
+            }
+            locate_query_words<no_shapes>(window, shapes_fwd, shapes_rev, kernel, kernel_rev);
+            if constexpr (no_shapes > 0) {
+                if(active != borders.all)
+                    disable_placements<no_shapes>(active, shapes_fwd, shapes_rev);
+            }
 
-        if(!rolling1) {
-            minimiser1 = find_minimiser<1>(kernel, kernel_rev, left_minimiser_position1, right_minimiser_position1);
-            rolling1 = true;
-        }
-        else
-            update_minimiser<1>(kernel, kernel_rev, minimiser1, left_minimiser_position1, right_minimiser_position1);
-
-        if(minimiser1 == current_pos_minimiser1) {
-            locate_buffer<1, no_shapes>(kmer_buffer1, offsets1, sequence_ends1, no_minimiser1, shapes_fwd, shapes_rev, left_minimiser_position1, right_minimiser_position1, positions, no_positions, found_kmers);
-            rolling2 = false;
-        }
-        else if(minimiser1 != current_neg_minimiser1 && r1.contains(minimiser1, minimiser_rank1)) {
-            const size_t minimiser_position1 = s1_select.select(minimiser_rank1);
-            no_minimiser1 = s1_select.select(minimiser_rank1+1) - minimiser_position1;
-
-            fill_buffer2<1>(offsets1, kmer_buffer1, sequence_ends1, minimiser_position1, no_minimiser1);
-            locate_buffer<1, no_shapes>(kmer_buffer1, offsets1, sequence_ends1, no_minimiser1, shapes_fwd, shapes_rev, left_minimiser_position1, right_minimiser_position1, positions, no_positions, found_kmers);
-            current_pos_minimiser1 = minimiser1;
-            rolling2 = false;
-        }
-        else {
-            if(!rolling2) {
-                minimiser2 = find_minimiser<2>(kernel, kernel_rev, left_minimiser_position2, right_minimiser_position2);
-                rolling2 = true;
+            if(!rolling1) {
+                minimiser1 = find_minimiser<1>(kernel, kernel_rev, left_minimiser_position1, right_minimiser_position1);
+                rolling1 = true;
             }
             else
-                update_minimiser<2>(kernel, kernel_rev, minimiser2, left_minimiser_position2, right_minimiser_position2);
+                update_minimiser<1>(kernel, kernel_rev, minimiser1, left_minimiser_position1, right_minimiser_position1);
 
-            if(minimiser2 == current_pos_minimiser2) {
-                locate_buffer<2, no_shapes>(kmer_buffer2, offsets2, sequence_ends2, no_minimiser2, shapes_fwd, shapes_rev, left_minimiser_position2, right_minimiser_position2, positions, no_positions, found_kmers);
+            if(minimiser1 == current_pos_minimiser1) {
+                locate_buffer<1, no_shapes>(kmer_buffer1, offsets1, sequence_ends1, no_minimiser1, shapes_fwd, shapes_rev, left_minimiser_position1, right_minimiser_position1, positions, no_positions, found_kmers);
+                rolling2 = false;
             }
-            else if(minimiser2 != current_neg_minimiser2 && r2.contains(minimiser2, minimiser_rank2)) {
-                const size_t minimiser_position2 = s2_select.select(minimiser_rank2);
-                no_minimiser2 = s2_select.select(minimiser_rank2+1) - minimiser_position2;
+            else if(minimiser1 != current_neg_minimiser1 && r1.contains(minimiser1, minimiser_rank1)) {
+                const size_t minimiser_position1 = s1_select.select(minimiser_rank1);
+                no_minimiser1 = s1_select.select(minimiser_rank1+1) - minimiser_position1;
 
-                fill_buffer2<2>(offsets2, kmer_buffer2, sequence_ends2, minimiser_position2, no_minimiser2);
-                locate_buffer<2, no_shapes>(kmer_buffer2, offsets2, sequence_ends2, no_minimiser2, shapes_fwd, shapes_rev, left_minimiser_position2, right_minimiser_position2, positions, no_positions, found_kmers);
-                current_pos_minimiser2 = minimiser2;
-                current_neg_minimiser1 = minimiser1;
+                fill_buffer2<1>(offsets1, kmer_buffer1, sequence_ends1, minimiser_position1, no_minimiser1);
+                locate_buffer<1, no_shapes>(kmer_buffer1, offsets1, sequence_ends1, no_minimiser1, shapes_fwd, shapes_rev, left_minimiser_position1, right_minimiser_position1, positions, no_positions, found_kmers);
+                current_pos_minimiser1 = minimiser1;
+                rolling2 = false;
             }
             else {
-                found_kmers += locate_last_level<no_shapes, use_ht>(window.value, window.value_hi, window.value_rev, window.value_rev_hi, positions, no_positions);
-                current_neg_minimiser1 = minimiser1;
-                current_neg_minimiser2 = minimiser2;
+                if(!rolling2) {
+                    minimiser2 = find_minimiser<2>(kernel, kernel_rev, left_minimiser_position2, right_minimiser_position2);
+                    rolling2 = true;
+                }
+                else
+                    update_minimiser<2>(kernel, kernel_rev, minimiser2, left_minimiser_position2, right_minimiser_position2);
+
+                if(minimiser2 == current_pos_minimiser2) {
+                    locate_buffer<2, no_shapes>(kmer_buffer2, offsets2, sequence_ends2, no_minimiser2, shapes_fwd, shapes_rev, left_minimiser_position2, right_minimiser_position2, positions, no_positions, found_kmers);
+                }
+                else if(minimiser2 != current_neg_minimiser2 && r2.contains(minimiser2, minimiser_rank2)) {
+                    const size_t minimiser_position2 = s2_select.select(minimiser_rank2);
+                    no_minimiser2 = s2_select.select(minimiser_rank2+1) - minimiser_position2;
+
+                    fill_buffer2<2>(offsets2, kmer_buffer2, sequence_ends2, minimiser_position2, no_minimiser2);
+                    locate_buffer<2, no_shapes>(kmer_buffer2, offsets2, sequence_ends2, no_minimiser2, shapes_fwd, shapes_rev, left_minimiser_position2, right_minimiser_position2, positions, no_positions, found_kmers);
+                    current_pos_minimiser2 = minimiser2;
+                    current_neg_minimiser1 = minimiser1;
+                }
+                else {
+                    found_kmers += locate_last_level<no_shapes, use_ht>(window.value, window.value_hi, window.value_rev, window.value_rev_hi, positions, no_positions, active);
+                    current_neg_minimiser1 = minimiser1;
+                    current_neg_minimiser2 = minimiser2;
+                }
             }
         }
-    }
+    };
+    if constexpr (no_shapes > 0)
+        scan(padded_query(query, borders));
+    else
+        scan(query);
 
     delete[] kmer_buffer1;
     delete[] kmer_buffer2;
@@ -565,84 +613,108 @@ bool RSHash::streaming_locate3(const seqan3::bitpacked_sequence<seqan3::dna4> &q
     uint64_t kernel, kernel_rev;
     uint64_t shapes_fwd[2*std::max(no_shapes, 1)], shapes_rev[2*std::max(no_shapes, 1)];
 
-    for (auto&& window : query | rshash::views::kmer_view({.window_size = window_size}))
-    {
-        locate_query_words<no_shapes>(window, shapes_fwd, shapes_rev, kernel, kernel_rev);
+    // shapes: the padded query, so that the shapes at the query ends are found as well
+    const int64_t query_length = query.size();
+    int64_t w = -1;   // window of the padded query
+    auto scan = [&](auto &&sequence) {
+        for (auto&& window : sequence | rshash::views::kmer_view({.window_size = window_size}))
+        {
+            uint64_t active = ~uint64_t{0};
+            if constexpr (no_shapes > 0) {
+                active = borders.active(++w, query_length);
+                if(!active) {
+                    // no placement within the query: the window is skipped
+                    rolling1 = false;
+                    rolling2 = false;
+                    rolling3 = false;
+                    continue;
+                }
+            }
+            locate_query_words<no_shapes>(window, shapes_fwd, shapes_rev, kernel, kernel_rev);
+            if constexpr (no_shapes > 0) {
+                if(active != borders.all)
+                    disable_placements<no_shapes>(active, shapes_fwd, shapes_rev);
+            }
 
-        if(!rolling1) {
-            minimiser1 = find_minimiser<1>(kernel, kernel_rev, left_minimiser_position1, right_minimiser_position1);
-            rolling1 = true;
-        }
-        else
-            update_minimiser<1>(kernel, kernel_rev, minimiser1, left_minimiser_position1, right_minimiser_position1);
-
-        if(minimiser1 == current_pos_minimiser1) {
-            locate_buffer<1, no_shapes>(kmer_buffer1, offsets1, sequence_ends1, no_minimiser1, shapes_fwd, shapes_rev, left_minimiser_position1, right_minimiser_position1, positions, no_positions, found_kmers);
-            rolling2 = false;
-            rolling3 = false;
-        }
-        else if(minimiser1 != current_neg_minimiser1 && r1.contains(minimiser1, minimiser_rank1)) {
-            const size_t minimiser_position1 = s1_select.select(minimiser_rank1);
-            no_minimiser1 = s1_select.select(minimiser_rank1+1) - minimiser_position1;
-
-            fill_buffer2<1>(offsets1, kmer_buffer1, sequence_ends1, minimiser_position1, no_minimiser1);
-            locate_buffer<1, no_shapes>(kmer_buffer1, offsets1, sequence_ends1, no_minimiser1, shapes_fwd, shapes_rev, left_minimiser_position1, right_minimiser_position1, positions, no_positions, found_kmers);
-            current_pos_minimiser1 = minimiser1;
-            rolling2 = false;
-            rolling3 = false;
-        }
-        else {
-            if(!rolling2) {
-                minimiser2 = find_minimiser<2>(kernel, kernel_rev, left_minimiser_position2, right_minimiser_position2);
-                rolling2 = true;
+            if(!rolling1) {
+                minimiser1 = find_minimiser<1>(kernel, kernel_rev, left_minimiser_position1, right_minimiser_position1);
+                rolling1 = true;
             }
             else
-                update_minimiser<2>(kernel, kernel_rev, minimiser2, left_minimiser_position2, right_minimiser_position2);
+                update_minimiser<1>(kernel, kernel_rev, minimiser1, left_minimiser_position1, right_minimiser_position1);
 
-            if(minimiser2 == current_pos_minimiser2) {
-                locate_buffer<2, no_shapes>(kmer_buffer2, offsets2, sequence_ends2, no_minimiser2, shapes_fwd, shapes_rev, left_minimiser_position2, right_minimiser_position2, positions, no_positions, found_kmers);
+            if(minimiser1 == current_pos_minimiser1) {
+                locate_buffer<1, no_shapes>(kmer_buffer1, offsets1, sequence_ends1, no_minimiser1, shapes_fwd, shapes_rev, left_minimiser_position1, right_minimiser_position1, positions, no_positions, found_kmers);
+                rolling2 = false;
                 rolling3 = false;
             }
-            else if(minimiser2 != current_neg_minimiser2 && r2.contains(minimiser2, minimiser_rank2)) {
-                const size_t minimiser_position2 = s2_select.select(minimiser_rank2);
-                no_minimiser2 = s2_select.select(minimiser_rank2+1) - minimiser_position2;
+            else if(minimiser1 != current_neg_minimiser1 && r1.contains(minimiser1, minimiser_rank1)) {
+                const size_t minimiser_position1 = s1_select.select(minimiser_rank1);
+                no_minimiser1 = s1_select.select(minimiser_rank1+1) - minimiser_position1;
 
-                fill_buffer2<2>(offsets2, kmer_buffer2, sequence_ends2, minimiser_position2, no_minimiser2);
-                locate_buffer<2, no_shapes>(kmer_buffer2, offsets2, sequence_ends2, no_minimiser2, shapes_fwd, shapes_rev, left_minimiser_position2, right_minimiser_position2, positions, no_positions, found_kmers);
-                current_pos_minimiser2 = minimiser2;
-                current_neg_minimiser1 = minimiser1;
+                fill_buffer2<1>(offsets1, kmer_buffer1, sequence_ends1, minimiser_position1, no_minimiser1);
+                locate_buffer<1, no_shapes>(kmer_buffer1, offsets1, sequence_ends1, no_minimiser1, shapes_fwd, shapes_rev, left_minimiser_position1, right_minimiser_position1, positions, no_positions, found_kmers);
+                current_pos_minimiser1 = minimiser1;
+                rolling2 = false;
                 rolling3 = false;
             }
             else {
-                if(!rolling3) {
-                    minimiser3 = find_minimiser<3>(kernel, kernel_rev, left_minimiser_position3, right_minimiser_position3);
-                    rolling3 = true;
+                if(!rolling2) {
+                    minimiser2 = find_minimiser<2>(kernel, kernel_rev, left_minimiser_position2, right_minimiser_position2);
+                    rolling2 = true;
                 }
                 else
-                    update_minimiser<3>(kernel, kernel_rev, minimiser3, left_minimiser_position3, right_minimiser_position3);
+                    update_minimiser<2>(kernel, kernel_rev, minimiser2, left_minimiser_position2, right_minimiser_position2);
 
-                if(minimiser3 == current_pos_minimiser3) {
-                    locate_buffer<3, no_shapes>(kmer_buffer3, offsets3, sequence_ends3, no_minimiser3, shapes_fwd, shapes_rev, left_minimiser_position3, right_minimiser_position3, positions, no_positions, found_kmers);
+                if(minimiser2 == current_pos_minimiser2) {
+                    locate_buffer<2, no_shapes>(kmer_buffer2, offsets2, sequence_ends2, no_minimiser2, shapes_fwd, shapes_rev, left_minimiser_position2, right_minimiser_position2, positions, no_positions, found_kmers);
+                    rolling3 = false;
                 }
-                else if(minimiser3 != current_neg_minimiser3 && r3.contains(minimiser3, minimiser_rank3)) {
-                    const size_t minimiser_position3 = s3_select.select(minimiser_rank3);
-                    no_minimiser3 = s3_select.select(minimiser_rank3+1) - minimiser_position3;
+                else if(minimiser2 != current_neg_minimiser2 && r2.contains(minimiser2, minimiser_rank2)) {
+                    const size_t minimiser_position2 = s2_select.select(minimiser_rank2);
+                    no_minimiser2 = s2_select.select(minimiser_rank2+1) - minimiser_position2;
 
-                    fill_buffer2<3>(offsets3, kmer_buffer3, sequence_ends3, minimiser_position3, no_minimiser3);
-                    locate_buffer<3, no_shapes>(kmer_buffer3, offsets3, sequence_ends3, no_minimiser3, shapes_fwd, shapes_rev, left_minimiser_position3, right_minimiser_position3, positions, no_positions, found_kmers);
-                    current_pos_minimiser3 = minimiser3;
+                    fill_buffer2<2>(offsets2, kmer_buffer2, sequence_ends2, minimiser_position2, no_minimiser2);
+                    locate_buffer<2, no_shapes>(kmer_buffer2, offsets2, sequence_ends2, no_minimiser2, shapes_fwd, shapes_rev, left_minimiser_position2, right_minimiser_position2, positions, no_positions, found_kmers);
+                    current_pos_minimiser2 = minimiser2;
                     current_neg_minimiser1 = minimiser1;
-                    current_neg_minimiser2 = minimiser2;
+                    rolling3 = false;
                 }
                 else {
-                    found_kmers += locate_last_level<no_shapes, use_ht>(window.value, window.value_hi, window.value_rev, window.value_rev_hi, positions, no_positions);
-                    current_neg_minimiser1 = minimiser1;
-                    current_neg_minimiser2 = minimiser2;
-                    current_neg_minimiser3 = minimiser3;
+                    if(!rolling3) {
+                        minimiser3 = find_minimiser<3>(kernel, kernel_rev, left_minimiser_position3, right_minimiser_position3);
+                        rolling3 = true;
+                    }
+                    else
+                        update_minimiser<3>(kernel, kernel_rev, minimiser3, left_minimiser_position3, right_minimiser_position3);
+
+                    if(minimiser3 == current_pos_minimiser3) {
+                        locate_buffer<3, no_shapes>(kmer_buffer3, offsets3, sequence_ends3, no_minimiser3, shapes_fwd, shapes_rev, left_minimiser_position3, right_minimiser_position3, positions, no_positions, found_kmers);
+                    }
+                    else if(minimiser3 != current_neg_minimiser3 && r3.contains(minimiser3, minimiser_rank3)) {
+                        const size_t minimiser_position3 = s3_select.select(minimiser_rank3);
+                        no_minimiser3 = s3_select.select(minimiser_rank3+1) - minimiser_position3;
+
+                        fill_buffer2<3>(offsets3, kmer_buffer3, sequence_ends3, minimiser_position3, no_minimiser3);
+                        locate_buffer<3, no_shapes>(kmer_buffer3, offsets3, sequence_ends3, no_minimiser3, shapes_fwd, shapes_rev, left_minimiser_position3, right_minimiser_position3, positions, no_positions, found_kmers);
+                        current_pos_minimiser3 = minimiser3;
+                        current_neg_minimiser1 = minimiser1;
+                        current_neg_minimiser2 = minimiser2;
+                    }
+                    else {
+                        found_kmers += locate_last_level<no_shapes, use_ht>(window.value, window.value_hi, window.value_rev, window.value_rev_hi, positions, no_positions, active);
+                        current_neg_minimiser1 = minimiser1;
+                        current_neg_minimiser2 = minimiser2;
+                        current_neg_minimiser3 = minimiser3;
+                    }
                 }
             }
         }
-    }
+    };
+    if constexpr (no_shapes > 0)
+        scan(padded_query(query, borders));
+    else
+        scan(query);
 
     delete[] kmer_buffer1;
     delete[] kmer_buffer2;

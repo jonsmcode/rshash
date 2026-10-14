@@ -66,6 +66,8 @@ class RSHash
 private:
     Shapes64 shapes;
     int number_shapes;
+    // query padding and the placements per window used at the query ends (shapes only, set in initialise_lookupfn)
+    ShapeBorders borders;
     size_t overlap;
     uint64_t k, window_size;
     uint64_t level, m1, m_thres1, m2, m_thres2, m3, m_thres3, threshold;
@@ -147,9 +149,9 @@ private:
     template<int level, int no_shapes>
     inline bool lookup_buffer128(uint64_t*, uint64_t *, const size_t, const uint64_t, const uint64_t, uint64_t*, uint64_t*, uint64_t &, const size_t, const size_t, bool &, uint64_t &, uint64_t &, uint64_t &, uint64_t &);
     template<int no_shapes, bool use_ht, bool locate>
-    inline bool lookup_last_level(const uint64_t, const uint64_t, const uint64_t, const uint64_t);
+    inline bool lookup_last_level(const uint64_t, const uint64_t, const uint64_t, const uint64_t, const uint64_t active = ~uint64_t{0});
     template<int no_shapes, bool use_ht>
-    inline bool locate_last_level(const uint64_t, const uint64_t, const uint64_t, const uint64_t, std::vector<uint64_t>&, uint64_t&);
+    inline bool locate_last_level(const uint64_t, const uint64_t, const uint64_t, const uint64_t, std::vector<uint64_t>&, uint64_t&, const uint64_t active = ~uint64_t{0});
     template<int no_shapes>
     inline bool extend_in_text(uint64_t&, uint64_t, uint64_t, bool, const uint64_t, const uint64_t, uint64_t*, uint64_t*, uint64_t&, uint64_t&);
     const inline uint64_t get_word64(uint64_t pos);
@@ -191,6 +193,18 @@ private:
     inline void locate_buffer(uint64_t*, uint64_t*, uint64_t *, const size_t, const uint64_t *, const uint64_t *, const size_t, const size_t, std::vector<uint64_t> &, uint64_t&, uint64_t&);
     template<int no_shapes, typename Window>
     inline void locate_query_words(const Window &, uint64_t *, uint64_t *, uint64_t &, uint64_t &);
+
+    // the query words of the placements that are not active (bit s of active) are set to a value that cannot
+    // match: (x & mask.hi) has no bit outside mask.hi, and mask.hi is not all ones as windows have < 64 bases
+    template<int no_shapes>
+    inline void disable_placements(const uint64_t active, uint64_t *shapes_fwd, uint64_t *shapes_rev) {
+        for(int i = 0; i < no_shapes; i++) {
+            if(!((active >> (2*i)) & 1))
+                shapes_fwd[2*i + 1] = ~shapes.shapes[i].w_mask.hi;
+            if(!((active >> (2*i + 1)) & 1))
+                shapes_rev[2*i + 1] = ~shapes.shapes[i].w_mask_rev.hi;
+        }
+    }
     template <int no_shapes, bool use_ht, bool locate>
     void initialise_lookupfn_impl();
     template<int no_shapes>
@@ -243,6 +257,12 @@ public:
     {}
     uint8_t getk() { return window_size; }
     Shapes64 getshapes() { return shapes; }
+    // number of k-mers/shape windows the streaming lookup and locate check in a query of length L
+    uint64_t query_windows(const uint64_t L) {
+        if(number_shapes == 0)
+            return L >= window_size ? L - window_size + 1 : 0;
+        return borders.no_windows(L);
+    }
     bool has_locate() { return loc; }
     // build the last level structures (one per shape and orientation) in parallel
     void set_parallel_last_level(bool parallel) { parallel_last_level = parallel; }

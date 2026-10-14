@@ -1,5 +1,10 @@
+#include <algorithm>
 #include <bitset>
+#include <limits>
+#include <ranges>
 #include <stdint.h>
+#include <vector>
+#include <seqan3/alphabet/nucleotide/dna4.hpp>
 #include <immintrin.h>
 #include "util.hpp"
 
@@ -388,6 +393,94 @@ static inline void align_shapes(Shapes64 &shapes)
         shapes.w_dist = std::max(shapes.w_dist, shape.w_rev_dist_right);
         shapes.w_dist = std::max(shapes.w_dist, shape.w_rev_dist_left);
     }
+}
+
+// a query is scanned with windows of shapes.length in which all shapes are aligned around the kernel they share;
+// a shape occurrence near a query end has no such window within the query. so the query is padded by pad_left and
+// pad_right bases and in each window only the placements that lie within the query are used. placement s is the
+// forward (s = 2i) or reverse (s = 2i+1) shape i; in window w of the padded query (query length L) placement s lies
+// within the query iff first(s) <= w <= last(s, L). the kernel lies within every placement, so it consists of query
+// bases in every window that has a placement within the query.
+struct ShapeBorders {
+    // bases from the start of the window (query order) to the start of placement s, and its length
+    std::vector<int64_t> offset;
+    std::vector<int64_t> length;
+    int64_t window = 0;
+    int64_t pad_left = 0;
+    int64_t pad_right = 0;
+    uint64_t all = 0;   // all placements
+    int64_t first_all = 0, last_all_minus_L = 0;   // windows in which all placements lie within the query
+
+    int64_t first(const size_t s) const { return pad_left - offset[s]; }
+    int64_t last(const size_t s, const int64_t L) const { return pad_left + L - length[s] - offset[s]; }
+
+    // bit s is set iff placement s of window w lies within the query
+    uint64_t active(const int64_t w, const int64_t L) const {
+        if(w >= first_all && w <= last_all_minus_L + L)
+            return all;
+        uint64_t mask = 0;
+        for(size_t s = 0; s < offset.size(); s++)
+            mask |= uint64_t(w >= first(s) && w <= last(s, L)) << s;
+        return mask;
+    }
+
+    // number of windows of the padded query with at least one placement within the query
+    uint64_t no_windows(const int64_t L) const {
+        std::vector<std::pair<int64_t, int64_t>> intervals;
+        for(size_t s = 0; s < offset.size(); s++)
+            if(first(s) <= last(s, L))
+                intervals.emplace_back(first(s), last(s, L));
+        std::ranges::sort(intervals);
+        uint64_t n = 0;
+        int64_t end = -1;   // last window counted
+        for(const auto &[b, e] : intervals) {
+            if(e > end) {
+                n += e - std::max(b, end + 1) + 1;
+                end = e;
+            }
+        }
+        return n;
+    }
+};
+
+static inline ShapeBorders shape_borders(const Shapes64 &shapes)
+{
+    ShapeBorders borders;
+    borders.window = shapes.length;
+    for(const Shape64 &shape : shapes.shapes) {
+        // the forward shape is placed w_dist_right bases from the window start, the reverse one is matched against
+        // the reverse complement of the window and placed w_rev_dist_right bases from the window end
+        borders.offset.push_back(shape.w_dist_right);
+        borders.offset.push_back((int64_t) shapes.length - shape.w_rev_dist_right - shape.length);
+        borders.length.push_back(shape.length);
+        borders.length.push_back(shape.length);
+    }
+    for(size_t s = 0; s < borders.offset.size(); s++) {
+        borders.pad_left = std::max(borders.pad_left, borders.offset[s]);
+        borders.pad_right = std::max(borders.pad_right, borders.window - borders.offset[s] - borders.length[s]);
+        borders.all |= uint64_t{1} << s;
+    }
+    borders.first_all = std::numeric_limits<int64_t>::min();
+    borders.last_all_minus_L = std::numeric_limits<int64_t>::max();
+    for(size_t s = 0; s < borders.offset.size(); s++) {
+        borders.first_all = std::max(borders.first_all, borders.first(s));
+        borders.last_all_minus_L = std::min(borders.last_all_minus_L, borders.last(s, 0));
+    }
+
+    return borders;
+}
+
+// the query padded by borders.pad_left and borders.pad_right bases (A), without copying it
+template<typename Sequence>
+static inline auto padded_query(const Sequence &query, const ShapeBorders &borders)
+{
+    const int64_t L = query.size();
+    const int64_t pad_left = borders.pad_left;
+    return std::views::iota(int64_t{0}, pad_left + L + borders.pad_right)
+        | std::views::transform([&query, pad_left, L](const int64_t i) -> seqan3::dna4 {
+            const int64_t q = i - pad_left;
+            return (q < 0 || q >= L) ? seqan3::dna4{} : seqan3::dna4{query[q]};
+        });
 }
 
 static inline Shapes32 shape32_create(const std::vector<uint32_t> &values)
