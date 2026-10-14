@@ -143,6 +143,7 @@ int main(int argc, char** argv)
 
         uint64_t kmers = 0;
         uint64_t found = 0;
+        uint64_t found_queries = 0;
         uint64_t extensions = 0;
         std::chrono::nanoseconds elapsed;
         RSHash index = RSHash();
@@ -152,7 +153,7 @@ int main(int argc, char** argv)
 
         std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
         for (auto query : queries) {
-            found += index.streaming_lookup(query, extensions);
+            found_queries += index.streaming_lookup(query, found, extensions);
             if(index.getshapes().shapes[0].value != std::numeric_limits<uint64_t>::max())
                 kmers += query.size() - index.getshapes().length + 1;
             else
@@ -165,9 +166,11 @@ int main(int argc, char** argv)
         
         std::cout << "==== query report:\n";
         std::cout << "num_kmers = " << kmers << '\n';
+        std::cout << "num_reads = " << queries.size() << '\n';
         std::cout << "num_positive_kmers = " << found << " (" << (double) found/kmers*100 << "%)\n";
         std::cout << "time_per_kmer = " << ns_per_kmer << '\n';
         std::cout << "extensions = " << extensions << '\n';
+        std::cout << "num_found_queries = " << found_queries << " (" << (double) found_queries/queries.size()*100 << "%)\n";
     }
     else if(args.cmd == "locate")
     {
@@ -190,13 +193,13 @@ int main(int argc, char** argv)
         std::cout << "locating...\n";
         uint64_t found_positions = 0;
         uint64_t found_kmers = 0;
+        uint64_t found_queries = 0;
         // const size_t max_kmer_freq = 1000000;
         std::vector<uint64_t> positions;
         // positions.reserve(max_query_length*max_kmer_freq);
         std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
         for (auto query : queries) {
-            found_kmers += index.streaming_locate(query, positions, found_positions);
-            found_positions += positions.size();
+            found_queries += index.streaming_locate(query, positions, found_kmers, found_positions);
             if(index.getshapes().shapes[0].value != std::numeric_limits<uint64_t>::max())
                 kmers += query.size() - index.getshapes().length + 1;
             else
@@ -210,9 +213,11 @@ int main(int argc, char** argv)
         
         std::cout << "==== query report:\n";
         std::cout << "num_kmers = " << kmers << '\n';
-        std::cout << "num_positive_kmers = " << found_kmers << "\n";
+        std::cout << "num_reads = " << queries.size() << '\n';
+        std::cout << "num_positive_kmers = " << found_kmers << " (" << (double) found_kmers/kmers*100 << "%)\n";
         std::cout << "num_positions = " << found_positions << '\n';
         std::cout << "time_per_kmer = " << ns_per_kmer << '\n';
+        std::cout << "num_found_queries = " << found_queries << " (" << (double) found_queries/queries.size()*100 << "%)\n";
     }
     else if(args.cmd == "bench")
     {

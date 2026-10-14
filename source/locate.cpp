@@ -54,14 +54,19 @@ void RSHash::initialise_locatefn()
     case 3:
         initialise_locatefn_dispatch<3>();
         break;
+    case 4:
+        initialise_locatefn_dispatch<4>();
+        break;
     default:
         throw std::runtime_error("Unsupported number of shapes");
     }
 }
 
-uint64_t RSHash::streaming_locate(const seqan3::bitpacked_sequence<seqan3::dna4> &query,
-    std::vector<uint64_t> &positions, uint64_t &no_positions) {
-    return (this->*streaming_locate_fn)(query, positions, no_positions);
+// returns whether at least one k-mer/shape of the query was found, adds the number of found k-mers/shapes to
+// found_kmers and the number of their positions to no_positions
+bool RSHash::streaming_locate(const seqan3::bitpacked_sequence<seqan3::dna4> &query,
+    std::vector<uint64_t> &positions, uint64_t &found_kmers, uint64_t &no_positions) {
+    return (this->*streaming_locate_fn)(query, positions, found_kmers, no_positions);
 }
 
 uint64_t RSHash::locate(const std::vector<mask128_t> &kmers, std::vector<uint64_t> &positions, uint64_t &no_positions) {
@@ -390,11 +395,11 @@ inline void RSHash::locate_query_words(const Window &window, uint64_t *shapes_fw
 
 
 template<int no_shapes, bool use_ht>
-uint64_t RSHash::streaming_locate1(const seqan3::bitpacked_sequence<seqan3::dna4> &query,
-    std::vector<uint64_t> &positions, uint64_t &no_positions)
+bool RSHash::streaming_locate1(const seqan3::bitpacked_sequence<seqan3::dna4> &query,
+    std::vector<uint64_t> &positions, uint64_t &found_kmers, uint64_t &no_positions)
 {
     constexpr uint64_t INF = std::numeric_limits<uint64_t>::max();
-    uint64_t found_kmers = 0;
+    const uint64_t found_kmers_before = found_kmers;
     uint64_t current_pos_minimiser1 = INF, current_neg_minimiser1 = INF;
     uint64_t* offsets1 = new uint64_t[m_thres1];
     uint64_t* kmer_buffer1 = new uint64_t[2*(m_thres1 * span1)];
@@ -438,16 +443,16 @@ uint64_t RSHash::streaming_locate1(const seqan3::bitpacked_sequence<seqan3::dna4
     delete[] offsets1;
     delete[] sequence_ends1;
 
-    return found_kmers;
+    return found_kmers > found_kmers_before;
 }
 
 
 template<int no_shapes, bool use_ht>
-uint64_t RSHash::streaming_locate2(const seqan3::bitpacked_sequence<seqan3::dna4> &query,
-    std::vector<uint64_t> &positions, uint64_t &no_positions)
+bool RSHash::streaming_locate2(const seqan3::bitpacked_sequence<seqan3::dna4> &query,
+    std::vector<uint64_t> &positions, uint64_t &found_kmers, uint64_t &no_positions)
 {
     constexpr uint64_t INF = std::numeric_limits<uint64_t>::max();
-    uint64_t found_kmers = 0;
+    const uint64_t found_kmers_before = found_kmers;
     uint64_t current_pos_minimiser1 = INF, current_neg_minimiser1 = INF;
     uint64_t current_pos_minimiser2 = INF, current_neg_minimiser2 = INF;
     uint64_t* offsets1 = new uint64_t[m_thres1];
@@ -525,16 +530,16 @@ uint64_t RSHash::streaming_locate2(const seqan3::bitpacked_sequence<seqan3::dna4
     delete[] sequence_ends1;
     delete[] sequence_ends2;
 
-    return found_kmers;
+    return found_kmers > found_kmers_before;
 }
 
 
 template<int no_shapes, bool use_ht>
-uint64_t RSHash::streaming_locate3(const seqan3::bitpacked_sequence<seqan3::dna4> &query,
-    std::vector<uint64_t> &positions, uint64_t &no_positions)
+bool RSHash::streaming_locate3(const seqan3::bitpacked_sequence<seqan3::dna4> &query,
+    std::vector<uint64_t> &positions, uint64_t &found_kmers, uint64_t &no_positions)
 {
     constexpr uint64_t INF = std::numeric_limits<uint64_t>::max();
-    uint64_t found_kmers = 0;
+    const uint64_t found_kmers_before = found_kmers;
     uint64_t current_pos_minimiser1 = INF, current_neg_minimiser1 = INF;
     uint64_t current_pos_minimiser2 = INF, current_neg_minimiser2 = INF;
     uint64_t current_pos_minimiser3 = INF, current_neg_minimiser3 = INF;
@@ -649,5 +654,5 @@ uint64_t RSHash::streaming_locate3(const seqan3::bitpacked_sequence<seqan3::dna4
     delete[] sequence_ends2;
     delete[] sequence_ends3;
 
-    return found_kmers;
+    return found_kmers > found_kmers_before;
 }

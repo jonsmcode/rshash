@@ -61,14 +61,18 @@ void RSHash::initialise_lookupfn()
     case 3:
         initialise_lookupfn_dispatch<3>();
         break;
+    case 4:
+        initialise_lookupfn_dispatch<4>();
+        break;
     default:
         throw std::runtime_error("Unsupported number of shapes");
     }
 }
 
 
-uint64_t RSHash::streaming_lookup(const seqan3::bitpacked_sequence<seqan3::dna4> &query, uint64_t &extensions) {
-    return (this->*streaming_lookup_fn)(query, extensions);
+// returns whether at least one k-mer/shape of the query was found, adds the number of found k-mers/shapes to found_kmers
+bool RSHash::streaming_lookup(const seqan3::bitpacked_sequence<seqan3::dna4> &query, uint64_t &found_kmers, uint64_t &extensions) {
+    return (this->*streaming_lookup_fn)(query, found_kmers, extensions);
 }
 
 uint64_t RSHash::lookup(const std::vector<mask128_t> &kmers) {
@@ -643,7 +647,7 @@ inline bool RSHash::lookup_buffer128(uint64_t* buffer, uint64_t *offsets, const 
 
 
 template<int no_shapes, bool use_ht, bool locate>
-uint64_t RSHash::streaming_lookup1(const seqan3::bitpacked_sequence<seqan3::dna4> &query, uint64_t &extensions)
+bool RSHash::streaming_lookup1(const seqan3::bitpacked_sequence<seqan3::dna4> &query, uint64_t &found_kmers, uint64_t &extensions)
 {
     constexpr uint64_t INF = std::numeric_limits<uint64_t>::max();
     uint64_t current_minimiser1=INF;
@@ -721,12 +725,13 @@ uint64_t RSHash::streaming_lookup1(const seqan3::bitpacked_sequence<seqan3::dna4
     delete[] offsets1;
     delete[] buffer1;
     
-    return occurences;
+    found_kmers += occurences;
+    return occurences > 0;
 }
 
 
 template<int no_shapes, bool use_ht, bool locate>
-uint64_t RSHash::streaming_lookup2(const seqan3::bitpacked_sequence<seqan3::dna4> &query, uint64_t &extensions)
+bool RSHash::streaming_lookup2(const seqan3::bitpacked_sequence<seqan3::dna4> &query, uint64_t &found_kmers, uint64_t &extensions)
 {
     constexpr uint64_t INF = std::numeric_limits<uint64_t>::max();
     uint64_t current_minimiser1=INF, current_minimiser2=INF;
@@ -838,12 +843,13 @@ uint64_t RSHash::streaming_lookup2(const seqan3::bitpacked_sequence<seqan3::dna4
     delete[] buffer1;
     delete[] buffer2;
     
-    return occurences;
+    found_kmers += occurences;
+    return occurences > 0;
 }
 
 
 template<int no_shapes, bool use_ht, bool locate>
-uint64_t RSHash::streaming_lookup3(const seqan3::bitpacked_sequence<seqan3::dna4> &query, uint64_t &extensions)
+bool RSHash::streaming_lookup3(const seqan3::bitpacked_sequence<seqan3::dna4> &query, uint64_t &found_kmers, uint64_t &extensions)
 {
     constexpr uint64_t INF = std::numeric_limits<uint64_t>::max();
     uint64_t current_minimiser1=INF, current_minimiser2=INF, current_minimiser3=INF;
@@ -992,5 +998,6 @@ uint64_t RSHash::streaming_lookup3(const seqan3::bitpacked_sequence<seqan3::dna4
     delete[] buffer2;
     delete[] buffer3;
     
-    return occurences;
+    found_kmers += occurences;
+    return occurences > 0;
 }
