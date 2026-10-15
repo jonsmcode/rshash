@@ -37,6 +37,7 @@ struct cmd_arguments {
     uint16_t t{0};
     bool loc{false};
     bool ht{false};
+    bool first{false};
     bool threads{true};
     std::vector<uint64_t> shape{std::numeric_limits<uint64_t>::max()};
 };
@@ -58,6 +59,7 @@ void initialise_argument_parser(sharg::parser &parser, cmd_arguments &args)
     parser.add_option(args.t, sharg::config{.short_id = 't', .description = "max k-mer/shape frequency threshold"});
     parser.add_flag(args.loc, sharg::config{.long_id = "loc", .description = "enable locate"});
     parser.add_flag(args.ht, sharg::config{.long_id = "ht", .description = "do not use hashtable on last level"});
+    parser.add_flag(args.first, sharg::config{.long_id = "first", .description = "lookup: stop the search in a query at its first found k-mer/shape"});
     parser.add_option(args.threads, sharg::config{.long_id = "threads", .description = "build the last level with one thread per structure (2 per shape)"});
     parser.add_option(args.shape, sharg::config{.long_id = "shape", .description = "shape value. multiple values can be given."});
 }
@@ -152,9 +154,17 @@ int main(int argc, char** argv)
         std::cout << "querying...\n";
 
         std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
-        for (auto query : queries) {
-            found_queries += index.streaming_lookup(query, found, extensions);
-            kmers += index.query_windows(query.size());
+        if(args.first) {
+            for (auto query : queries) {
+                found_queries += index.first_hit_lookup(query, found, extensions);
+                kmers += index.query_windows(query.size());
+            }
+        }
+        else {
+            for (auto query : queries) {
+                found_queries += index.streaming_lookup(query, found, extensions);
+                kmers += index.query_windows(query.size());
+            }
         }
         std::chrono::high_resolution_clock::time_point t_stop = std::chrono::high_resolution_clock::now();
         elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
@@ -168,6 +178,8 @@ int main(int argc, char** argv)
         std::cout << "time_per_kmer = " << ns_per_kmer << '\n';
         std::cout << "extensions = " << extensions << '\n';
         std::cout << "num_found_queries = " << found_queries << " (" << (double) found_queries/queries.size()*100 << "%)\n";
+        std::cout << "time_per_read = " << (double) elapsed.count() / queries.size() << '\n';
+        std::cout << "first_hit = " << args.first << '\n';
     }
     else if(args.cmd == "locate")
     {

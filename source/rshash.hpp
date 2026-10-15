@@ -97,6 +97,7 @@ private:
     using StreamingLookupFn = bool (RSHash::*)(const seqan3::bitpacked_sequence<seqan3::dna4>&, uint64_t&, uint64_t&);
     using LookupFn = uint64_t (RSHash::*)(const std::vector<mask128_t> &);
     StreamingLookupFn streaming_lookup_fn = nullptr;
+    StreamingLookupFn first_hit_lookup_fn = nullptr;
     LookupFn lookup_fn = nullptr;
     using StreamingLocateFn = bool (RSHash::*)(const seqan3::bitpacked_sequence<seqan3::dna4>&, std::vector<uint64_t> &, uint64_t &, uint64_t &);
     using LocateFn = uint64_t (RSHash::*)(const std::vector<mask128_t> &, std::vector<uint64_t>&, uint64_t &);
@@ -157,11 +158,11 @@ private:
     const inline uint64_t get_word64(uint64_t pos);
     const inline uint64_t get_base(uint64_t pos);
     const inline void get_2words64(uint64_t pos, uint64_t &lo, uint64_t &hi);
-    template<int no_shapes, bool use_ht, bool locate>
+    template<int no_shapes, bool use_ht, bool locate, bool first_hit = false>
     bool streaming_lookup1(const seqan3::bitpacked_sequence<seqan3::dna4>&, uint64_t&, uint64_t&);
-    template<int no_shapes, bool use_ht, bool locate>
+    template<int no_shapes, bool use_ht, bool locate, bool first_hit = false>
     bool streaming_lookup2(const seqan3::bitpacked_sequence<seqan3::dna4>&, uint64_t&, uint64_t&);
-    template<int no_shapes, bool use_ht, bool locate>
+    template<int no_shapes, bool use_ht, bool locate, bool first_hit = false>
     bool streaming_lookup3(const seqan3::bitpacked_sequence<seqan3::dna4>&, uint64_t&, uint64_t&);
     template<int no_shapes, bool use_ht>
     bool streaming_locate1(const seqan3::bitpacked_sequence<seqan3::dna4>&, std::vector<uint64_t>&, uint64_t &, uint64_t &);
@@ -276,6 +277,7 @@ public:
     uint64_t locate(const std::vector<mask128_t>&, std::vector<uint64_t>&, uint64_t &);
     void build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&);
     bool streaming_lookup(const seqan3::bitpacked_sequence<seqan3::dna4>&, uint64_t&, uint64_t&);
+    bool first_hit_lookup(const seqan3::bitpacked_sequence<seqan3::dna4>&, uint64_t&, uint64_t&);
     bool streaming_locate(const seqan3::bitpacked_sequence<seqan3::dna4>&, std::vector<uint64_t>&, uint64_t&, uint64_t&);
     int save(const std::filesystem::path&);
     int load(const std::filesystem::path&);

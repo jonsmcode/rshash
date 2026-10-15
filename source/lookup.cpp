@@ -10,21 +10,25 @@ void RSHash::initialise_lookupfn_impl()
     switch (level) {
     case 1:
         streaming_lookup_fn = &RSHash::streaming_lookup1<no_shapes, use_ht, locate>;
+        first_hit_lookup_fn = &RSHash::streaming_lookup1<no_shapes, use_ht, locate, true>;
         lookup_fn           = &RSHash::lookup1<no_shapes, use_ht, locate>;
         break;
 
     case 2:
         streaming_lookup_fn = &RSHash::streaming_lookup2<no_shapes, use_ht, locate>;
+        first_hit_lookup_fn = &RSHash::streaming_lookup2<no_shapes, use_ht, locate, true>;
         lookup_fn           = &RSHash::lookup2<no_shapes, use_ht, locate>;
         break;
 
     case 3:
         streaming_lookup_fn = &RSHash::streaming_lookup3<no_shapes, use_ht, locate>;
+        first_hit_lookup_fn = &RSHash::streaming_lookup3<no_shapes, use_ht, locate, true>;
         lookup_fn           = &RSHash::lookup3<no_shapes, use_ht, locate>;
         break;
 
     default:
         streaming_lookup_fn = nullptr;
+        first_hit_lookup_fn = nullptr;
         lookup_fn = nullptr;
     }
 }
@@ -76,6 +80,11 @@ void RSHash::initialise_lookupfn()
 // returns whether at least one k-mer/shape of the query was found, adds the number of found k-mers/shapes to found_kmers
 bool RSHash::streaming_lookup(const seqan3::bitpacked_sequence<seqan3::dna4> &query, uint64_t &found_kmers, uint64_t &extensions) {
     return (this->*streaming_lookup_fn)(query, found_kmers, extensions);
+}
+
+// as streaming_lookup, but stops at the first found k-mer/shape of the query (found_kmers grows by at most 1)
+bool RSHash::first_hit_lookup(const seqan3::bitpacked_sequence<seqan3::dna4> &query, uint64_t &found_kmers, uint64_t &extensions) {
+    return (this->*first_hit_lookup_fn)(query, found_kmers, extensions);
 }
 
 uint64_t RSHash::lookup(const std::vector<mask128_t> &kmers) {
@@ -661,7 +670,7 @@ inline bool RSHash::lookup_buffer128(uint64_t* buffer, uint64_t *offsets, const 
 }
 
 
-template<int no_shapes, bool use_ht, bool locate>
+template<int no_shapes, bool use_ht, bool locate, bool first_hit>
 bool RSHash::streaming_lookup1(const seqan3::bitpacked_sequence<seqan3::dna4> &query, uint64_t &found_kmers, uint64_t &extensions)
 {
     constexpr uint64_t INF = std::numeric_limits<uint64_t>::max();
@@ -753,6 +762,10 @@ bool RSHash::streaming_lookup1(const seqan3::bitpacked_sequence<seqan3::dna4> &q
                     current_neg_minimiser1 = minimiser1;
                 }
             }
+            if constexpr (first_hit) {
+                if(occurences)
+                    break;
+            }
         }
     };
     if constexpr (no_shapes > 0)
@@ -768,7 +781,7 @@ bool RSHash::streaming_lookup1(const seqan3::bitpacked_sequence<seqan3::dna4> &q
 }
 
 
-template<int no_shapes, bool use_ht, bool locate>
+template<int no_shapes, bool use_ht, bool locate, bool first_hit>
 bool RSHash::streaming_lookup2(const seqan3::bitpacked_sequence<seqan3::dna4> &query, uint64_t &found_kmers, uint64_t &extensions)
 {
     constexpr uint64_t INF = std::numeric_limits<uint64_t>::max();
@@ -893,6 +906,10 @@ bool RSHash::streaming_lookup2(const seqan3::bitpacked_sequence<seqan3::dna4> &q
                     }
                 }
             }
+            if constexpr (first_hit) {
+                if(occurences)
+                    break;
+            }
         }
     };
     if constexpr (no_shapes > 0)
@@ -910,7 +927,7 @@ bool RSHash::streaming_lookup2(const seqan3::bitpacked_sequence<seqan3::dna4> &q
 }
 
 
-template<int no_shapes, bool use_ht, bool locate>
+template<int no_shapes, bool use_ht, bool locate, bool first_hit>
 bool RSHash::streaming_lookup3(const seqan3::bitpacked_sequence<seqan3::dna4> &query, uint64_t &found_kmers, uint64_t &extensions)
 {
     constexpr uint64_t INF = std::numeric_limits<uint64_t>::max();
@@ -1070,6 +1087,10 @@ bool RSHash::streaming_lookup3(const seqan3::bitpacked_sequence<seqan3::dna4> &q
                         }
                     }
                 }
+            }
+            if constexpr (first_hit) {
+                if(occurences)
+                    break;
             }
         }
     };
