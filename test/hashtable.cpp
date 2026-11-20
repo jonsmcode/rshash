@@ -107,6 +107,7 @@ int main(int argc, char** argv)
     // fwd and rev structure per shape, one canonical structure for k-mers
     const size_t no_structures = use_shapes ? 2*no_shapes : 1;
     const size_t window_size = use_shapes ? shapes.length : args.k;
+    const ShapeBorders borders = use_shapes ? shape_borders(shapes) : ShapeBorders{};
 
     std::vector<gtl::flat_hash_set<uint64_t>> hts(args.locate ? 0 : no_structures);
     std::vector<FlatMap> hms(args.locate ? no_structures : 0);
@@ -176,14 +177,18 @@ int main(int argc, char** argv)
     std::cout << "build_time = " << build_time << '\n';
     std::cout << "build_mem = " << build_mem << '\n';
 
+    // placement s (forward 2i, reverse 2i+1 of shape i) is only used if bit s of active is set: in the windows at the
+    // query ends only the placements within the query (see ShapeBorders)
+    auto is_active = [](const uint64_t active, const size_t s) { return (active >> s) & 1; };
+
     // lookup: whether any shape (fwd or rev) of the window is found
-    auto lookup_window = [&](const rshash::kmerview_result &window) {
+    auto lookup_window = [&](const rshash::kmerview_result &window, const uint64_t active = ~uint64_t{0}) {
         if(use_shapes) {
             for(size_t i = 0; i < no_shapes; i++) {
                 const Shape64 &shape = shapes.shapes[i];
                 const uint64_t kmer_fwd = _pext_u64(window.value, shape.w_mask.lo) | (_pext_u64(window.value_hi, shape.w_mask.hi) << shape.w_lo_weight);
                 const uint64_t kmer_rev = _pext_u64(window.value_rev, shape.w_mask_rev.lo) | (_pext_u64(window.value_rev_hi, shape.w_mask_rev.hi) << shape.w_rev_lo_weight);
-                if(hts[2*i].contains(kmer_fwd) || hts[2*i+1].contains(kmer_rev))
+                if((is_active(active, 2*i) && hts[2*i].contains(kmer_fwd)) || (is_active(active, 2*i+1) && hts[2*i+1].contains(kmer_rev)))
                     return true;
             }
             return false;
@@ -192,20 +197,27 @@ int main(int argc, char** argv)
     };
 
     // locate: number of positions of all shapes (fwd and rev) of the window; like rshash locate_last_level
-    // the positions are not read, only counted
-    auto locate_window = [&](const rshash::kmerview_result &window) {
+    // the positions are iterated over (but not reported) and counted
+    auto iterate_positions = [](const FlatMap::Span values) {
+        for(uint32_t v : values)
+            do_not_optimize(v);
+        return (uint64_t) values.size();
+    };
+    auto locate_window = [&](const rshash::kmerview_result &window, const uint64_t active = ~uint64_t{0}) {
         if(use_shapes) {
             uint64_t no_positions = 0;
             for(size_t i = 0; i < no_shapes; i++) {
                 const Shape64 &shape = shapes.shapes[i];
                 const uint64_t kmer_fwd = _pext_u64(window.value, shape.w_mask.lo) | (_pext_u64(window.value_hi, shape.w_mask.hi) << shape.w_lo_weight);
                 const uint64_t kmer_rev = _pext_u64(window.value_rev, shape.w_mask_rev.lo) | (_pext_u64(window.value_rev_hi, shape.w_mask_rev.hi) << shape.w_rev_lo_weight);
-                no_positions += hms[2*i].find(kmer_fwd).size();
-                no_positions += hms[2*i+1].find(kmer_rev).size();
+                if(is_active(active, 2*i))
+                    no_positions += iterate_positions(hms[2*i].find(kmer_fwd));
+                if(is_active(active, 2*i+1))
+                    no_positions += iterate_positions(hms[2*i+1].find(kmer_rev));
             }
             return (uint64_t) no_positions;
         }
-        return (uint64_t) hms[0].find(std::min<uint64_t>(window.value, window.value_rev)).size();
+        return iterate_positions(hms[0].find(std::min<uint64_t>(window.value, window.value_rev)));
     };
 
     if(args.bench) {
@@ -272,7 +284,7 @@ int main(int argc, char** argv)
         }
         else {
             for(const bool positive : {true, false}) {
-                const double t = bench(positive ? pos_kmers : neg_kmers, locate_window, found, no_positions);
+                const double t = bench(positive ? pos_kmers : neg_kmers, [&](const auto &kmer) { return locate_window(kmer); }, found, no_positions);
                 std::cout << "==== " << (positive ? "positive" : "negative") << " locate:\n";
                 std::cout << "num_kmers = " << n << '\n';
                 std::cout << "num_" << (positive ? "positive" : "negative") << "_kmers = " << found << " (" << (double) found/n*100 << "%)\n";
@@ -296,19 +308,34 @@ int main(int argc, char** argv)
         std::chrono::high_resolution_clock::time_point t_start = std::chrono::high_resolution_clock::now();
         for (auto& query : queries) {
             bool found_query = false;
-            for (auto&& window : query | rshash::views::kmer_view({.window_size = window_size})) {
-                bool found;
-                if(args.locate) {
-                    const uint64_t no_positions = locate_window(window);
-                    found_positions += no_positions;
-                    found = no_positions > 0;
+            // shapes: like rshash the padded query, in each window only the placements within the query
+            const int64_t query_length = query.size();
+            int64_t w = -1;
+            auto scan = [&](auto &&sequence) {
+                for (auto&& window : sequence | rshash::views::kmer_view({.window_size = window_size})) {
+                    uint64_t active = ~uint64_t{0};
+                    if(use_shapes) {
+                        active = borders.active(++w, query_length);
+                        if(!active)
+                            continue;
+                    }
+                    bool found;
+                    if(args.locate) {
+                        const uint64_t no_positions = locate_window(window, active);
+                        found_positions += no_positions;
+                        found = no_positions > 0;
+                    }
+                    else
+                        found = lookup_window(window, active);
+                    found_query |= found;
+                    found_kmers += found;
+                    kmers++;
                 }
-                else
-                    found = lookup_window(window);
-                found_query |= found;
-                found_kmers += found;
-                kmers++;
-            }
+            };
+            if(use_shapes)
+                scan(padded_query(query, borders));
+            else
+                scan(query);
             found_queries += found_query;
         }
         std::chrono::high_resolution_clock::time_point t_stop = std::chrono::high_resolution_clock::now();
