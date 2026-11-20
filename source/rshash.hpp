@@ -76,6 +76,8 @@ private:
     uint64_t windowshift;
     uint64_t mmermask1, mmermask2, mmermask3;
     bool loc, use_ht;
+    // false: the k-mers/shapes with frequent minimisers on all levels are dropped (no last level, not exact)
+    bool store_last_level = true;
     // build option of the last level (not stored in the index)
     bool parallel_last_level = true;
     mixer_64 m_hasher1, m_hasher2, m_hasher3;
@@ -267,6 +269,7 @@ public:
     bool has_locate() { return loc; }
     // build the last level structures (one per shape and orientation) in parallel
     void set_parallel_last_level(bool parallel) { parallel_last_level = parallel; }
+    void set_store_last_level(bool store) { store_last_level = store; }
     uint64_t number_unitigs() { return endpoints.rank(endpoints.size()); }
     size_t unitig_size(uint64_t unitig_id) { return endpoints.select(unitig_id+1) - endpoints.select(unitig_id) - k + 1; }
     // const inline uint64_t access(const size_t);
@@ -296,7 +299,8 @@ public:
         uint64_t no_kmers4 = 0;
         size_t freq_space = 0;
         size_t freq_kmers = 0;
-        if(use_ht) {
+        if(!store_last_level) {}
+        else if(use_ht) {
             if(loc) {
                 const size_t n = (number_shapes > 0) ? hashmaps.size() : 1;
                 for(size_t i = 0; i < n; i++) {

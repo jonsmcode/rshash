@@ -78,6 +78,9 @@ template<int no_shapes, bool use_ht>
 inline bool RSHash::locate_last_level(const uint64_t kmer, const uint64_t kmer_hi, const uint64_t kmer_rc, const uint64_t kmer_rc_hi,
     std::vector<uint64_t> &positions, uint64_t &no_positions, const uint64_t active)
 {
+    if(!store_last_level)
+        return false;
+
     // structure j holds the forward (even j) or reverse (odd j) values of shape j/2;
     // all occurrences of all structures are counted (windows found by several shapes are counted several times)
     bool found = false;
@@ -88,7 +91,13 @@ inline bool RSHash::locate_last_level(const uint64_t kmer, const uint64_t kmer_h
             const auto values = hashmaps[j].find(key);
             if(values.empty())
                 return;
-            // for(uint32_t v : values) positions.push_back(v - dist + shapes.overlap); // position of the kernel
+            // the positions (of the kernel) are iterated over, but not reported
+#ifdef FLATMAP_ENCODED
+            // the encoded entries (sequence id, position, orientation) are touched once, but not decoded
+            for(uint64_t v : values) do_not_optimize(v);
+#else
+            for(uint32_t v : values) do_not_optimize(v - dist + shapes.overlap); // positions.push_back(...)
+#endif
             no_positions += values.size();
         }
         else {
@@ -96,8 +105,10 @@ inline bool RSHash::locate_last_level(const uint64_t kmer, const uint64_t kmer_h
             if(!ri[j].contains(key, rank))
                 return;
             const size_t p = si_select[j].select(rank);
-            // for(size_t o = p; o < si_select[j].select(rank + 1); o++) positions.push_back(offsetsi[j].access(o) - dist + shapes.overlap);
-            no_positions += si_select[j].select(rank + 1) - p;
+            const size_t q = si_select[j].select(rank + 1);
+            // the positions (of the kernel) are iterated over, but not reported
+            for(size_t o = p; o < q; o++) do_not_optimize(offsetsi[j].access(o) - dist + shapes.overlap); // positions.push_back(...)
+            no_positions += q - p;
         }
         found = true;
     };
@@ -296,7 +307,7 @@ inline bool RSHash::locate_windows(const uint64_t *offsets, const size_t no_mini
             }
 
             if(match) {
-                // positions.push_back(window_pos + shapes.overlap); // position of the kernel
+                do_not_optimize(window_pos + shapes.overlap); // position of the kernel, positions.push_back(...)
                 no_positions += match;
                 found = true;
             }

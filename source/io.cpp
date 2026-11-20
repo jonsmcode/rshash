@@ -83,6 +83,9 @@ void save(Archive& ar, const FlatMap& map) {
         ar(key, entry.offset, entry.size);
 
     ar(map.values);
+#ifdef FLATMAP_ENCODED
+    ar(map.ref_len_bits);
+#endif
 }
 
 template <class Archive>
@@ -104,6 +107,9 @@ void load(Archive& ar, FlatMap& map) {
     }
 
     ar(map.values);
+#ifdef FLATMAP_ENCODED
+    ar(map.ref_len_bits);
+#endif
 }
 
 
@@ -121,6 +127,7 @@ int RSHash::save(const std::filesystem::path &filepath) {
     archive(ri.size());
     for(const auto &ef : ri)
         archive(ef);
+    archive(store_last_level);
 
     out.close();
     return 0;
@@ -144,6 +151,10 @@ int RSHash::load(const std::filesystem::path &filepath) {
         ri.emplace_back(std::vector<uint64_t>{}, 1);
         archive(ri.back());
     }
+    // not stored by older indexes
+    store_last_level = true;
+    if(in.peek() != std::ifstream::traits_type::eof())
+        archive(store_last_level);
     in.close();
 
     this->s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), s1.size(), 3);

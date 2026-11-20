@@ -4,6 +4,14 @@ struct mask128_t {
 };
 
 
+// the value has to be computed, but is not used (like benchmark::DoNotOptimize); for timing the iteration over
+// located positions without reporting them
+static inline void do_not_optimize(const uint64_t value)
+{
+    asm volatile("" : : "r"(value) : "memory");
+}
+
+
 static inline constexpr uint64_t compute_mask(uint64_t const size)
 {
     assert(size > 0u);

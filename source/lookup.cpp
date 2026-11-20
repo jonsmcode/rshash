@@ -117,6 +117,8 @@ inline bool contains_impl(Forward &forward, const std::vector<Shape64>& shapes,
 template<int no_shapes, bool use_ht, bool locate>
 inline bool RSHash::lookup_last_level(const uint64_t kmer, const uint64_t kmer_hi, const uint64_t kmer_rc, const uint64_t kmer_rc_hi, const uint64_t active)
 {
+    if(!store_last_level)
+        return false;
     if constexpr (use_ht) {
         if constexpr (locate)
             return contains_impl<no_shapes>(hashmaps, shapes.shapes, kmer, kmer_hi, kmer_rc, kmer_rc_hi, active);

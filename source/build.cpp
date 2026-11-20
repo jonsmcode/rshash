@@ -377,7 +377,11 @@ void RSHash::process_canonical_kmers(Add&& add,
         auto skmer = input[skmer_info.seq_id] | std::views::drop(skmer_info.start) | std::views::take(skmer_info.end - skmer_info.start);
 
         for (auto&& kmer : skmer | rshash::views::kmer_view({.window_size = window_size})) {
-            add(std::min<uint64_t>(kmer.value, kmer.value_rev), pos);
+            // add can also take the orientation (whether the canonical k-mer is the forward k-mer)
+            if constexpr (std::is_invocable_v<Add&, uint64_t, uint32_t, bool>)
+                add(std::min<uint64_t>(kmer.value, kmer.value_rev), pos, kmer.value <= kmer.value_rev);
+            else
+                add(std::min<uint64_t>(kmer.value, kmer.value_rev), pos);
             ++pos;
         }
     }
@@ -421,6 +425,9 @@ RSHash::EF RSHash::build_level(const size_t idx, const std::vector<KeyValue>& pa
 void RSHash::last_level(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& input,
     const std::vector<SkmerInfo> &freq_skmers)
 {
+    if(!store_last_level)
+        return;
+
     gtl::flat_hash_map<uint64_t, uint16_t> kmer_counts;
     if(threshold > 0)
         kmer_counts = count_kmers(input, freq_skmers);
@@ -466,7 +473,48 @@ void RSHash::last_level(const std::vector<seqan3::bitpacked_sequence<seqan3::dna
     if(use_ht) {
         if(loc) {
             std::vector<FlatMap> maps(no_structures);
+#ifdef FLATMAP_ENCODED
+            // positional information as in the u2o table of piscem-style rshash (encode_entry of ContigTable):
+            // (sequence id << (ref_len_bits + 1)) | (position in sequence << 1) | forward, with
+            // ref_len_bits = ceil(log2(max sequence length + 1)) and ceil(log2(no sequences + 1)) bits for the id
+            uint64_t max_len = 0;
+            for(const auto &record : input)
+                max_len = std::max<uint64_t>(max_len, record.size());
+            const uint64_t ref_len_bits = std::bit_width(max_len);
+            const uint64_t ref_id_bits = std::bit_width(input.size());
+            const uint64_t width = ref_len_bits + ref_id_bits + 1;
+            if(width > 57) // compact_vector::access() reads at most 57 bits
+                throw std::runtime_error("encoded positions need more than 57 bits");
+            // canonical k-mers: the orientation is carried in the lowest bit of the (shifted) key until encoding
+            const int key_shift = (number_shapes == 0) ? 1 : 0;
+            if(key_shift && 2 * window_size > 63)
+                throw std::runtime_error("encoded positions need k <= 31");
+            std::cout << "encoded positions: " << ref_id_bits << " + " << ref_len_bits << " + 1 = " << width << " bits\n";
+
+            for_each_structure([&](const size_t j) {
+                std::vector<KeyValue> pairs;
+                auto add = [&](uint64_t key, uint32_t pos, bool fw = true) {
+                    pairs.push_back({key_shift ? (key << 1 | fw) : key, pos});
+                };
+                auto skip = [](uint64_t, uint32_t, bool = true) {};
+                if(j % 2 == 0)
+                    process(j / 2, add, skip);
+                else
+                    process(j / 2, skip, add);
+                sort_unique(pairs);
+                // shapes: the forward (even j) and reverse (odd j) structures
+                const bool structure_fw = (j % 2 == 0);
+                maps[j] = FlatMap::from_sorted_encoded(pairs, width, key_shift, ref_len_bits, [&](const KeyValue &p) {
+                    const bool fw = key_shift ? (p.key & 1) : structure_fw;
+                    // sequence i starts at text position endpoints.select(i + 1) (after the padding at 0)
+                    const uint64_t seq_id = endpoints.rank(uint64_t(p.value) + 1) - 2;
+                    const uint64_t seq_pos = p.value - endpoints.select(seq_id + 1);
+                    return (seq_id << (ref_len_bits + 1)) | (seq_pos << 1) | uint64_t(fw);
+                });
+            });
+#else
             for_each_structure([&](const size_t j) { maps[j] = FlatMap::from_sorted(collect_sorted(j)); });
+#endif
             for(auto &map : maps)
                 hashmaps.push_back(std::move(map));
         }
@@ -617,7 +665,7 @@ void RSHash::build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& 
 
     // print_freq_skmers(input, freq_skmers);
 
-    std::cout << "build last level...\n" << freq_kmers << " frequent kmers\n";
+    std::cout << (store_last_level ? "build last level...\n" : "no last level, dropped...\n") << freq_kmers << " frequent kmers\n";
     last_level(input, freq_skmers);
 
     std::cout << "copy text...\n";
