@@ -70,7 +70,9 @@ private:
     ShapeBorders borders;
     size_t overlap;
     uint64_t k, window_size;
-    uint64_t level, m1, m_thres1, m2, m_thres2, m3, m_thres3, threshold;
+    uint64_t level, m1, m_thres1, m2, m_thres2, m3, m_thres3;
+    // k-mer/shape frequency threshold: only k-mers/shapes occurring less often in the text are stored (0: all)
+    uint64_t threshold = 0;
     uint64_t span1, span2, span3;
     mask128_t windowmask;
     uint64_t windowshift;
@@ -116,13 +118,12 @@ private:
     void fill_minimizer_offsets(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &, std::vector<size_t> &, std::vector<uint8_t> &, const size_t, const size_t);
     template<int level>
     size_t get_frequent_skmers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> &, const std::vector<SkmerInfo> &, std::vector<SkmerInfo> &);
-    gtl::flat_hash_map<uint64_t, uint16_t> count_kmers(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &);
-    template <typename Add>
-    void process_canonical_kmers(Add&&, const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &);
-    template <typename AddForward, typename AddReverse>
-    void process_freq_kmers(AddForward&&, AddReverse&& , const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &, gtl::flat_hash_map<uint64_t, uint16_t> &, Shape64 &);
-    // template <typename AddForward>
-    // void process_freq_kmers(AddForward&&, const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &, gtl::flat_hash_map<uint64_t, uint16_t> &);
+    // keep predicate of process_canonical_kmers/process_freq_kmers that accepts all k-mers/shapes (no threshold)
+    struct KeepAll { bool operator()(uint64_t) const { return true; } };
+    template <typename Add, typename Keep>
+    void process_canonical_kmers(Add&&, Keep&&, const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &);
+    template <typename AddForward, typename AddReverse, typename Keep>
+    void process_freq_kmers(AddForward&&, AddReverse&&, Keep&&, const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &, const Shape64 &);
     using EF = sux::bits::EliasFano<sux::util::AllocType::MALLOC>;
     EF build_level(size_t, const std::vector<KeyValue>&);
     void last_level(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &);
@@ -267,6 +268,10 @@ public:
         return borders.no_windows(L);
     }
     bool has_locate() { return loc; }
+    // an index with a k-mer/shape frequency threshold only supports locate: the lookup extends hits in the text and
+    // would also report the k-mers/shapes that are not stored
+    bool has_lookup() { return threshold == 0; }
+    uint64_t get_threshold() { return threshold; }
     // build the last level structures (one per shape and orientation) in parallel
     void set_parallel_last_level(bool parallel) { parallel_last_level = parallel; }
     void set_store_last_level(bool store) { store_last_level = store; }

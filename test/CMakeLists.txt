@@ -25,3 +25,12 @@ target_link_libraries(parse PRIVATE seqan3::seqan3 sharg::sharg gtl)
 add_executable (preproc preprocess.cpp)
 target_compile_options(preproc PRIVATE -O3 -march=native -Wno-interference-size)
 target_link_libraries(preproc PRIVATE seqan3::seqan3 sharg::sharg)
+
+# correctness test of the k-mer/shape frequency threshold (rshash build -t) against a reference of all text k-mers
+add_executable (test_threshold test_threshold.cpp
+    ${CMAKE_SOURCE_DIR}/source/build.cpp ${CMAKE_SOURCE_DIR}/source/lookup.cpp
+    ${CMAKE_SOURCE_DIR}/source/locate.cpp ${CMAKE_SOURCE_DIR}/source/io.cpp)
+target_include_directories(test_threshold PRIVATE ${CMAKE_SOURCE_DIR}/sux ${CMAKE_SOURCE_DIR}/source)
+target_compile_definitions(test_threshold PRIVATE PARSEARCH)
+target_compile_options(test_threshold PRIVATE -O3 -march=native -Wno-interference-size)
+target_link_libraries(test_threshold PRIVATE seqan3::seqan3 sharg::sharg gtl)

@@ -40,14 +40,26 @@ template<int level, typename MinimizerT>
 inline void RSHash::filter_freq_minimizers(std::vector<MinimizerT> &minimizers,
     std::vector<uint16_t> &counts, size_t &no_minimizers, size_t &no_skmers)
 {
-    uint64_t threshold;
+    uint64_t max_occurences;
     if constexpr (level == 1)
-        threshold = m_thres1;
+        max_occurences = m_thres1;
     if constexpr (level == 2)
-        threshold = m_thres2;
+        max_occurences = m_thres2;
     if constexpr (level == 3)
-        threshold = m_thres3;
-    
+        max_occurences = m_thres3;
+
+    // k-mer/shape frequency threshold: a k-mer/shape stored on this level must occur less than threshold times, so the
+    // minimisers occurring threshold times or more are passed on to the next level; the k-mers/shapes that reach the
+    // last level are counted exactly (see last_level). the build view emits all positions of a minimiser in a window
+    // (ties), so every occurrence of a k-mer/shape value is found from its own position of the minimiser: the leftmost
+    // one on its strand (forward), the mirrored one (reverse complement). a forward and a reverse complement occurrence
+    // could only share this position if it held an m-mer equal to its reverse complement, which is impossible for odd
+    // m (required with a threshold, see build): frequency <= minimiser occurrences
+    size_t no_threshold_minimizers = 0;
+    auto exceeds_threshold = [&](const size_t occurences) {
+        return threshold > 0 && occurences >= threshold;
+    };
+
     size_t write_pos_idx = 0, write_min_idx = 0;
 
     // keeps the distinct positions of a minimiser if there are at most threshold of them; the radix sort does not
@@ -58,8 +70,12 @@ inline void RSHash::filter_freq_minimizers(std::vector<MinimizerT> &minimizers,
         size_t occurences = 0;
         for (size_t j = start; j < end; j++)
             occurences += (j == start || minimizers[j].second != minimizers[j-1].second);
-        if(occurences > threshold)
+        if(occurences > max_occurences)
             return;
+        if(exceeds_threshold(occurences)) {
+            no_threshold_minimizers++;
+            return;
+        }
 
         minimizers[write_min_idx++].first = minimizer;
         uint64_t previous = 0;
@@ -80,6 +96,9 @@ inline void RSHash::filter_freq_minimizers(std::vector<MinimizerT> &minimizers,
         }
     }
     keep_minimizer(start, minimizers.size());
+
+    if(no_threshold_minimizers > 0)
+        std::cout << no_threshold_minimizers << " minimizers passed on because of the k-mer threshold " << threshold << "\n";
 
     no_minimizers = write_min_idx;
     no_skmers = write_pos_idx;
@@ -292,96 +311,81 @@ size_t RSHash::get_frequent_skmers(
 }
 
 
-gtl::flat_hash_map<uint64_t, uint16_t> RSHash::count_kmers(
+template <typename AddForward, typename AddReverse, typename Keep>
+void RSHash::process_freq_kmers(AddForward&& addfwd, AddReverse&& addrev, Keep&& keep,
     const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& input,
-    const std::vector<SkmerInfo> &freq_skmers)
+    const std::vector<SkmerInfo> &freq_skmers, const Shape64 &shape)
 {
-    
-    gtl::flat_hash_map<uint64_t, uint16_t> kmer_counts;
-    for(const auto & skmer_info : freq_skmers) {
-        size_t s = (skmer_info.start > shapes.overlap) ? skmer_info.start - shapes.overlap : 0;
-        size_t e = std::min(skmer_info.end + shapes.overlap, input[skmer_info.seq_id].size());
+    constexpr bool filter = !std::is_same_v<std::decay_t<Keep>, KeepAll>;
+    // a super-k-mer (of kernels) is extended by the overlap of the shape window on both sides: the kernel lies at the
+    // start of the run of a forward shape and at the end of the run of a reverse shape, which is shapes.overlap
+    // (>= shape.overlap + run - kernel) bases away from the shape ends. so the windows of neighbouring super-k-mers
+    // can overlap: every window (text position) is only processed once, the super-k-mers are sorted by text position
+    const size_t extension = shapes.overlap;
+    uint64_t next_pos = 0, last_start = 0;
+    for (const auto& skmer_info : freq_skmers) {
+        const uint64_t sequence_begin = endpoints.select(skmer_info.seq_id + 1);
+        size_t s = (skmer_info.start > extension) ? skmer_info.start - extension : 0;
+        const size_t e = std::min(skmer_info.end + extension, input[skmer_info.seq_id].size());
+        if(sequence_begin + s < last_start)
+            throw std::runtime_error("super-k-mers of the last level are not sorted");
+        last_start = sequence_begin + s;
+        s = std::max<uint64_t>(sequence_begin + s, next_pos) - sequence_begin;
+        if(s + shape.length > e)
+            continue;
+        // text position of the current shape window
+        uint64_t pos = sequence_begin + s;
+        next_pos = sequence_begin + e - shape.length + 1;
+
         auto skmer = input[skmer_info.seq_id] | std::views::drop(s) | std::views::take(e - s);
-        for(auto && kmer : skmer | rshash::views::kmer_view({.window_size = window_size})) {
-            if(number_shapes > 0) {
-                // todo: multiple shapes
-                uint64_t shape_val = _pext_u64(kmer.value, shapes.shapes[0].mask.lo);
-                uint64_t shape_val_rev = _pext_u64(kmer.value_rev, shapes.shapes[0].mask.lo);
-                uint64_t canonical_shape = std::min<uint64_t>(shape_val, shape_val_rev);
-                if(kmer_counts[canonical_shape] < threshold)
-                    kmer_counts[canonical_shape]++;
+
+        for (auto&& kmer : skmer | rshash::views::kmer_view({.window_size = shape.length})) {
+            const uint64_t shape_fwd = _pext_u64(kmer.value, shape.mask.lo) | (_pext_u64(kmer.value_hi, shape.mask.hi) << shape.lo_weight);
+            const uint64_t shape_rev = _pext_u64(kmer.value, shape.mask_rev.lo) | (_pext_u64(kmer.value_hi, shape.mask_rev.hi) << shape.rev_lo_weight);
+            if constexpr (filter) {
+                // the k-mer/shape threshold is applied to the shape values of both strands: the forward structure
+                // stores the shape of the window, the reverse structure (reversed shape) the shape of its reverse
+                // complement, which is found by the queries with this shape value
+                const uint64_t shape_of_rc = _pext_u64(kmer.value_rev, shape.mask.lo) | (_pext_u64(kmer.value_rev_hi, shape.mask.hi) << shape.lo_weight);
+                if(keep(shape_fwd))
+                    addfwd(shape_fwd, pos);
+                if(keep(shape_of_rc))
+                    addrev(shape_rev, pos);
             }
             else {
-                uint64_t canonical_kmer = std::min<uint64_t>(kmer.value, kmer.value_rev);
-                if(kmer_counts[canonical_kmer] < threshold)
-                    kmer_counts[canonical_kmer]++;
-            }
-        }
-    }
-    return kmer_counts;
-}
-
-
-// template <typename AddForward>
-// void RSHash::process_freq_kmers(AddForward&& add,
-//     const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& input,
-//     const std::vector<SkmerInfo> &freq_skmers,
-//     gtl::flat_hash_map<uint64_t, uint16_t> &kmer_counts)
-// {
-//     for (const auto& skmer_info : freq_skmers) {
-//         auto skmer = input[skmer_info.seq_id] | std::views::drop(skmer_info.start) | std::views::take(skmer_info.end - skmer_info.start);
-//         uint32_t pos = endpoints.select(skmer_info.seq_id + 1) + skmer_info.start;
-//         for (auto&& kmer : skmer | rshash::views::kmer_view({.window_size = window_size})) {
-//             uint64_t canonical_kmer = std::min<uint64_t>(kmer.value, kmer.value_rev);
-//             if(threshold == 0 || kmer_counts[canonical_kmer] < threshold)
-//                 add(canonical_kmer, pos);
-//             ++pos;
-//         }
-//     }
-// }
-
-
-template <typename AddForward, typename AddReverse>
-void RSHash::process_freq_kmers(AddForward&& addfwd, AddReverse&& addrev,
-    const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& input,
-    const std::vector<SkmerInfo> &freq_skmers,
-    gtl::flat_hash_map<uint64_t, uint16_t> &kmer_counts, Shape64 &shape)
-{
-    for (const auto& skmer_info : freq_skmers) {
-            size_t s = (skmer_info.start > shape.overlap) ? skmer_info.start - shape.overlap : 0;
-            // text position of the current shape window
-            uint32_t pos = endpoints.select(skmer_info.seq_id + 1) + s;
-            size_t e = std::min(skmer_info.end + shape.overlap, input[skmer_info.seq_id].size());
-            
-            auto skmer = input[skmer_info.seq_id] | std::views::drop(s) | std::views::take(e - s);
-
-            for (auto&& kmer : skmer | rshash::views::kmer_view({.window_size = shape.length})) {
-                const uint64_t shape_fwd = _pext_u64(kmer.value, shape.mask.lo) | (_pext_u64(kmer.value_hi, shape.mask.hi) << shape.lo_weight);
-                const uint64_t shape_rev = _pext_u64(kmer.value, shape.mask_rev.lo) | (_pext_u64(kmer.value_hi, shape.mask_rev.hi) << shape.rev_lo_weight);
                 addfwd(shape_fwd, pos);
                 addrev(shape_rev, pos);
-                ++pos;
             }
+            ++pos;
+        }
     }
 }
 
 
 // canonical k-mers (minimum of the k-mer and its reverse complement) with their text positions, k <= 32
-template <typename Add>
-void RSHash::process_canonical_kmers(Add&& add,
+template <typename Add, typename Keep>
+void RSHash::process_canonical_kmers(Add&& add, Keep&& keep,
     const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& input,
     const std::vector<SkmerInfo> &freq_skmers)
 {
+    constexpr bool filter = !std::is_same_v<std::decay_t<Keep>, KeepAll>;
     for (const auto& skmer_info : freq_skmers) {
         uint32_t pos = endpoints.select(skmer_info.seq_id + 1) + skmer_info.start;
         auto skmer = input[skmer_info.seq_id] | std::views::drop(skmer_info.start) | std::views::take(skmer_info.end - skmer_info.start);
 
         for (auto&& kmer : skmer | rshash::views::kmer_view({.window_size = window_size})) {
+            const uint64_t canonical_kmer = std::min<uint64_t>(kmer.value, kmer.value_rev);
+            if constexpr (filter) {
+                if(!keep(canonical_kmer)) {
+                    ++pos;
+                    continue;
+                }
+            }
             // add can also take the orientation (whether the canonical k-mer is the forward k-mer)
             if constexpr (std::is_invocable_v<Add&, uint64_t, uint32_t, bool>)
-                add(std::min<uint64_t>(kmer.value, kmer.value_rev), pos, kmer.value <= kmer.value_rev);
+                add(canonical_kmer, pos, kmer.value <= kmer.value_rev);
             else
-                add(std::min<uint64_t>(kmer.value, kmer.value_rev), pos);
+                add(canonical_kmer, pos);
             ++pos;
         }
     }
@@ -428,19 +432,62 @@ void RSHash::last_level(const std::vector<seqan3::bitpacked_sequence<seqan3::dna
     if(!store_last_level)
         return;
 
-    gtl::flat_hash_map<uint64_t, uint16_t> kmer_counts;
-    if(threshold > 0)
-        kmer_counts = count_kmers(input, freq_skmers);
-
     // shapes: a forward and a reverse structure per shape, k-mers: one structure of the canonical k-mers
     const int no_shapes = std::max(number_shapes, 1);
     const size_t no_structures = (number_shapes > 0) ? 2 * number_shapes : 1;
 
-    auto process = [&](const int i, auto &&add, auto &&add_rc) {
+    // calls add/add_rc for the (forward/reverse) values of shape i (the canonical k-mers) that keep accepts
+    auto process_filtered = [&](const int i, auto &&add, auto &&add_rc, auto &&keep) {
         if(number_shapes > 0)
-            process_freq_kmers(add, add_rc, input, freq_skmers, kmer_counts, shapes.shapes[i]);
+            process_freq_kmers(add, add_rc, keep, input, freq_skmers, shapes.shapes[i]);
         else
-            process_canonical_kmers(add, input, freq_skmers);
+            process_canonical_kmers(add, keep, input, freq_skmers);
+    };
+
+    // k-mer/shape threshold: the frequencies (number of text positions of the canonical k-mer, of the shape value on
+    // both strands) of the k-mers/shapes on the last level, counted up to threshold. all occurrences of a k-mer/shape
+    // with frequent minimisers on all levels are on the last level, so these are their exact frequencies
+    std::vector<gtl::flat_hash_map<uint64_t, uint16_t>> counts(threshold > 0 ? no_shapes : 0);
+    if(threshold > 0) {
+        std::cout << "count last level k-mers/shapes...\n";
+        auto skip = [](uint64_t, uint32_t) {};
+        auto count_shape = [&](const int i) {
+            auto &count = counts[i];
+            process_filtered(i, skip, skip, [&](const uint64_t value) {
+                uint16_t &c = count[value];
+                c += (c < threshold);
+                return false;
+            });
+        };
+        if(parallel_last_level) {
+            std::vector<std::jthread> workers;
+            for(int i = 1; i < no_shapes; i++)
+                workers.emplace_back([&count_shape, i]() { count_shape(i); });
+            count_shape(0);
+        }
+        else
+            for(int i = 0; i < no_shapes; i++)
+                count_shape(i);
+
+        for(int i = 0; i < no_shapes; i++) {
+            size_t frequent = 0;
+            for(const auto &[value, c] : counts[i])
+                frequent += (c >= threshold);
+            std::cout << (number_shapes > 0 ? "shape " + std::to_string(i) + ": " : "") << frequent << " of " << counts[i].size()
+                      << " distinct last level k-mers/shapes with frequency >= " << threshold << " are not stored\n";
+        }
+    }
+
+    auto process = [&](const int i, auto &&add, auto &&add_rc) {
+        if(threshold > 0) {
+            const auto &count = counts[i];
+            process_filtered(i, add, add_rc, [&count, t = threshold](const uint64_t value) {
+                const auto it = count.find(value);
+                return it == count.end() || it->second < t;
+            });
+        }
+        else
+            process_filtered(i, add, add_rc, KeepAll{});
     };
 
     // with locate: structure j holds the forward (even j) or reverse (odd j) values of shape j/2 (0 the canonical
@@ -583,6 +630,14 @@ void print_freq_skmers(
 
 void RSHash::build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& input)
 {
+    // with a threshold, the minimiser occurrences bound the k-mer/shape frequencies only for odd minimiser lengths
+    // (see filter_freq_minimizers)
+    if(threshold > 0) {
+        const uint64_t ms[] = {m1, m2, m3};
+        for(uint64_t i = 0; i < level; i++)
+            if(ms[i] % 2 == 0)
+                throw std::invalid_argument("the k-mer/shape threshold needs minimisers of odd length (m" + std::to_string(i + 1) + " = " + std::to_string(ms[i]) + ")");
+    }
     no_text_kmers = mark_sequences(input, k, endpoints);
     const size_t text_length = endpoints.size();
     const size_t log_text_length = std::bit_width(text_length);
@@ -598,7 +653,9 @@ void RSHash::build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& 
 
     std::cout << "build R_1...\n";
     const uint64_t M1 = 1ULL << (m1+m1);
-    r1 = sux::bits::EliasFano(minimizers1, M1);
+    // no minimiser on this level (e.g. a threshold <= the minimiser occurrences): an empty structure as for an unused
+    // level, the upper bits of an empty Elias-Fano would take M1 bits
+    r1 = sux::bits::EliasFano(minimizers1, minimizers1.empty() ? 1 : M1);
     minimizers1.clear();
 
     std::cout << "mark skmers1...\n";
@@ -622,7 +679,7 @@ void RSHash::build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& 
 
         std::cout << "build R_2...\n";
         const uint64_t M2 = 1ULL << (m2+m2);
-        r2 = sux::bits::EliasFano(minimizers2, M2);
+        r2 = sux::bits::EliasFano(minimizers2, minimizers2.empty() ? 1 : M2);
         minimizers2.clear();
 
         std::cout << "mark skmers2...\n";
@@ -649,7 +706,7 @@ void RSHash::build(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& 
 
         std::cout << "build R_3...\n";
         const uint64_t M3 = 1ULL << (m3+m3);
-        r3 = sux::bits::EliasFano(minimizers3, M3);
+        r3 = sux::bits::EliasFano(minimizers3, minimizers3.empty() ? 1 : M3);
         minimizers3.clear();
 
         std::cout << "mark skmers3...\n";

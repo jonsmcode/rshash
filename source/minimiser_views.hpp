@@ -392,6 +392,9 @@ private:
     bool next_minimiser()
     {
         if(!minimiser_in_window.empty()) {
+            // the further positions of the minimiser of a recomputed window (ties): the value has to be set as well,
+            // the cache still holds the previous minimiser (or none in the first window)
+            cached.minimiser_value = current.minimiser_value;
             cached.range_position = range_position + 1 - window_size + current.range_position;
             current.range_position = minimiser_in_window.front();
             minimiser_in_window.pop_front();

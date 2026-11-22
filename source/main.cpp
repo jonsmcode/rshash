@@ -57,7 +57,7 @@ void initialise_argument_parser(sharg::parser &parser, cmd_arguments &args)
     parser.add_option(args.t1, sharg::config{.long_id = "t1", .description = "threshold1"});
     parser.add_option(args.t2, sharg::config{.long_id = "t2", .description = "threshold2"});
     parser.add_option(args.t3, sharg::config{.long_id = "t3", .description = "threshold3"});
-    parser.add_option(args.t, sharg::config{.short_id = 't', .description = "max k-mer/shape frequency threshold"});
+    parser.add_option(args.t, sharg::config{.short_id = 't', .long_id = "threshold", .description = "locate only (needs --loc, the index does not support lookup): only store and locate the k-mers/shapes that occur less than t times in the text (on both strands); 0: all. the minimiser lengths m1..m<level> have to be odd; minimisers occurring >= t times are passed on to the next level, so t > t_i keeps level i unchanged"});
     parser.add_flag(args.loc, sharg::config{.long_id = "loc", .description = "enable locate"});
     parser.add_flag(args.ht, sharg::config{.long_id = "ht", .description = "do not use hashtable on last level"});
     parser.add_flag(args.no_last_level, sharg::config{.long_id = "no-last-level", .description = "do not store the k-mers/shapes with frequent minimisers on all levels (no last level, not exact)"});
@@ -74,6 +74,16 @@ int check_arguments(sharg::parser &parser, cmd_arguments &args) {
             throw sharg::user_input_error("provide input file.");
         if(!parser.is_option_set("shape") && args.k > 32)
             throw sharg::user_input_error("k-mers (without shapes) are limited to k <= 32.");
+        // no k-mer equals its reverse complement for odd k (a palindromic k-mer would be located twice at its position)
+        if(!parser.is_option_set("shape") && args.k % 2 == 0)
+            throw sharg::user_input_error("k-mers (without shapes) need an odd k.");
+        if(args.t > 0 && !args.loc)
+            throw sharg::user_input_error("the k-mer/shape threshold -t is only supported for locate (--loc).");
+        // with -t, the minimiser occurrences bound the k-mer/shape frequencies only for odd minimiser lengths
+        const uint8_t ms[] = {args.m1, args.m2, args.m3};
+        for(int i = 0; args.t > 0 && i < args.level && i < 3; i++)
+            if(ms[i] % 2 == 0)
+                throw sharg::user_input_error("the k-mer/shape threshold -t needs minimisers of odd length (m" + std::to_string(i + 1) + " = " + std::to_string(ms[i]) + ").");
     }
     else if(args.cmd == "lookup") {
         if(!parser.is_option_set('q'))
@@ -153,6 +163,10 @@ int main(int argc, char** argv)
         std::chrono::nanoseconds elapsed;
         RSHash index = RSHash();
         index.load(args.d);
+        if(!index.has_lookup()) {
+            std::cerr << "index built with the k-mer/shape threshold -t " << index.get_threshold() << " only supports locate\n";
+            return -1;
+        }
         print_shapes(index.getshapes());
         std::cout << "querying...\n";
 
@@ -239,7 +253,6 @@ int main(int argc, char** argv)
         RSHash index = RSHash();
         index.load(args.d);
 
-        std::cout << "bench pos lookup...\n";
         double error = 0.0;
         std::vector<double> times;
         double lookup_time_sum = 0.0;
@@ -247,53 +260,58 @@ int main(int argc, char** argv)
         std::chrono::high_resolution_clock::time_point t_start, t_stop;
         std::chrono::nanoseconds elapsed;
 
-        while((round < 10 || error/round > 0.05 * (lookup_time_sum/round)) && round <= 50) {
-            kmers = index.rand_text_kmers(1000000);
-            t_start = std::chrono::high_resolution_clock::now();
-            found = index.lookup(kmers);
-            t_stop = std::chrono::high_resolution_clock::now();
-            elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
-            ns_per_kmer = (double) elapsed.count() / kmers.size();
-            lookup_time_sum += ns_per_kmer;
-            round++;
-            error += std::abs((lookup_time_sum/round) - ns_per_kmer);
-            times.push_back(ns_per_kmer);
-            std::cout << "round " << round << " found " << found << " time per kmer: " << ns_per_kmer << ", avg: " << (lookup_time_sum/round) << ", error: " << error/round << '\n';
+        // an index with a k-mer/shape threshold only supports locate
+        if(index.has_lookup()) {
+            std::cout << "bench pos lookup...\n";
+
+            while((round < 10 || error/round > 0.05 * (lookup_time_sum/round)) && round <= 50) {
+                kmers = index.rand_text_kmers(1000000);
+                t_start = std::chrono::high_resolution_clock::now();
+                found = index.lookup(kmers);
+                t_stop = std::chrono::high_resolution_clock::now();
+                elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
+                ns_per_kmer = (double) elapsed.count() / kmers.size();
+                lookup_time_sum += ns_per_kmer;
+                round++;
+                error += std::abs((lookup_time_sum/round) - ns_per_kmer);
+                times.push_back(ns_per_kmer);
+                std::cout << "round " << round << " found " << found << " time per kmer: " << ns_per_kmer << ", avg: " << (lookup_time_sum/round) << ", error: " << error/round << '\n';
+            }
+
+            std::cout << "==== positive lookup:\n";
+            std::cout << "num_kmers = " << kmers.size() << '\n';
+            std::cout << "num_positive_kmers = " << found << " (" << (double) found/kmers.size()*100 << "%)\n";
+            // std::cout << "pos_time_per_kmer = " << lookup_time_sum/round << '\n';
+            std::cout << "pos_time_per_kmer = " << std::accumulate(times.begin(), times.end(), 0.0) / times.size() << '\n';
+            std::cout << "pos_time_per_kmer_variance = " << std::sqrt(std::accumulate(times.begin(), times.end(), 0.0, [&](double acc, double x) { return acc + (x - (lookup_time_sum/round)) * (x - (lookup_time_sum/round)); }) / times.size()) << '\n';
+
+            std::cout << "bench neg lookup...\n";
+            round = 0;
+            error = 0.0;
+            lookup_time_sum = 0.0;
+            times.clear();
+
+            while((round < 10 || error/round > 0.05 * (lookup_time_sum/round)) && round <= 50) {
+                kmers = rand_kmers(1000000, index.getk());
+                t_start = std::chrono::high_resolution_clock::now();
+                found = index.lookup(kmers);
+                t_stop = std::chrono::high_resolution_clock::now();
+                elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
+                ns_per_kmer = (double) elapsed.count() / kmers.size();
+                lookup_time_sum += ns_per_kmer;
+                round++;
+                error += std::abs((lookup_time_sum/round) - ns_per_kmer);
+                times.push_back(ns_per_kmer);
+                std::cout << "round " << round << " time per kmer: " << ns_per_kmer << ", avg: " << (lookup_time_sum/round) << ", error: " << error/round << '\n';
+            }
+
+            std::cout << "==== negative lookup:\n";
+            std::cout << "num_kmers = " << kmers.size() << '\n';
+            std::cout << "num_negative_kmers = " << found << " (" << (double) found/kmers.size()*100 << "%)\n";
+            // std::cout << "neg_time_per_kmer = " << ns_per_kmer << '\n';
+            std::cout << "neg_time_per_kmer = " << std::accumulate(times.begin(), times.end(), 0.0) / times.size() << '\n';
+            std::cout << "neg_time_per_kmer_variance = " << std::sqrt(std::accumulate(times.begin(), times.end(), 0.0, [&](double acc, double x) { return acc + (x - (lookup_time_sum/round)) * (x - (lookup_time_sum/round)) ; }) / times.size()) << '\n';
         }
-
-        std::cout << "==== positive lookup:\n";
-        std::cout << "num_kmers = " << kmers.size() << '\n';
-        std::cout << "num_positive_kmers = " << found << " (" << (double) found/kmers.size()*100 << "%)\n";
-        // std::cout << "pos_time_per_kmer = " << lookup_time_sum/round << '\n';
-        std::cout << "pos_time_per_kmer = " << std::accumulate(times.begin(), times.end(), 0.0) / times.size() << '\n';
-        std::cout << "pos_time_per_kmer_variance = " << std::sqrt(std::accumulate(times.begin(), times.end(), 0.0, [&](double acc, double x) { return acc + (x - (lookup_time_sum/round)) * (x - (lookup_time_sum/round)); }) / times.size()) << '\n';
-
-        std::cout << "bench neg lookup...\n";
-        round = 0;
-        error = 0.0;
-        lookup_time_sum = 0.0;
-        times.clear();
-
-        while((round < 10 || error/round > 0.05 * (lookup_time_sum/round)) && round <= 50) {
-            kmers = rand_kmers(1000000, index.getk());
-            t_start = std::chrono::high_resolution_clock::now();
-            found = index.lookup(kmers);
-            t_stop = std::chrono::high_resolution_clock::now();
-            elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(t_stop - t_start);
-            ns_per_kmer = (double) elapsed.count() / kmers.size();
-            lookup_time_sum += ns_per_kmer;
-            round++;
-            error += std::abs((lookup_time_sum/round) - ns_per_kmer);
-            times.push_back(ns_per_kmer);
-            std::cout << "round " << round << " time per kmer: " << ns_per_kmer << ", avg: " << (lookup_time_sum/round) << ", error: " << error/round << '\n';
-        }
-
-        std::cout << "==== negative lookup:\n";
-        std::cout << "num_kmers = " << kmers.size() << '\n';
-        std::cout << "num_negative_kmers = " << found << " (" << (double) found/kmers.size()*100 << "%)\n";
-        // std::cout << "neg_time_per_kmer = " << ns_per_kmer << '\n';
-        std::cout << "neg_time_per_kmer = " << std::accumulate(times.begin(), times.end(), 0.0) / times.size() << '\n';
-        std::cout << "neg_time_per_kmer_variance = " << std::sqrt(std::accumulate(times.begin(), times.end(), 0.0, [&](double acc, double x) { return acc + (x - (lookup_time_sum/round)) * (x - (lookup_time_sum/round)) ; }) / times.size()) << '\n';
 
         if(index.has_locate()) {
             std::vector<uint64_t> positions;

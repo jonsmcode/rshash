@@ -530,6 +530,15 @@ static inline Shapes64 shape64_create(const std::vector<uint64_t> &values)
         window.kernel_length = std::min(window.kernel_length, shape.kernel_length);
     }
 
+    // every shape is placed with its longest run starting at the kernel (forward: overlap - overlap_right, reverse:
+    // overlap - overlap_left bases from the window start). a run longer than the (common) kernel extends the shape
+    // beyond kernel + overlap, so the overlap has to cover overlap_i + run_i - kernel on both sides; otherwise the
+    // aligned masks (w_mask, w_mask_rev) would be cut at the window end and match without some care positions
+    // (not for the k-mer mode, the shape UINT64_MAX has no run)
+    for (const Shape64 &shape : window.shapes)
+        if (shape.value != UINT64_MAX)
+            window.overlap = std::max(window.overlap, shape.overlap + shape.kernel_length - window.kernel_length);
+
     window.length = window.kernel_length + 2 * window.overlap;
 
     if (window.length > 64) {

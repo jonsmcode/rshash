@@ -18,6 +18,7 @@ struct cmd_arguments {
     std::filesystem::path o{};
     uint8_t k{31};
     std::vector<uint64_t> shapes{std::numeric_limits<uint64_t>::max()};
+    uint64_t t{0};
     bool locate{false};
     bool bench{false};
 };
@@ -28,6 +29,7 @@ void initialise_argument_parser(sharg::parser &parser, cmd_arguments &args) {
     parser.add_option(args.k, sharg::config{.short_id = 'k', .long_id = "k-mer", .description = "k-mer length"});
     parser.add_option(args.shapes, sharg::config{.long_id = "shapes", .description = "list of shape values"});
     parser.add_flag(args.locate, sharg::config{.long_id = "locate", .description = "locate with the FlatMap of the rshash last level (key -> positions) instead of lookup with a hash set"});
+    parser.add_option(args.t, sharg::config{.short_id = 't', .long_id = "threshold", .description = "like rshash -t: only the k-mers/shapes occurring less than t times in the text (canonical k-mers: positions of the k-mer or its reverse complement, shapes: forward plus reverse occurrences of the shape value) are found; 0: all"});
     parser.add_flag(args.bench, sharg::config{.long_id = "bench", .description = "benchmark single random text k-mers (pos) and random k-mers (neg) like rshash bench"});
 }
 
@@ -109,8 +111,11 @@ int main(int argc, char** argv)
     const size_t window_size = use_shapes ? shapes.length : args.k;
     const ShapeBorders borders = use_shapes ? shape_borders(shapes) : ShapeBorders{};
 
-    std::vector<gtl::flat_hash_set<uint64_t>> hts(args.locate ? 0 : no_structures);
-    std::vector<FlatMap> hms(args.locate ? no_structures : 0);
+    // with a threshold, the number of occurrences of every key of every structure (lookup and locate)
+    const bool use_counts = args.t > 0;
+    std::vector<gtl::flat_hash_set<uint64_t>> hts(args.locate || use_counts ? 0 : no_structures);
+    std::vector<FlatMap> hms(args.locate && !use_counts ? no_structures : 0);
+    std::vector<gtl::flat_hash_map<uint64_t, uint64_t>> counts(use_counts ? no_structures : 0);
 
     // calls f(key, text position) for all text k-mers/shapes of structure j: the forward (even j) or reverse
     // (odd j) values of shape j/2, for k-mers the canonical k-mers (j = 0)
@@ -141,7 +146,11 @@ int main(int argc, char** argv)
     };
 
     for(size_t j = 0; j < no_structures; j++) {
-        if(args.locate) {
+        if(use_counts) {
+            // every text position once: the key of a window is counted once per position
+            for_each_text_key(j, [&](const uint64_t key, const uint64_t) { counts[j][key]++; });
+        }
+        else if(args.locate) {
             // as on the rshash last level: the (key, position) pairs are sorted instead of hashed one by one
             std::vector<KeyValue> pairs;
             for_each_text_key(j, [&](const uint64_t key, const uint64_t pos) { pairs.push_back({key, static_cast<uint32_t>(pos)}); });
@@ -169,6 +178,8 @@ int main(int argc, char** argv)
         space += hm.memory_bits();
         keys += hm.size();
     }
+    for(auto &count : counts)
+        keys += count.size();
     std::cout << "textkmers: " << no_text_kmers << '\n';
     std::cout << "no structures: " << no_structures << '\n';
     std::cout << "no keys: " << keys << '\n';
@@ -181,8 +192,45 @@ int main(int argc, char** argv)
     // query ends only the placements within the query (see ShapeBorders)
     auto is_active = [](const uint64_t active, const size_t s) { return (active >> s) & 1; };
 
+    auto count_of = [&](const size_t j, const uint64_t key) -> uint64_t {
+        const auto it = counts[j].find(key);
+        return it == counts[j].end() ? 0 : it->second;
+    };
+    auto pext128 = [](const uint64_t lo, const uint64_t hi, const mask128_t &mask) {
+        return _pext_u64(lo, mask.lo) | (_pext_u64(hi, mask.hi) << std::popcount(mask.lo));
+    };
+    // with a threshold: the number of positions of the active placements of all shapes of the window whose shape value
+    // occurs less than t times (forward occurrences + occurrences on the reverse strand; k-mers: positions of the
+    // canonical k-mer). the forward and the reverse placement of a shape are checked separately: if the run of the
+    // shape is longer than the common kernel, they are different placements with different shape values
+    auto count_window = [&](const rshash::kmerview_result &window, const uint64_t active) -> uint64_t {
+        if(use_shapes) {
+            uint64_t no_positions = 0;
+            const unsigned L = window_size;
+            for(size_t i = 0; i < no_shapes; i++) {
+                const Shape64 &shape = shapes.shapes[i];
+                // forward placement: its value and the reverse structure key of the same value
+                const uint64_t kf = pext128(window.value, window.value_hi, shape.w_mask);
+                const uint64_t kf_rev = pext128(window.value_rev, window.value_rev_hi, mask128_shl(shape.mask_rev, 2 * (L - shape.w_dist_right - shape.length)));
+                // reverse placement: its reverse structure key and the value (forward structure key)
+                const uint64_t kr = pext128(window.value_rev, window.value_rev_hi, shape.w_mask_rev);
+                const uint64_t kr_fwd = pext128(window.value, window.value_hi, mask128_shl(shape.mask, 2 * (L - shape.w_rev_dist_right - shape.length)));
+                const uint64_t fwd = count_of(2*i, kf), rev = count_of(2*i+1, kr);
+                if(is_active(active, 2*i) && fwd + count_of(2*i+1, kf_rev) < args.t)
+                    no_positions += fwd;
+                if(is_active(active, 2*i+1) && count_of(2*i, kr_fwd) + rev < args.t)
+                    no_positions += rev;
+            }
+            return no_positions;
+        }
+        const uint64_t c = count_of(0, std::min<uint64_t>(window.value, window.value_rev));
+        return c < args.t ? c : 0;
+    };
+
     // lookup: whether any shape (fwd or rev) of the window is found
     auto lookup_window = [&](const rshash::kmerview_result &window, const uint64_t active = ~uint64_t{0}) {
+        if(use_counts)
+            return count_window(window, active) > 0;
         if(use_shapes) {
             for(size_t i = 0; i < no_shapes; i++) {
                 const Shape64 &shape = shapes.shapes[i];
@@ -204,6 +252,8 @@ int main(int argc, char** argv)
         return (uint64_t) values.size();
     };
     auto locate_window = [&](const rshash::kmerview_result &window, const uint64_t active = ~uint64_t{0}) {
+        if(use_counts)
+            return count_window(window, active);
         if(use_shapes) {
             uint64_t no_positions = 0;
             for(size_t i = 0; i < no_shapes; i++) {
