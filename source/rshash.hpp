@@ -1,3 +1,4 @@
+#include <numeric>
 #include <seqan3/alphabet/nucleotide/dna4.hpp>
 #include <seqan3/alphabet/container/bitpacked_sequence.hpp>
 #include <seqan3/io/sequence_file/all.hpp>
@@ -61,6 +62,18 @@ struct RadixTraitsMinimizer64 {
 #define RSHASH_HPP
 
 
+// a symmetric shape (value == reverse_shape(value)) whose forward and reverse placement cover the same bases of the
+// aligned window (i.e. its longest run is the kernel): the forward placement starts w_dist_right bases from the window
+// start, the reverse one ends w_rev_dist_right bases before the window end. its reverse value is then the reverse
+// complement of its forward value, and its forward and reverse structure would hold the same keys, so one structure of
+// the canonical values (minimum of both) is enough, which only the forward placement is looked up in
+static inline bool symmetric_placement(const Shapes64 &shapes, const Shape64 &shape)
+{
+    return shape.value == reverse_shape(shape.value)
+        && shape.w_dist_right + shape.length + shape.w_rev_dist_right == shapes.length;
+}
+
+
 class RSHash
 {
 private:
@@ -90,6 +103,15 @@ private:
     bits::compact_vector offsets1, offsets2, offsets3;
     std::vector<gtl::flat_hash_set<uint64_t>> hashsets;
     std::vector<FlatMap> hashmaps;
+    // last level with hash tables: the shapes are sorted, shapes [0, number_symmetric) are symmetric
+    // (symmetric_placement) and have one table of canonical values each (canonical_sets/canonical_maps[i]), the
+    // other shapes i a forward and a reverse table (hashsets/hashmaps[2(i - number_symmetric)] and the next one).
+    // k-mers: one canonical table (canonical_sets/canonical_maps[0]). without hash tables number_symmetric = 0
+    int number_symmetric = 0;
+    // shape i is shape shape_order[i] of the shapes given to the constructor
+    std::vector<uint32_t> shape_order;
+    std::vector<gtl::flat_hash_set<uint64_t>> canonical_sets;
+    std::vector<FlatMap> canonical_maps;
     // last level without hash tables: two rank structures per shape (forward, reverse),
     // the select bitvectors and offsets are only built for locate
     std::vector<sux::bits::EliasFano<sux::util::AllocType::MALLOC>> ri;
@@ -122,8 +144,12 @@ private:
     struct KeepAll { bool operator()(uint64_t) const { return true; } };
     template <typename Add, typename Keep>
     void process_canonical_kmers(Add&&, Keep&&, const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &);
+    template <typename F>
+    void for_each_shape_window(F&&, const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &, const Shape64 &);
     template <typename AddForward, typename AddReverse, typename Keep>
     void process_freq_kmers(AddForward&&, AddReverse&&, Keep&&, const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &, const Shape64 &);
+    template <typename Add, typename Keep>
+    void process_canonical_shapes(Add&&, Keep&&, const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &, const Shape64 &);
     using EF = sux::bits::EliasFano<sux::util::AllocType::MALLOC>;
     EF build_level(size_t, const std::vector<KeyValue>&);
     void last_level(const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>&, const std::vector<SkmerInfo> &);
@@ -258,7 +284,21 @@ public:
         r2(std::vector<uint64_t>{}, 1),
         r3(std::vector<uint64_t>{}, 1),
         m_hasher1(seed1), m_hasher2(seed2), m_hasher3(seed3)
-    {}
+    {
+        if(number_shapes > 4)
+            throw std::runtime_error("Unsupported number of shapes");
+        // with hash tables the symmetric shapes come first (stable, so the order of the others is kept)
+        shape_order.resize(number_shapes);
+        std::iota(shape_order.begin(), shape_order.end(), 0);
+        if(use_ht) {
+            std::ranges::stable_partition(shape_order, [&](const uint32_t i) { return symmetric_placement(this->shapes, shapes.shapes[i]); });
+            std::vector<Shape64> sorted;
+            for(const uint32_t i : shape_order)
+                sorted.push_back(shapes.shapes[i]);
+            this->shapes.shapes = std::move(sorted);
+            number_symmetric = std::ranges::count_if(this->shapes.shapes, [&](const Shape64 &shape) { return symmetric_placement(this->shapes, shape); });
+        }
+    }
     uint8_t getk() { return window_size; }
     Shapes64 getshapes() { return shapes; }
     // number of k-mers/shape windows the streaming lookup and locate check in a query of length L
@@ -307,18 +347,18 @@ public:
         if(!store_last_level) {}
         else if(use_ht) {
             if(loc) {
-                const size_t n = (number_shapes > 0) ? hashmaps.size() : 1;
-                for(size_t i = 0; i < n; i++) {
-                    freq_space += hashmaps[i].memory_bits();
-                    freq_kmers += hashmaps[i].size();
-                }
+                for(const auto *maps : {&canonical_maps, &hashmaps})
+                    for(const auto &map : *maps) {
+                        freq_space += map.memory_bits();
+                        freq_kmers += map.size();
+                    }
             }
             else {
-                const size_t n = (number_shapes > 0) ? hashsets.size() : 1;
-                for(size_t i = 0; i < n; i++) {
-                    freq_space += hashsets[i].capacity()*(sizeof(uint64_t) + 1)*8;
-                    freq_kmers += hashsets[i].size();
-                }
+                for(const auto *sets : {&canonical_sets, &hashsets})
+                    for(const auto &set : *sets) {
+                        freq_space += set.capacity()*(sizeof(uint64_t) + 1)*8;
+                        freq_kmers += set.size();
+                    }
             }
         }
         else {

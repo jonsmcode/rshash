@@ -81,14 +81,17 @@ inline bool RSHash::locate_last_level(const uint64_t kmer, const uint64_t kmer_h
     if(!store_last_level)
         return false;
 
-    // structure j holds the forward (even j) or reverse (odd j) values of shape j/2;
-    // all occurrences of all structures are counted (windows found by several shapes are counted several times)
+    // the canonical structures (k-mers, symmetric shapes) and the forward and reverse structures of the other shapes
+    // (see number_symmetric); all occurrences of all structures are counted (windows found by several shapes are
+    // counted several times)
     bool found = false;
 
-    // a structure stores the starts of the shape windows, the (aligned) window starts dist bases earlier
-    auto count = [&](const size_t j, const uint64_t key, [[maybe_unused]] const uint64_t dist) {
+    // a structure stores the starts of the shape windows, the (aligned) window starts dist bases earlier. the
+    // positions are counted times times. without hash tables the only canonical structure is the one of the k-mers,
+    // ri[0]
+    auto count = [&](const bool canonical, const size_t j, const uint64_t key, [[maybe_unused]] const uint64_t dist, const uint64_t times = 1) {
         if constexpr (use_ht) {
-            const auto values = hashmaps[j].find(key);
+            const auto values = (canonical ? canonical_maps[j] : hashmaps[j]).find(key);
             if(values.empty())
                 return;
             // the positions (of the kernel) are iterated over, but not reported
@@ -98,7 +101,7 @@ inline bool RSHash::locate_last_level(const uint64_t kmer, const uint64_t kmer_h
 #else
             for(uint32_t v : values) do_not_optimize(v - dist + shapes.overlap); // positions.push_back(...)
 #endif
-            no_positions += values.size();
+            no_positions += times * values.size();
         }
         else {
             uint64_t rank;
@@ -108,26 +111,40 @@ inline bool RSHash::locate_last_level(const uint64_t kmer, const uint64_t kmer_h
             const size_t q = si_select[j].select(rank + 1);
             // the positions (of the kernel) are iterated over, but not reported
             for(size_t o = p; o < q; o++) do_not_optimize(offsetsi[j].access(o) - dist + shapes.overlap); // positions.push_back(...)
-            no_positions += q - p;
+            no_positions += times * (q - p);
         }
         found = true;
     };
 
     if constexpr (no_shapes > 0) {
-        for(int i = 0; i < no_shapes; ++i) {
+        int i = 0;
+        // symmetric shapes: the reverse value is the reverse complement of the forward value (the reverse placement
+        // covers the same bases), so only the canonical value of the forward placement is looked up. its structure
+        // has the positions of both, i.e. the hits of the forward and of the reverse placement, except for a
+        // palindromic value (both placements hit the same positions), which counts twice as with a forward and a
+        // reverse structure
+        for(; i < number_symmetric; ++i) {
+            const Shape64 &shape = shapes.shapes[i];
+            const uint64_t shape_fwd = _pext_u64(kmer, shape.w_mask.lo) | (_pext_u64(kmer_hi, shape.w_mask.hi) << shape.w_lo_weight);
+            const uint64_t shape_rev = _pext_u64(kmer_rc, shape.w_mask_rev.lo) | (_pext_u64(kmer_rc_hi, shape.w_mask_rev.hi) << shape.w_rev_lo_weight);
+            if((active >> (2*i)) & 1)
+                count(true, i, std::min(shape_fwd, shape_rev), shape.w_dist_right, 1 + (shape_fwd == shape_rev));
+        }
+        for(; i < no_shapes; ++i) {
             const Shape64 &shape = shapes.shapes[i];
             // the shape values are only extracted when the last level is reached
             const uint64_t shape_fwd = _pext_u64(kmer, shape.w_mask.lo) | (_pext_u64(kmer_hi, shape.w_mask.hi) << shape.w_lo_weight);
             const uint64_t shape_rev = _pext_u64(kmer_rc, shape.w_mask_rev.lo) | (_pext_u64(kmer_rc_hi, shape.w_mask_rev.hi) << shape.w_rev_lo_weight);
+            const size_t j = 2 * (i - number_symmetric);
             // only the placements within the query (bit 2i forward, 2i+1 reverse of active)
             if((active >> (2*i)) & 1)
-                count(2*i, shape_fwd, shape.w_dist_right);
+                count(false, j, shape_fwd, shape.w_dist_right);
             if((active >> (2*i + 1)) & 1)
-                count(2*i + 1, shape_rev, shape.w_rev_dist_right);
+                count(false, j + 1, shape_rev, shape.w_rev_dist_right);
         }
     }
     else
-        count(0, std::min<uint64_t>(kmer, kmer_rc), 0);
+        count(true, 0, std::min<uint64_t>(kmer, kmer_rc), 0);
 
     return found;
 }

@@ -311,12 +311,11 @@ size_t RSHash::get_frequent_skmers(
 }
 
 
-template <typename AddForward, typename AddReverse, typename Keep>
-void RSHash::process_freq_kmers(AddForward&& addfwd, AddReverse&& addrev, Keep&& keep,
-    const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& input,
+// calls f(window, text position) for every shape window (of shape.length bases) of the frequent super-k-mers
+template <typename F>
+void RSHash::for_each_shape_window(F&& f, const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& input,
     const std::vector<SkmerInfo> &freq_skmers, const Shape64 &shape)
 {
-    constexpr bool filter = !std::is_same_v<std::decay_t<Keep>, KeepAll>;
     // a super-k-mer (of kernels) is extended by the overlap of the shape window on both sides: the kernel lies at the
     // start of the run of a forward shape and at the end of the run of a reverse shape, which is shapes.overlap
     // (>= shape.overlap + run - kernel) bases away from the shape ends. so the windows of neighbouring super-k-mers
@@ -339,26 +338,62 @@ void RSHash::process_freq_kmers(AddForward&& addfwd, AddReverse&& addrev, Keep&&
 
         auto skmer = input[skmer_info.seq_id] | std::views::drop(s) | std::views::take(e - s);
 
-        for (auto&& kmer : skmer | rshash::views::kmer_view({.window_size = shape.length})) {
-            const uint64_t shape_fwd = _pext_u64(kmer.value, shape.mask.lo) | (_pext_u64(kmer.value_hi, shape.mask.hi) << shape.lo_weight);
-            const uint64_t shape_rev = _pext_u64(kmer.value, shape.mask_rev.lo) | (_pext_u64(kmer.value_hi, shape.mask_rev.hi) << shape.rev_lo_weight);
-            if constexpr (filter) {
-                // the k-mer/shape threshold is applied to the shape values of both strands: the forward structure
-                // stores the shape of the window, the reverse structure (reversed shape) the shape of its reverse
-                // complement, which is found by the queries with this shape value
-                const uint64_t shape_of_rc = _pext_u64(kmer.value_rev, shape.mask.lo) | (_pext_u64(kmer.value_rev_hi, shape.mask.hi) << shape.lo_weight);
-                if(keep(shape_fwd))
-                    addfwd(shape_fwd, pos);
-                if(keep(shape_of_rc))
-                    addrev(shape_rev, pos);
-            }
-            else {
-                addfwd(shape_fwd, pos);
-                addrev(shape_rev, pos);
-            }
-            ++pos;
-        }
+        for (auto&& kmer : skmer | rshash::views::kmer_view({.window_size = shape.length}))
+            f(kmer, pos++);
     }
+}
+
+
+template <typename AddForward, typename AddReverse, typename Keep>
+void RSHash::process_freq_kmers(AddForward&& addfwd, AddReverse&& addrev, Keep&& keep,
+    const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& input,
+    const std::vector<SkmerInfo> &freq_skmers, const Shape64 &shape)
+{
+    constexpr bool filter = !std::is_same_v<std::decay_t<Keep>, KeepAll>;
+    for_each_shape_window([&](const auto &kmer, const uint64_t pos) {
+        const uint64_t shape_fwd = _pext_u64(kmer.value, shape.mask.lo) | (_pext_u64(kmer.value_hi, shape.mask.hi) << shape.lo_weight);
+        const uint64_t shape_rev = _pext_u64(kmer.value, shape.mask_rev.lo) | (_pext_u64(kmer.value_hi, shape.mask_rev.hi) << shape.rev_lo_weight);
+        if constexpr (filter) {
+            // the k-mer/shape threshold is applied to the shape values of both strands: the forward structure
+            // stores the shape of the window, the reverse structure (reversed shape) the shape of its reverse
+            // complement, which is found by the queries with this shape value
+            const uint64_t shape_of_rc = _pext_u64(kmer.value_rev, shape.mask.lo) | (_pext_u64(kmer.value_rev_hi, shape.mask.hi) << shape.lo_weight);
+            if(keep(shape_fwd))
+                addfwd(shape_fwd, pos);
+            if(keep(shape_of_rc))
+                addrev(shape_rev, pos);
+        }
+        else {
+            addfwd(shape_fwd, pos);
+            addrev(shape_rev, pos);
+        }
+    }, input, freq_skmers, shape);
+}
+
+
+// symmetric shapes (see symmetric_placement): canonical values (minimum of the shape on the window and on its reverse
+// complement) with their text positions. the threshold of the canonical value is the one of both values (the counts
+// of a value and of its reverse complement are the same: forward plus reverse occurrences)
+template <typename Add, typename Keep>
+void RSHash::process_canonical_shapes(Add&& add, Keep&& keep,
+    const std::vector<seqan3::bitpacked_sequence<seqan3::dna4>>& input,
+    const std::vector<SkmerInfo> &freq_skmers, const Shape64 &shape)
+{
+    constexpr bool filter = !std::is_same_v<std::decay_t<Keep>, KeepAll>;
+    for_each_shape_window([&](const auto &kmer, const uint64_t pos) {
+        const uint64_t shape_fwd = _pext_u64(kmer.value, shape.mask.lo) | (_pext_u64(kmer.value_hi, shape.mask.hi) << shape.lo_weight);
+        const uint64_t shape_of_rc = _pext_u64(kmer.value_rev, shape.mask.lo) | (_pext_u64(kmer.value_rev_hi, shape.mask.hi) << shape.lo_weight);
+        const uint64_t canonical = std::min(shape_fwd, shape_of_rc);
+        if constexpr (filter) {
+            if(!keep(canonical))
+                return;
+        }
+        // add can also take the orientation (whether the canonical value is the forward value)
+        if constexpr (std::is_invocable_v<Add&, uint64_t, uint32_t, bool>)
+            add(canonical, pos, shape_fwd <= shape_of_rc);
+        else
+            add(canonical, pos);
+    }, input, freq_skmers, shape);
 }
 
 
@@ -432,9 +467,9 @@ void RSHash::last_level(const std::vector<seqan3::bitpacked_sequence<seqan3::dna
     if(!store_last_level)
         return;
 
-    // shapes: a forward and a reverse structure per shape, k-mers: one structure of the canonical k-mers
+    // shapes: a forward and a reverse structure per shape (with hash tables one canonical structure per symmetric
+    // shape, see number_symmetric), k-mers: one structure of the canonical k-mers
     const int no_shapes = std::max(number_shapes, 1);
-    const size_t no_structures = (number_shapes > 0) ? 2 * number_shapes : 1;
 
     // calls add/add_rc for the (forward/reverse) values of shape i (the canonical k-mers) that keep accepts
     auto process_filtered = [&](const int i, auto &&add, auto &&add_rc, auto &&keep) {
@@ -473,33 +508,62 @@ void RSHash::last_level(const std::vector<seqan3::bitpacked_sequence<seqan3::dna
             size_t frequent = 0;
             for(const auto &[value, c] : counts[i])
                 frequent += (c >= threshold);
-            std::cout << (number_shapes > 0 ? "shape " + std::to_string(i) + ": " : "") << frequent << " of " << counts[i].size()
+            std::cout << (number_shapes > 0 ? "shape " + std::to_string(shape_order[i]) + ": " : "") << frequent << " of " << counts[i].size()
                       << " distinct last level k-mers/shapes with frequency >= " << threshold << " are not stored\n";
         }
     }
 
-    auto process = [&](const int i, auto &&add, auto &&add_rc) {
+    // calls f(keep) with the keep predicate of shape i (the k-mers)
+    auto with_keep = [&](const int i, auto &&f) {
         if(threshold > 0) {
             const auto &count = counts[i];
-            process_filtered(i, add, add_rc, [&count, t = threshold](const uint64_t value) {
+            f([&count, t = threshold](const uint64_t value) {
                 const auto it = count.find(value);
                 return it == count.end() || it->second < t;
             });
         }
         else
-            process_filtered(i, add, add_rc, KeepAll{});
+            f(KeepAll{});
+    };
+    auto process = [&](const int i, auto &&add, auto &&add_rc) {
+        with_keep(i, [&](auto &&keep) { process_filtered(i, add, add_rc, keep); });
     };
 
-    // with locate: structure j holds the forward (even j) or reverse (odd j) values of shape j/2 (0 the canonical
-    // k-mers); its (key, position) pairs are collected and sorted instead of hashed one by one
+    // the shape (0 for k-mers) of structure j and which of its values the structure holds: first the canonical
+    // structures (the k-mers or the symmetric shapes), then the forward and reverse structure of each other shape
+    enum class Kind { forward, reverse, canonical };
+    std::vector<std::pair<int, Kind>> structures;
+    if(number_shapes == 0)
+        structures.emplace_back(0, Kind::canonical);
+    for(int i = 0; i < number_symmetric; i++)
+        structures.emplace_back(i, Kind::canonical);
+    for(int i = number_symmetric; i < number_shapes; i++) {
+        structures.emplace_back(i, Kind::forward);
+        structures.emplace_back(i, Kind::reverse);
+    }
+    const size_t no_structures = structures.size();
+    const size_t no_canonical = (number_shapes == 0) ? 1 : number_symmetric;
+
+    // calls add(key, position[, forward]) for the values of structure j: the forward or reverse values of a shape,
+    // the canonical values of a symmetric shape or the canonical k-mers
+    auto process_structure = [&](const size_t j, auto &&add) {
+        const int i = structures[j].first;
+        const Kind kind = structures[j].second;
+        auto skip = [](uint64_t, uint32_t, bool = true) {};
+        if(kind == Kind::forward)
+            process(i, add, skip);
+        else if(kind == Kind::reverse)
+            process(i, skip, add);
+        else if(number_shapes == 0)
+            process(i, add, skip);
+        else
+            with_keep(i, [&](auto &&keep) { process_canonical_shapes(add, keep, input, freq_skmers, shapes.shapes[i]); });
+    };
+
+    // with locate: the (key, position) pairs of structure j are collected and sorted instead of hashed one by one
     auto collect_sorted = [&](const size_t j) {
         std::vector<KeyValue> pairs;
-        auto add = [&](uint64_t key, uint32_t pos) { pairs.push_back({key, pos}); };
-        auto skip = [](uint64_t, uint32_t) {};
-        if(j % 2 == 0)
-            process(j / 2, add, skip);
-        else
-            process(j / 2, skip, add);
+        process_structure(j, [&](uint64_t key, uint32_t pos) { pairs.push_back({key, pos}); });
         sort_unique(pairs);
         return pairs;
     };
@@ -532,25 +596,21 @@ void RSHash::last_level(const std::vector<seqan3::bitpacked_sequence<seqan3::dna
             const uint64_t width = ref_len_bits + ref_id_bits + 1;
             if(width > 57) // compact_vector::access() reads at most 57 bits
                 throw std::runtime_error("encoded positions need more than 57 bits");
-            // canonical k-mers: the orientation is carried in the lowest bit of the (shifted) key until encoding
-            const int key_shift = (number_shapes == 0) ? 1 : 0;
-            if(key_shift && 2 * window_size > 63)
-                throw std::runtime_error("encoded positions need k <= 31");
+            // canonical k-mers/shapes: the orientation is carried in the lowest bit of the (shifted) key until encoding
+            for(const auto &[i, kind] : structures)
+                if(kind == Kind::canonical && 2 * (number_shapes == 0 ? window_size : shapes.shapes[i].weight) > 63)
+                    throw std::runtime_error("encoded positions need k <= 31 (shapes: weight <= 31 for symmetric shapes)");
             std::cout << "encoded positions: " << ref_id_bits << " + " << ref_len_bits << " + 1 = " << width << " bits\n";
 
             for_each_structure([&](const size_t j) {
+                const int key_shift = (structures[j].second == Kind::canonical) ? 1 : 0;
                 std::vector<KeyValue> pairs;
-                auto add = [&](uint64_t key, uint32_t pos, bool fw = true) {
+                process_structure(j, [&](uint64_t key, uint32_t pos, bool fw = true) {
                     pairs.push_back({key_shift ? (key << 1 | fw) : key, pos});
-                };
-                auto skip = [](uint64_t, uint32_t, bool = true) {};
-                if(j % 2 == 0)
-                    process(j / 2, add, skip);
-                else
-                    process(j / 2, skip, add);
+                });
                 sort_unique(pairs);
-                // shapes: the forward (even j) and reverse (odd j) structures
-                const bool structure_fw = (j % 2 == 0);
+                // shapes: the forward and reverse structures
+                const bool structure_fw = (structures[j].second == Kind::forward);
                 maps[j] = FlatMap::from_sorted_encoded(pairs, width, key_shift, ref_len_bits, [&](const KeyValue &p) {
                     const bool fw = key_shift ? (p.key & 1) : structure_fw;
                     // sequence i starts at text position endpoints.select(i + 1) (after the padding at 0)
@@ -562,18 +622,16 @@ void RSHash::last_level(const std::vector<seqan3::bitpacked_sequence<seqan3::dna
 #else
             for_each_structure([&](const size_t j) { maps[j] = FlatMap::from_sorted(collect_sorted(j)); });
 #endif
-            for(auto &map : maps)
-                hashmaps.push_back(std::move(map));
+            for(size_t j = 0; j < no_structures; j++)
+                (j < no_canonical ? canonical_maps : hashmaps).push_back(std::move(maps[j]));
         }
         else {
-            for(int i = 0; i < no_shapes; i++) {
-                gtl::flat_hash_set<uint64_t> hashset, hashset_rc;
-                process(i, [&](uint64_t key, uint32_t) {hashset.insert(key);},
-                           [&](uint64_t key, uint32_t) {hashset_rc.insert(key);});
-                hashsets.push_back(hashset);
-                if(number_shapes > 0)
-                    hashsets.push_back(hashset_rc);
-            }
+            std::vector<gtl::flat_hash_set<uint64_t>> sets(no_structures);
+            for_each_structure([&](const size_t j) {
+                process_structure(j, [&set = sets[j]](uint64_t key, uint32_t) { set.insert(key); });
+            });
+            for(size_t j = 0; j < no_structures; j++)
+                (j < no_canonical ? canonical_sets : hashsets).push_back(std::move(sets[j]));
         }
     }
     else {

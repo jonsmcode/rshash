@@ -1,3 +1,4 @@
+#include <numeric>
 #include <bitset>
 #include <cereal/cereal.hpp>
 #include <cereal/types/vector.hpp>
@@ -128,6 +129,7 @@ int RSHash::save(const std::filesystem::path &filepath) {
     for(const auto &ef : ri)
         archive(ef);
     archive(store_last_level);
+    archive(number_symmetric, shape_order, canonical_sets, canonical_maps);
 
     out.close();
     return 0;
@@ -155,6 +157,20 @@ int RSHash::load(const std::filesystem::path &filepath) {
     store_last_level = true;
     if(in.peek() != std::ifstream::traits_type::eof())
         archive(store_last_level);
+    canonical_sets.clear();
+    canonical_maps.clear();
+    if(in.peek() != std::ifstream::traits_type::eof())
+        archive(number_symmetric, shape_order, canonical_sets, canonical_maps);
+    else {
+        // older indexes: a forward and a reverse table per shape (shapes in the given order), the k-mer table first
+        number_symmetric = 0;
+        shape_order.resize(number_shapes);
+        std::iota(shape_order.begin(), shape_order.end(), 0);
+        if(use_ht && number_shapes == 0) {
+            std::swap(canonical_sets, hashsets);
+            std::swap(canonical_maps, hashmaps);
+        }
+    }
     in.close();
 
     this->s1_select = sux::bits::SimpleSelect(reinterpret_cast<uint64_t*>(s1.data()), s1.size(), 3);

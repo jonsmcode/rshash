@@ -92,26 +92,39 @@ uint64_t RSHash::lookup(const std::vector<mask128_t> &kmers) {
 }
 
 
-template <int no_shapes, typename Forward>
-inline bool contains_impl(Forward &forward, const std::vector<Shape64>& shapes,
+// canonical: the canonical structures (the k-mers or the first no_symmetric shapes), structures: the forward and
+// reverse structure of the other shapes (see number_symmetric)
+template <int no_shapes, typename Canonical, typename Structures>
+inline bool contains_impl(Canonical &canonical, Structures &structures, const std::vector<Shape64>& shapes, const int no_symmetric,
     const uint64_t kmer, const uint64_t kmer_hi, const uint64_t kmer_rc, const uint64_t kmer_rc_hi, const uint64_t active)
 {
     if constexpr (no_shapes > 0) {
-        for(int i = 0; i < no_shapes; ++i) {
-            Shape64 shape = shapes[i];
+        int i = 0;
+        // symmetric shapes: the reverse value is the reverse complement of the forward value (the reverse placement
+        // covers the same bases), so only the canonical value of the forward placement is looked up
+        for(; i < no_symmetric; ++i) {
+            const Shape64 &shape = shapes[i];
             const uint64_t shape_fwd = _pext_u64(kmer, shape.w_mask.lo) | (_pext_u64(kmer_hi, shape.w_mask.hi) << shape.w_lo_weight);
             const uint64_t shape_rev  = _pext_u64(kmer_rc, shape.w_mask_rev.lo) | (_pext_u64(kmer_rc_hi, shape.w_mask_rev.hi) << shape.w_rev_lo_weight);
+            if((active >> (2*i)) & 1 && canonical[i].contains(std::min(shape_fwd, shape_rev)))
+                return true;
+        }
+        for(; i < no_shapes; ++i) {
+            const Shape64 &shape = shapes[i];
+            const uint64_t shape_fwd = _pext_u64(kmer, shape.w_mask.lo) | (_pext_u64(kmer_hi, shape.w_mask.hi) << shape.w_lo_weight);
+            const uint64_t shape_rev  = _pext_u64(kmer_rc, shape.w_mask_rev.lo) | (_pext_u64(kmer_rc_hi, shape.w_mask_rev.hi) << shape.w_rev_lo_weight);
+            const size_t j = 2 * (i - no_symmetric);
 
             // only the placements within the query (bit 2i forward, 2i+1 reverse of active)
-            if(((active >> (2*i)) & 1 && forward[2*i].contains(shape_fwd)) ||
-               ((active >> (2*i + 1)) & 1 && forward[2*i+1].contains(shape_rev)))
+            if(((active >> (2*i)) & 1 && structures[j].contains(shape_fwd)) ||
+               ((active >> (2*i + 1)) & 1 && structures[j + 1].contains(shape_rev)))
                 return true;
         }
 
         return false;
     }
     else
-        return forward[0].contains(std::min<uint64_t>(kmer, kmer_rc));
+        return canonical[0].contains(std::min<uint64_t>(kmer, kmer_rc));
 }
 
 template<int no_shapes, bool use_ht, bool locate>
@@ -121,12 +134,12 @@ inline bool RSHash::lookup_last_level(const uint64_t kmer, const uint64_t kmer_h
         return false;
     if constexpr (use_ht) {
         if constexpr (locate)
-            return contains_impl<no_shapes>(hashmaps, shapes.shapes, kmer, kmer_hi, kmer_rc, kmer_rc_hi, active);
+            return contains_impl<no_shapes>(canonical_maps, hashmaps, shapes.shapes, number_symmetric, kmer, kmer_hi, kmer_rc, kmer_rc_hi, active);
         else
-            return contains_impl<no_shapes>(hashsets, shapes.shapes, kmer, kmer_hi, kmer_rc, kmer_rc_hi, active);
+            return contains_impl<no_shapes>(canonical_sets, hashsets, shapes.shapes, number_symmetric, kmer, kmer_hi, kmer_rc, kmer_rc_hi, active);
     }
     else
-        return contains_impl<no_shapes>(ri, shapes.shapes, kmer, kmer_hi, kmer_rc, kmer_rc_hi, active);
+        return contains_impl<no_shapes>(ri, ri, shapes.shapes, 0, kmer, kmer_hi, kmer_rc, kmer_rc_hi, active);
 }
 
 
